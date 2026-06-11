@@ -4,7 +4,15 @@ import argparse
 from pathlib import Path
 
 from . import __version__
-from .bookmarks import parse_bookmarks_html, write_bookmarks_to_vault
+from .bookmarks import Bookmark, parse_bookmarks_html, write_bookmarks_to_vault
+
+
+def top_level_folder_counts(bookmarks: list[Bookmark]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for bookmark in bookmarks:
+        folder = bookmark.folders[0] if bookmark.folders else "Unfiled"
+        counts[folder] = counts.get(folder, 0) + 1
+    return counts
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -21,6 +29,9 @@ def build_parser() -> argparse.ArgumentParser:
     import_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
     import_cmd.add_argument("--limit", type=int, default=None, help="Only import the first N bookmarks. Useful for tests.")
 
+    inspect_cmd = sub.add_parser("inspect", help="Inspect a browser bookmark HTML export without writing files.")
+    inspect_cmd.add_argument("bookmarks", type=Path, help="Browser bookmark export HTML file.")
+
     return parser
 
 
@@ -36,6 +47,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Imported {len(written)} Drops into {Path(args.vault).expanduser().resolve() / args.root}")
         if written:
             print(f"First Drop: {written[0]}")
+        return 0
+
+    if args.command == "inspect":
+        bookmarks = parse_bookmarks_html(args.bookmarks)
+        counts = top_level_folder_counts(bookmarks)
+        print(f"Total bookmarks: {len(bookmarks)}")
+        print("Top-level folders:")
+        for folder, count in counts.items():
+            print(f"- {folder}: {count}")
         return 0
 
     parser.error("unknown command")
