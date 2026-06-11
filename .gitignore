@@ -1,0 +1,19 @@
+# generated/local data
+/tmp/
+.DS_Store
+.env
+.env.*
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# MemoReef generated vaults
+memoreef-vault/
+MemoReef-output/

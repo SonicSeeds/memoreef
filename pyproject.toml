@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memoreef"
+version = "0.1.0"
+description = "Import browser bookmarks into an Obsidian-ready, agent-readable source reef."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "SonicSeeds" }]
+keywords = ["bookmarks", "obsidian", "markdown", "knowledge-base", "agents"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Utilities",
+]
+
+[project.scripts]
+memoreef = "memoreef.cli:main"
+
+[tool.setuptools]
+packages = ["memoreef"]
