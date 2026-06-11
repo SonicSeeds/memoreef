@@ -68,6 +68,44 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertEqual(len(list((vault_path / "MemoReef" / "Drops").glob("*.md"))), 2)
 
+    def test_import_command_writes_import_log(self):
+        html = """<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<DL><p>
+  <DT><H3>Research</H3>
+  <DL><p>
+    <DT><A HREF="HTTPS://Example.COM/Case?keep=1&utm_source=news">First</A>
+    <DT><A HREF="https://example.com/Case?keep=1&fbclid=tracking">Second</A>
+  </DL><p>
+</DL><p>
+"""
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bookmarks_path = Path(tmp) / "bookmarks.html"
+            vault_path = Path(tmp) / "vault"
+            bookmarks_path.write_text(html, encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                result = main(["import", str(bookmarks_path), "--vault", str(vault_path)])
+
+            logs = list((vault_path / "MemoReef" / "imports").glob("*-import.md"))
+            self.assertEqual(result, 0)
+            self.assertEqual(len(logs), 1)
+            self.assertEqual(len(list((vault_path / "MemoReef" / "Drops").glob("*.md"))), 1)
+
+            content = logs[0].read_text(encoding="utf-8")
+            self.assertIn(f"- Source file: {bookmarks_path.resolve()}", content)
+            self.assertIn("- Command options:", content)
+            self.assertIn(f"  - vault: {vault_path.resolve()}", content)
+            self.assertIn("  - root: MemoReef", content)
+            self.assertIn("  - limit: None", content)
+            self.assertIn("  - allow_duplicates: False", content)
+            self.assertIn("- Parsed bookmark count: 2", content)
+            self.assertIn("- Written Drop count: 1", content)
+            self.assertIn("- Skipped duplicate count: 1", content)
+            self.assertIn("- Errors/warnings:", content)
+            self.assertIn("  - none", content)
+
     def test_inspect_command_prints_summary(self):
         bookmarks_path = Path(__file__).parent.parent / "examples" / "bookmarks.html"
         stdout = io.StringIO()
