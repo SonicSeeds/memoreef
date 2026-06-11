@@ -6,6 +6,7 @@ from pathlib import Path
 import html
 import re
 from typing import Iterable
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 @dataclass
@@ -100,6 +101,37 @@ def parse_bookmarks_html(path: str | Path) -> list[Bookmark]:
     return parser.bookmarks
 
 
+def canonicalize_url(url: str) -> str:
+    parsed = urlsplit(url)
+    scheme = parsed.scheme.lower()
+    netloc = parsed.netloc
+    if parsed.hostname:
+        userinfo = ""
+        if parsed.username:
+            userinfo = parsed.username
+            if parsed.password:
+                userinfo += f":{parsed.password}"
+            userinfo += "@"
+        host = parsed.hostname.lower()
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        port = f":{parsed.port}" if parsed.port else ""
+        netloc = f"{userinfo}{host}{port}"
+
+    query_items = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if not is_tracking_param(key)
+    ]
+    query = urlencode(query_items, doseq=True)
+    return urlunsplit((scheme, netloc, parsed.path, query, parsed.fragment))
+
+
+def is_tracking_param(name: str) -> bool:
+    normalized = name.lower()
+    return normalized.startswith("utm_") or normalized in {"fbclid", "gclid"}
+
+
 def slugify(value: str, max_len: int = 80) -> str:
     value = value.lower().strip()
     value = re.sub(r"https?://", "", value)
@@ -169,11 +201,21 @@ def bookmark_to_markdown(bookmark: Bookmark) -> str:
     return "\n".join(lines)
 
 
-def write_bookmarks_to_vault(bookmarks: Iterable[Bookmark], vault: str | Path, root: str = "MemoReef") -> list[Path]:
+def write_bookmarks_to_vault(
+    bookmarks: Iterable[Bookmark],
+    vault: str | Path,
+    root: str = "MemoReef",
+    allow_duplicates: bool = False,
+) -> list[Path]:
     base = Path(vault).expanduser().resolve() / root / "Drops"
     base.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
+    seen_urls: set[str] = set()
     for bookmark in bookmarks:
+        canonical_url = canonicalize_url(bookmark.url)
+        if not allow_duplicates and canonical_url in seen_urls:
+            continue
+        seen_urls.add(canonical_url)
         stem = slugify(bookmark.title)
         path = unique_path(base, stem)
         path.write_text(bookmark_to_markdown(bookmark), encoding="utf-8")

@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     import_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     import_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
     import_cmd.add_argument("--limit", type=int, default=None, help="Only import the first N bookmarks. Useful for tests.")
+    import_cmd.add_argument("--allow-duplicates", action="store_true", help="Write duplicate URLs instead of skipping them.")
 
     inspect_cmd = sub.add_parser("inspect", help="Inspect a browser bookmark HTML export without writing files.")
     inspect_cmd.add_argument("bookmarks", type=Path, help="Browser bookmark export HTML file.")
@@ -43,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
         bookmarks = parse_bookmarks_html(args.bookmarks)
         if args.limit is not None:
             bookmarks = bookmarks[: args.limit]
-        written = write_bookmarks_to_vault(bookmarks, args.vault, args.root)
+        written = write_bookmarks_to_vault(bookmarks, args.vault, args.root, allow_duplicates=args.allow_duplicates)
         print(f"Imported {len(written)} Drops into {Path(args.vault).expanduser().resolve() / args.root}")
         if written:
             print(f"First Drop: {written[0]}")

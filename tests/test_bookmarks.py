@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from memoreef.bookmarks import parse_bookmarks_html, write_bookmarks_to_vault
+from memoreef.bookmarks import Bookmark, canonicalize_url, parse_bookmarks_html, write_bookmarks_to_vault
 from memoreef.cli import main
 
 
@@ -26,6 +26,47 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("status: drift", content)
             self.assertIn("agent_ready: true", content)
             self.assertIn("Source: [https://example.com/local-agents]", content)
+
+    def test_canonicalize_url_strips_tracking_params(self):
+        self.assertEqual(
+            canonicalize_url("HTTPS://Example.COM/CaseSensitive/Path?keep=1&utm_source=news&fbclid=abc&GCLID=xyz"),
+            "https://example.com/CaseSensitive/Path?keep=1",
+        )
+
+    def test_write_skips_duplicate_canonical_urls_by_default(self):
+        bookmarks = [
+            Bookmark("First", "HTTPS://Example.COM/Case?keep=1&utm_campaign=spring"),
+            Bookmark("Second", "https://example.com/Case?keep=1&fbclid=tracking"),
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            written = write_bookmarks_to_vault(bookmarks, tmp)
+
+            self.assertEqual(len(written), 1)
+            self.assertEqual(len(list((Path(tmp) / "MemoReef" / "Drops").glob("*.md"))), 1)
+
+    def test_import_command_allows_duplicate_urls(self):
+        html = """<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<DL><p>
+  <DT><H3>Research</H3>
+  <DL><p>
+    <DT><A HREF="HTTPS://Example.COM/Case?keep=1&utm_source=news">First</A>
+    <DT><A HREF="https://example.com/Case?keep=1&gclid=tracking">Second</A>
+  </DL><p>
+</DL><p>
+"""
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bookmarks_path = Path(tmp) / "bookmarks.html"
+            vault_path = Path(tmp) / "vault"
+            bookmarks_path.write_text(html, encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                result = main(["import", str(bookmarks_path), "--vault", str(vault_path), "--allow-duplicates"])
+
+            self.assertEqual(result, 0)
+            self.assertEqual(len(list((vault_path / "MemoReef" / "Drops").glob("*.md"))), 2)
 
     def test_inspect_command_prints_summary(self):
         bookmarks_path = Path(__file__).parent.parent / "examples" / "bookmarks.html"
