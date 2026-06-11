@@ -112,6 +112,14 @@ python3 -m memoreef.cli import-links links.txt --vault /tmp/memoreef-vault
 python3 -m memoreef.cli import-csv links.csv --vault /tmp/memoreef-vault
 ```
 
+Open the static Drift triage prototype:
+
+```bash
+open site/triage.html
+```
+
+This is a browser-only prototype with inline sample data. It is not connected to real vault files yet.
+
 ## Near-term roadmap
 
 1. Robust browser bookmark import across Chrome/Brave/Arc/Firefox/Safari exports.
