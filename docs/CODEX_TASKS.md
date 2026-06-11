@@ -79,6 +79,19 @@ Write an import report into the vault after each import.
 - Import log is created for every import.
 - Tests verify log creation and key fields.
 
+## Task 3A — Dedupe policy note for social/X imports
+
+Browser bookmark imports can dedupe by canonical target URL, but social imports must not blindly discard different posts that point to the same target URL.
+
+Future X/social import behavior:
+
+- preserve each saved post by `source_url` or platform post ID;
+- store the outbound article/page as `target_url` plus `canonical_target_url`;
+- group multiple posts pointing to the same target into a Shoal or mentions list;
+- dedupe social imports by source post identity, not by outbound target URL alone.
+
+This is a design constraint for future importer tasks, not an implementation requirement for Task 3.
+
 ## Task 4 — CSV / URL list importer
 
 ### Goal
