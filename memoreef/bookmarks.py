@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
+import csv
 import html
 import re
 from typing import Iterable
@@ -15,7 +16,9 @@ class Bookmark:
     url: str
     add_date: str | None = None
     icon: str | None = None
+    source: str | None = None
     folders: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
 
 class BrowserBookmarkParser(HTMLParser):
@@ -101,6 +104,38 @@ def parse_bookmarks_html(path: str | Path) -> list[Bookmark]:
     return parser.bookmarks
 
 
+def parse_links_text(path: str | Path) -> list[Bookmark]:
+    bookmarks: list[Bookmark] = []
+    for line in Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
+        url = line.strip()
+        if url:
+            bookmarks.append(Bookmark(title=url, url=url))
+    return bookmarks
+
+
+def parse_links_csv(path: str | Path) -> list[Bookmark]:
+    bookmarks: list[Bookmark] = []
+    with Path(path).open(newline="", encoding="utf-8", errors="replace") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            url = clean_text(row.get("url") or "")
+            if not url:
+                continue
+            title = clean_text(row.get("title") or "") or url
+            source = clean_text(row.get("source") or "") or None
+            bookmarks.append(Bookmark(title=title, url=url, source=source, tags=parse_tag_list(row.get("tags") or "")))
+    return bookmarks
+
+
+def parse_tag_list(value: str) -> list[str]:
+    tags: list[str] = []
+    for tag in re.split(r"[,;]", value):
+        tag = tag.strip().lstrip("#")
+        if tag:
+            tags.append(tag)
+    return tags
+
+
 def canonicalize_url(url: str) -> str:
     parsed = urlsplit(url)
     scheme = parsed.scheme.lower()
@@ -170,12 +205,16 @@ def bookmark_to_markdown(bookmark: Bookmark) -> str:
     ]
     if bookmark.add_date:
         lines.append(f"browser_add_date: {yaml_quote(bookmark.add_date)}")
+    if bookmark.source:
+        lines.append(f"import_source: {yaml_quote(bookmark.source)}")
     if bookmark.folders:
         lines.append("folders:")
         for folder in bookmark.folders:
             lines.append(f"  - {yaml_quote(folder)}")
-    if folder_tags:
+    if bookmark.tags or folder_tags:
         lines.append("tags:")
+        for tag in bookmark.tags:
+            lines.append(f"  - {yaml_quote(tag)}")
         for tag in folder_tags:
             lines.append(f"  - {tag}")
     lines.extend([

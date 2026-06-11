@@ -106,6 +106,121 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("- Errors/warnings:", content)
             self.assertIn("  - none", content)
 
+    def test_import_links_uses_url_as_title_and_dedupes(self):
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            links_path = Path(tmp) / "links.txt"
+            vault_path = Path(tmp) / "vault"
+            links_path.write_text(
+                "\n".join(
+                    [
+                        "HTTPS://Example.COM/Alpha?utm_source=news",
+                        "https://example.com/Alpha?fbclid=tracking",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(stdout):
+                result = main(["import-links", str(links_path), "--vault", str(vault_path)])
+
+            drops = list((vault_path / "MemoReef" / "Drops").glob("*.md"))
+            logs = list((vault_path / "MemoReef" / "imports").glob("*-import.md"))
+
+            self.assertEqual(result, 0)
+            self.assertEqual(len(drops), 1)
+            self.assertEqual(len(logs), 1)
+            content = drops[0].read_text(encoding="utf-8")
+            self.assertIn('title: "HTTPS://Example.COM/Alpha?utm_source=news"', content)
+            self.assertIn("Source: [HTTPS://Example.COM/Alpha?utm_source=news]", content)
+            self.assertIn("- Parsed bookmark count: 2", logs[0].read_text(encoding="utf-8"))
+            self.assertIn("- Skipped duplicate count: 1", logs[0].read_text(encoding="utf-8"))
+
+    def test_import_csv_preserves_title_and_tags(self):
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "links.csv"
+            vault_path = Path(tmp) / "vault"
+            csv_path.write_text(
+                "\n".join(
+                    [
+                        "title,url,source,tags",
+                        'Article One,HTTPS://Example.COM/One?utm_source=news,newsletter,"research, ai"',
+                        "Article Duplicate,https://example.com/One?gclid=tracking,newsletter,duplicate",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(stdout):
+                result = main(["import-csv", str(csv_path), "--vault", str(vault_path)])
+
+            drops = list((vault_path / "MemoReef" / "Drops").glob("*.md"))
+            logs = list((vault_path / "MemoReef" / "imports").glob("*-import.md"))
+
+            self.assertEqual(result, 0)
+            self.assertEqual(len(drops), 1)
+            self.assertEqual(len(logs), 1)
+            content = drops[0].read_text(encoding="utf-8")
+            self.assertIn('title: "Article One"', content)
+            self.assertIn('import_source: "newsletter"', content)
+            self.assertIn('  - "research"', content)
+            self.assertIn('  - "ai"', content)
+            log_content = logs[0].read_text(encoding="utf-8")
+            self.assertIn("- Parsed bookmark count: 2", log_content)
+            self.assertIn("- Written Drop count: 1", log_content)
+            self.assertIn("- Skipped duplicate count: 1", log_content)
+
+    def test_import_csv_omits_import_source_when_source_is_empty(self):
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "links.csv"
+            vault_path = Path(tmp) / "vault"
+            csv_path.write_text(
+                "\n".join(
+                    [
+                        "title,url,source,tags",
+                        "Article One,https://example.com/one,,research",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(stdout):
+                result = main(["import-csv", str(csv_path), "--vault", str(vault_path)])
+
+            drops = list((vault_path / "MemoReef" / "Drops").glob("*.md"))
+            self.assertEqual(result, 0)
+            self.assertEqual(len(drops), 1)
+            self.assertNotIn("import_source:", drops[0].read_text(encoding="utf-8"))
+
+    def test_import_csv_omits_import_source_when_source_column_is_missing(self):
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "links.csv"
+            vault_path = Path(tmp) / "vault"
+            csv_path.write_text(
+                "\n".join(
+                    [
+                        "title,url,tags",
+                        "Article One,https://example.com/one,research",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(stdout):
+                result = main(["import-csv", str(csv_path), "--vault", str(vault_path)])
+
+            drops = list((vault_path / "MemoReef" / "Drops").glob("*.md"))
+            self.assertEqual(result, 0)
+            self.assertEqual(len(drops), 1)
+            self.assertNotIn("import_source:", drops[0].read_text(encoding="utf-8"))
+
     def test_inspect_command_prints_summary(self):
         bookmarks_path = Path(__file__).parent.parent / "examples" / "bookmarks.html"
         stdout = io.StringIO()

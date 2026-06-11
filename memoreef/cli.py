@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import __version__
-from .bookmarks import Bookmark, parse_bookmarks_html, write_bookmarks_to_vault
+from .bookmarks import Bookmark, parse_bookmarks_html, parse_links_csv, parse_links_text, write_bookmarks_to_vault
 
 
 def top_level_folder_counts(bookmarks: list[Bookmark]) -> dict[str, int]:
@@ -58,6 +58,43 @@ def write_import_log(
     return path
 
 
+def add_vault_import_options(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    command.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    command.add_argument("--allow-duplicates", action="store_true", help="Write duplicate URLs instead of skipping them.")
+
+
+def import_bookmarks(
+    bookmarks: list[Bookmark],
+    source: Path,
+    vault: Path,
+    root: str,
+    allow_duplicates: bool,
+    limit: int | None = None,
+) -> list[Path]:
+    parsed_count = len(bookmarks)
+    if limit is not None:
+        bookmarks = bookmarks[:limit]
+    written = write_bookmarks_to_vault(bookmarks, vault, root, allow_duplicates=allow_duplicates)
+    skipped_duplicates = 0 if allow_duplicates else len(bookmarks) - len(written)
+    write_import_log(
+        vault,
+        root,
+        source,
+        {
+            "vault": vault.expanduser().resolve(),
+            "root": root,
+            "limit": limit,
+            "allow_duplicates": allow_duplicates,
+        },
+        parsed_count,
+        len(written),
+        skipped_duplicates,
+        [],
+    )
+    return written
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="memoreef",
@@ -68,10 +105,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     import_cmd = sub.add_parser("import", help="Import browser bookmark HTML into Markdown Drops.")
     import_cmd.add_argument("bookmarks", type=Path, help="Browser bookmark export HTML file.")
-    import_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
-    import_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
     import_cmd.add_argument("--limit", type=int, default=None, help="Only import the first N bookmarks. Useful for tests.")
-    import_cmd.add_argument("--allow-duplicates", action="store_true", help="Write duplicate URLs instead of skipping them.")
+    add_vault_import_options(import_cmd)
+
+    import_links_cmd = sub.add_parser("import-links", help="Import a plain text URL list into Markdown Drops.")
+    import_links_cmd.add_argument("links", type=Path, help="Text file with one URL per line.")
+    add_vault_import_options(import_links_cmd)
+
+    import_csv_cmd = sub.add_parser("import-csv", help="Import CSV links into Markdown Drops.")
+    import_csv_cmd.add_argument("csv", type=Path, help="CSV file with title,url,source,tags columns.")
+    add_vault_import_options(import_csv_cmd)
 
     inspect_cmd = sub.add_parser("inspect", help="Inspect a browser bookmark HTML export without writing files.")
     inspect_cmd.add_argument("bookmarks", type=Path, help="Browser bookmark export HTML file.")
@@ -85,26 +128,21 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "import":
         bookmarks = parse_bookmarks_html(args.bookmarks)
-        parsed_count = len(bookmarks)
-        if args.limit is not None:
-            bookmarks = bookmarks[: args.limit]
-        written = write_bookmarks_to_vault(bookmarks, args.vault, args.root, allow_duplicates=args.allow_duplicates)
-        skipped_duplicates = 0 if args.allow_duplicates else len(bookmarks) - len(written)
-        write_import_log(
-            args.vault,
-            args.root,
-            args.bookmarks,
-            {
-                "vault": Path(args.vault).expanduser().resolve(),
-                "root": args.root,
-                "limit": args.limit,
-                "allow_duplicates": args.allow_duplicates,
-            },
-            parsed_count,
-            len(written),
-            skipped_duplicates,
-            [],
-        )
+        written = import_bookmarks(bookmarks, args.bookmarks, args.vault, args.root, args.allow_duplicates, args.limit)
+        print(f"Imported {len(written)} Drops into {Path(args.vault).expanduser().resolve() / args.root}")
+        if written:
+            print(f"First Drop: {written[0]}")
+        return 0
+
+    if args.command == "import-links":
+        written = import_bookmarks(parse_links_text(args.links), args.links, args.vault, args.root, args.allow_duplicates)
+        print(f"Imported {len(written)} Drops into {Path(args.vault).expanduser().resolve() / args.root}")
+        if written:
+            print(f"First Drop: {written[0]}")
+        return 0
+
+    if args.command == "import-csv":
+        written = import_bookmarks(parse_links_csv(args.csv), args.csv, args.vault, args.root, args.allow_duplicates)
         print(f"Imported {len(written)} Drops into {Path(args.vault).expanduser().resolve() / args.root}")
         if written:
             print(f"First Drop: {written[0]}")
