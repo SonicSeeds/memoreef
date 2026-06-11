@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from memoreef.bookmarks import Bookmark, canonicalize_url, parse_bookmarks_html, write_bookmarks_to_vault
+from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, write_bookmarks_to_vault
 from memoreef.cli import main
 
 
@@ -26,6 +26,33 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("status: drift", content)
             self.assertIn("agent_ready: true", content)
             self.assertIn("Source: [https://example.com/local-agents]", content)
+
+    def test_default_bookmark_writes_drift_triage_state(self):
+        content = bookmark_to_markdown(Bookmark("Example", "https://example.com"))
+
+        self.assertIn("status: drift", content)
+        self.assertIn("pearl: false", content)
+
+    def test_explicit_status_and_pearl_are_written(self):
+        content = bookmark_to_markdown(Bookmark("Example", "https://example.com", status="reef", pearl=True))
+
+        self.assertIn("status: reef", content)
+        self.assertIn("pearl: true", content)
+
+    def test_projects_are_written(self):
+        content = bookmark_to_markdown(Bookmark("Example", "https://example.com", projects=["Project Alpha"]))
+
+        self.assertIn("projects:\n  - \"Project Alpha\"", content)
+
+    def test_shoals_are_written(self):
+        content = bookmark_to_markdown(Bookmark("Example", "https://example.com", shoals=["Local AI"]))
+
+        self.assertIn("shoals:\n  - \"Local AI\"", content)
+
+    def test_triaged_at_is_written(self):
+        content = bookmark_to_markdown(Bookmark("Example", "https://example.com", triaged_at="2026-06-11T12:00:00Z"))
+
+        self.assertIn('triaged_at: "2026-06-11T12:00:00Z"', content)
 
     def test_canonicalize_url_strips_tracking_params(self):
         self.assertEqual(

@@ -45,7 +45,7 @@ Implemented:
 - Preserve folder path as Markdown frontmatter.
 - Write one Markdown file per bookmark.
 - Store files in an Obsidian-ready folder structure.
-- Mark imported items as `status: drift` and `agent_ready: true`.
+- Mark imported items as `status: drift`, `agent_ready: true`, and triage-ready Drop frontmatter.
 
 Not implemented yet:
 

@@ -17,8 +17,13 @@ class Bookmark:
     add_date: str | None = None
     icon: str | None = None
     source: str | None = None
+    status: str = "drift"
+    pearl: bool = False
     folders: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    projects: list[str] = field(default_factory=list)
+    shoals: list[str] = field(default_factory=list)
+    triaged_at: str | None = None
 
 
 class BrowserBookmarkParser(HTMLParser):
@@ -199,14 +204,24 @@ def bookmark_to_markdown(bookmark: Bookmark) -> str:
         f"title: {yaml_quote(bookmark.title)}",
         f"url: {yaml_quote(bookmark.url)}",
         "type: drop",
-        "status: drift",
+        f"status: {bookmark.status}",
         "agent_ready: true",
-        "pearl: false",
+        f"pearl: {'true' if bookmark.pearl else 'false'}",
     ]
     if bookmark.add_date:
         lines.append(f"browser_add_date: {yaml_quote(bookmark.add_date)}")
     if bookmark.source:
         lines.append(f"import_source: {yaml_quote(bookmark.source)}")
+    if bookmark.projects:
+        lines.append("projects:")
+        for project in bookmark.projects:
+            lines.append(f"  - {yaml_quote(project)}")
+    if bookmark.shoals:
+        lines.append("shoals:")
+        for shoal in bookmark.shoals:
+            lines.append(f"  - {yaml_quote(shoal)}")
+    if bookmark.triaged_at:
+        lines.append(f"triaged_at: {yaml_quote(bookmark.triaged_at)}")
     if bookmark.folders:
         lines.append("folders:")
         for folder in bookmark.folders:
