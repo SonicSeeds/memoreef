@@ -303,17 +303,17 @@
     }
     .octopus-photo {
       position: absolute;
-      right: max(-11vw, -150px);
-      bottom: max(-5vh, -48px);
+      right: clamp(18px, 4.2vw, 76px);
+      bottom: clamp(24px, 5vh, 72px);
       z-index: 0;
-      width: min(1120px, 108vw);
+      width: min(980px, 82vw);
       max-width: none;
-      opacity: calc(.62 + var(--depth, 0) * .34);
-      transform: translate3d(0, calc(72px - var(--depth, 0) * 118px), 0) scale(calc(.98 + var(--depth, 0) * .05));
+      opacity: calc(.66 + var(--depth, 0) * .3);
+      transform: translate3d(0, calc(58px - var(--depth, 0) * 104px), 0) scale(calc(.94 + var(--depth, 0) * .045));
       filter: saturate(1.16) contrast(1.12) brightness(1.05) drop-shadow(0 0 86px rgba(121,242,220,.16));
       mask-image:
-        linear-gradient(to left, #000 0 72%, transparent 100%),
-        linear-gradient(to top, #000 0 78%, transparent 100%);
+        linear-gradient(to left, #000 0 88%, transparent 100%),
+        linear-gradient(to top, #000 0 88%, transparent 100%);
       mask-composite: intersect;
     }
     .tentacle-trace {
@@ -337,7 +337,7 @@
     .final-cta {
       position: relative;
       z-index: 3;
-      margin-top: -30vh;
+      margin-top: -12vh;
       padding: 0 0 130px;
       text-align: center;
     }
@@ -380,7 +380,7 @@
       .archive-window { min-height: 520px; }
       .cards { grid-template-columns: 1fr; }
       section.depth { padding: 76px 0; }
-      .octopus-photo { right: -56vw; width: 170vw; opacity: .66; }
+      .octopus-photo { right: -18vw; width: 132vw; opacity: .72; }
       .tentacle-trace { width: 120vw; opacity: .18; }
     }
   </style>

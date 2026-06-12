@@ -2783,6 +2783,7 @@ def app_common_css() -> str:
     * { box-sizing:border-box; }
     body { margin:0; font-family:ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:radial-gradient(circle at 12% -10%, rgba(117,234,211,.14), transparent 24rem), radial-gradient(circle at 85% 8%, rgba(255,146,126,.08), transparent 20rem), linear-gradient(180deg, var(--bg2), var(--bg)); color:var(--text); }
     body::before { content:""; position:fixed; inset:0; pointer-events:none; background:linear-gradient(180deg, rgba(255,255,255,.035), transparent 38%), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px); background-size:auto, 72px 72px, 72px 72px; mask-image:linear-gradient(to bottom, rgba(0,0,0,.75), transparent 78%); }
+    body::after { content:""; position:fixed; right:-120px; top:10vh; width:420px; height:760px; pointer-events:none; border-left:1px solid rgba(117,234,211,.12); border-top:1px solid rgba(255,146,126,.08); border-radius:55% 0 0 45%; transform:rotate(13deg); box-shadow:-34px 0 90px rgba(117,234,211,.055); mask-image:linear-gradient(to bottom, transparent, #000 18%, #000 72%, transparent); }
     main { width:min(1040px, calc(100% - 32px)); margin:0 auto; padding:34px 0 58px; position:relative; }
     a { color:var(--green); text-decoration-thickness:1px; text-underline-offset:3px; }
     h1 { font-size:clamp(34px, 6.8vw, 66px); line-height:.95; margin:.22em 0 .18em; letter-spacing:-.055em; }
