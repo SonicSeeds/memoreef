@@ -374,3 +374,26 @@ Complete the local agent finish loop by applying accepted agent proposal JSON ba
 - Dry run reports proposed updates without modifying Markdown.
 - Missing files, malformed proposals, invalid statuses, and path traversal warn and skip.
 - Existing frontmatter fields and Markdown body are preserved.
+
+## Task 14 — Duplicate report
+
+### Goal
+Create a local report that surfaces bookmark clutter without modifying Markdown files.
+
+### Requirements
+
+- Add `python3 -m memoreef.cli duplicate-report --vault <vault>`.
+- Support `--output`; default to `<vault>/MemoReef/reports/YYYY-MM-DD-HHMMSS-duplicate-report.json`.
+- Group exact canonical URL duplicates.
+- Group same-domain clusters with at least two Drops.
+- Group conservative similar-title matches.
+- Do not modify, move, or delete Markdown files.
+- Do not call network APIs.
+- Update the local app dashboard to detect the latest duplicate report.
+
+### Acceptance criteria
+
+- Duplicate report JSON includes `summary`, `groups.exact_url`, `groups.same_domain`, and `groups.similar_title`.
+- Singletons are excluded from duplicate groups.
+- Empty or missing URLs do not crash.
+- Dashboard includes latest duplicate report information.

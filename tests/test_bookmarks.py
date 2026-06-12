@@ -875,6 +875,66 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("outside the vault", output)
             self.assertIn("unsupported proposed_status", output)
 
+    def test_duplicate_report_explicit_output_groups_urls_and_domains(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "duplicate-report.json"
+            write_bookmarks_to_vault([
+                Bookmark("Example Article", "https://example.com/article?utm_source=test"),
+                Bookmark("Example Article Copy", "https://example.com/article"),
+                Bookmark("Other Example", "https://example.com/other"),
+            ], vault_path, allow_duplicates=True)
+
+            with redirect_stdout(stdout):
+                result = main(["duplicate-report", "--vault", str(vault_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(data["summary"]["total_drops"], 3)
+            self.assertEqual(data["summary"]["exact_url_groups"], 1)
+            self.assertEqual(data["summary"]["same_domain_groups"], 1)
+            self.assertIn("Created duplicate report", stdout.getvalue())
+
+    def test_duplicate_report_default_output_and_similar_titles(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([
+                Bookmark("Local AI Agents Small Teams Guide", "https://a.example/one"),
+                Bookmark("Local AI Agents Small Teams Handbook", "https://b.example/two"),
+                Bookmark("Completely Different Orchard", "https://c.example/three"),
+            ], vault_path, allow_duplicates=True)
+
+            with redirect_stdout(stdout):
+                result = main(["duplicate-report", "--vault", str(vault_path)])
+
+            reports = list((vault_path / "MemoReef" / "reports").glob("*-duplicate-report.json"))
+            self.assertEqual(result, 0)
+            self.assertEqual(len(reports), 1)
+            data = json.loads(reports[0].read_text(encoding="utf-8"))
+            self.assertGreaterEqual(data["summary"]["similar_title_groups"], 1)
+            self.assertEqual(data["summary"]["exact_url_groups"], 0)
+
+    def test_duplicate_report_does_not_modify_markdown_and_dashboard_detects_it(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Example", "https://example.com")], vault_path)
+            before = written[0].read_text(encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                result = main(["duplicate-report", "--vault", str(vault_path)])
+            with redirect_stdout(io.StringIO()):
+                app_result = main(["app", "--vault", str(vault_path)])
+
+            html = (vault_path / "MemoReef" / "app" / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertEqual(app_result, 0)
+            self.assertEqual(written[0].read_text(encoding="utf-8"), before)
+            self.assertIn("Duplicate report", html)
+            self.assertIn("duplicate-report", html)
+
 
 if __name__ == "__main__":
     unittest.main()

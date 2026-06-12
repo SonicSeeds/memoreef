@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 from . import __version__
 from .bookmarks import (
     Bookmark,
+    canonicalize_url,
     markdown_drop_to_review_item,
     parse_bookmarks_html,
     parse_links_csv,
@@ -572,6 +573,136 @@ def apply_agent_proposals(
     return updated, skipped, warnings
 
 
+def duplicate_drop_item(drop: dict[str, object]) -> dict[str, object]:
+    return {
+        "id": drop.get("id", ""),
+        "path": drop.get("path", ""),
+        "title": drop.get("title", ""),
+        "url": drop.get("url", ""),
+        "status": drop.get("status", "drift"),
+        "pearl": bool(drop.get("pearl", False)),
+    }
+
+
+def grouped_duplicates(groups: dict[str, list[dict[str, object]]]) -> list[dict[str, object]]:
+    result = []
+    for key, drops in sorted(groups.items()):
+        if len(drops) < 2:
+            continue
+        result.append({"key": key, "count": len(drops), "drops": [duplicate_drop_item(drop) for drop in drops]})
+    return result
+
+
+TITLE_STOPWORDS = {
+    "the", "and", "for", "with", "from", "into", "your", "you", "are", "was", "were",
+    "this", "that", "not", "but", "can", "how", "why", "what", "when", "where",
+}
+
+
+def title_tokens(title: str) -> set[str]:
+    return {token for token in re.findall(r"[a-z0-9]+", title.lower()) if len(token) >= 3 and token not in TITLE_STOPWORDS}
+
+
+def similar_title_groups(drops: list[dict[str, object]]) -> list[dict[str, object]]:
+    token_sets = [title_tokens(str(drop.get("title") or "")) for drop in drops]
+    parent = list(range(len(drops)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def union(a: int, b: int) -> None:
+        root_a = find(a)
+        root_b = find(b)
+        if root_a != root_b:
+            parent[root_b] = root_a
+
+    for i, tokens_i in enumerate(token_sets):
+        if len(tokens_i) < 3:
+            continue
+        for j in range(i + 1, len(drops)):
+            tokens_j = token_sets[j]
+            if len(tokens_j) < 3:
+                continue
+            overlap = tokens_i & tokens_j
+            union_size = len(tokens_i | tokens_j)
+            jaccard = len(overlap) / union_size if union_size else 0
+            if len(overlap) >= 3 and jaccard >= 0.6:
+                union(i, j)
+
+    grouped: dict[int, list[dict[str, object]]] = {}
+    for index, drop in enumerate(drops):
+        grouped.setdefault(find(index), []).append(drop)
+
+    result = []
+    for group in grouped.values():
+        if len(group) < 2:
+            continue
+        key = " | ".join(sorted(str(drop.get("title") or "") for drop in group))
+        result.append({"key": key, "count": len(group), "drops": [duplicate_drop_item(drop) for drop in group]})
+    return sorted(result, key=lambda item: str(item["key"]))
+
+
+def create_duplicate_report(vault: Path, root: str = "MemoReef", output: Path | None = None) -> tuple[Path, dict[str, object]]:
+    vault_path = vault.expanduser().resolve()
+    drops = load_drop_items(vault_path, root)
+    exact_url: dict[str, list[dict[str, object]]] = {}
+    same_domain: dict[str, list[dict[str, object]]] = {}
+    warnings: list[str] = []
+
+    for drop in drops:
+        raw_url = drop.get("url")
+        path = drop.get("path", "unknown")
+        if not isinstance(raw_url, str) or not raw_url.strip():
+            continue
+        canonical = canonicalize_url(raw_url)
+        if not canonical:
+            continue
+        exact_url.setdefault(canonical, []).append(drop)
+        hostname = urlsplit(canonical).hostname
+        if hostname:
+            same_domain.setdefault(hostname.lower(), []).append(drop)
+        else:
+            warnings.append(f"{path}: URL has no hostname")
+
+    groups = {
+        "exact_url": grouped_duplicates(exact_url),
+        "same_domain": grouped_duplicates(same_domain),
+        "similar_title": similar_title_groups(drops),
+    }
+    affected = {
+        str(drop.get("path", ""))
+        for group_list in groups.values()
+        for group in group_list
+        for drop in group["drops"]
+    }
+
+    if output is None:
+        output = vault_path / root / "reports" / f"{timestamp_for_filename()}-duplicate-report.json"
+    output = output.expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    report = {
+        "version": 1,
+        "created_at": utc_now_iso(),
+        "vault": str(vault_path),
+        "source": f"{root}/Drops",
+        "summary": {
+            "total_drops": len(drops),
+            "exact_url_groups": len(groups["exact_url"]),
+            "same_domain_groups": len(groups["same_domain"]),
+            "similar_title_groups": len(groups["similar_title"]),
+            "affected_drops": len(affected),
+        },
+        "groups": groups,
+        "warnings": warnings,
+    }
+    output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    return output, report
+
+
 def latest_file(paths: list[Path]) -> Path | None:
     existing = [path for path in paths if path.exists()]
     if not existing:
@@ -610,6 +741,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
     latest_review_decisions = latest_matching_file(vault_path, ["*review-decisions*.json"])
     latest_agent_plan = latest_matching_file(root_path / "agent-plans", ["*-agent-finish-plan.json"])
     latest_agent_proposals = latest_matching_file(root_path / "agent-plans", ["*-agent-proposals.json"])
+    latest_duplicate_report = latest_matching_file(root_path / "reports", ["*-duplicate-report.json"])
 
     return {
         "vault": vault_path,
@@ -625,6 +757,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
         "latest_review_decisions": latest_review_decisions,
         "latest_agent_plan": latest_agent_plan,
         "latest_agent_proposals": latest_agent_proposals,
+        "latest_duplicate_report": latest_duplicate_report,
         "next_action": recommended_next_action(
             total,
             drift,
@@ -632,6 +765,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
             latest_review_decisions,
             latest_agent_plan,
             latest_agent_proposals,
+            latest_duplicate_report,
         ),
     }
 
@@ -643,9 +777,12 @@ def recommended_next_action(
     latest_review_decisions: Path | None,
     latest_agent_plan: Path | None,
     latest_agent_proposals: Path | None,
+    latest_duplicate_report: Path | None,
 ) -> str:
     if total == 0:
         return "Import bookmarks, a URL list, or a CSV file to create your first Drops."
+    if total > 0 and latest_duplicate_report is None:
+        return "Create a duplicate report, then continue reviewing Drift Drops."
     if drift > 0 and latest_review_session is None:
         return "Export a review session JSON, then open Review Mode."
     if drift > 0 and latest_review_decisions is None:
@@ -672,6 +809,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
     latest_review_decisions = relative_or_none(state.get("latest_review_decisions"), vault)
     latest_agent_plan = relative_or_none(state.get("latest_agent_plan"), vault)
     latest_agent_proposals = relative_or_none(state.get("latest_agent_proposals"), vault)
+    latest_duplicate_report = relative_or_none(state.get("latest_duplicate_report"), vault)
     next_action = html_escape(str(state.get("next_action", "Continue.")))
     vault_text = html_escape(str(vault))
 
@@ -739,12 +877,14 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <dt>Review decisions JSON</dt><dd>{html_escape(latest_review_decisions)}</dd>
           <dt>Agent finish plan</dt><dd>{html_escape(latest_agent_plan)}</dd>
           <dt>Agent proposals</dt><dd>{html_escape(latest_agent_proposals)}</dd>
+          <dt>Duplicate report</dt><dd>{html_escape(latest_duplicate_report)}</dd>
         </dl>
       </div>
       <div class=\"card workflow\">
         <h2>Workflow</h2>
         <ol>
           <li>Import links into Markdown Drops.</li>
+          <li>Run <code>duplicate-report</code> to spot exact URL, same-domain, and similar-title clutter.</li>
           <li>Run <code>export-review-session</code> and open <code>site/swipe.html</code> for Review Mode.</li>
           <li>Export decisions from Review Mode, then run <code>apply-review-decisions</code>.</li>
           <li>Create an agent finish plan with <code>plan-agent-finish</code>.</li>
@@ -824,6 +964,11 @@ def build_parser() -> argparse.ArgumentParser:
     apply_proposals_cmd.add_argument("--proposals", type=Path, required=True, help="Agent proposals JSON from draft-agent-proposals.")
     apply_proposals_cmd.add_argument("--dry-run", action="store_true", help="Preview updates without modifying Markdown files.")
     apply_proposals_cmd.add_argument("--include-needs-review", action="store_true", help="Also apply proposals marked requires_user_review.")
+
+    duplicate_cmd = sub.add_parser("duplicate-report", help="Create a local duplicate report for Markdown Drops.")
+    duplicate_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    duplicate_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    duplicate_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults inside the vault.")
 
     app_cmd = sub.add_parser("app", help="Generate a static MemoReef local app dashboard.")
     app_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -930,6 +1075,25 @@ def main(argv: list[str] | None = None) -> int:
             print(f"- updated: {updated}")
         print(f"- skipped: {skipped}")
         print(f"- warnings: {len(warnings)}")
+        for warning in warnings:
+            print(f"  - {warning}")
+        return 0
+
+    if args.command == "duplicate-report":
+        output, report = create_duplicate_report(args.vault, args.root, args.output)
+        summary = report["summary"]
+        assert isinstance(summary, dict)
+        warnings = report.get("warnings", [])
+        if not isinstance(warnings, list):
+            warnings = []
+        print("Created duplicate report:")
+        print(f"- total drops: {summary['total_drops']}")
+        print(f"- exact URL groups: {summary['exact_url_groups']}")
+        print(f"- same domain groups: {summary['same_domain_groups']}")
+        print(f"- similar title groups: {summary['similar_title_groups']}")
+        print(f"- affected drops: {summary['affected_drops']}")
+        print(f"- warnings: {len(warnings)}")
+        print(f"- output: {output}")
         for warning in warnings:
             print(f"  - {warning}")
         return 0

@@ -173,6 +173,14 @@ python3 -m memoreef.cli apply-agent-proposals --vault /tmp/memoreef-vault --prop
 
 Proposals marked `requires_user_review: true` are skipped by default. Pass `--include-needs-review` to apply them deliberately. This updates frontmatter only and does not move, delete, or retag files.
 
+Create a local duplicate report:
+
+```bash
+python3 -m memoreef.cli duplicate-report --vault /tmp/memoreef-vault
+```
+
+The duplicate report groups exact canonical URLs, same-domain clusters, and conservative similar-title matches. It is local-only, does not call the network, and does not modify, move, or delete files.
+
 Generate the static local app dashboard:
 
 ```bash
