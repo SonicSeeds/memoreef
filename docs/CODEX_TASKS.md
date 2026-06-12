@@ -493,3 +493,26 @@ Apply accepted project and shoal suggestions from a garden suggestion report bac
 - Dry run reports planned updates without modifying Markdown.
 - Missing files and unmatched requested labels produce warnings.
 - Existing frontmatter fields and Markdown body are preserved.
+
+## Task 19 — Filtered review sessions
+
+### Goal
+Create focused review queues by filtering Drops during review session export.
+
+### Requirements
+
+- Add filter options to `python3 -m memoreef.cli export-review-session`.
+- Support repeatable `--project`, `--shoal`, `--status`, `--tag`, `--folder`, `--hostname`, and `--exclude-status`.
+- Support `--pearl-only` and `--limit`.
+- Match exact strings case-insensitively.
+- AND different filter groups together and OR repeated values inside one group.
+- Apply exclusions after inclusions and limit after filtering/sorting.
+- Record filters in the review session JSON.
+- Mention filtered review export in the dashboard workflow.
+
+### Acceptance criteria
+
+- No filters preserve existing export behavior and write default filters.
+- Project, shoal, status, tag, folder, hostname, pearl, exclusion, and limit filters work.
+- CLI output includes a filter summary.
+- README and task docs explain filtered review sessions.

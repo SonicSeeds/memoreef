@@ -137,6 +137,18 @@ python3 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault
 open site/swipe.html
 ```
 
+Create filtered review sessions for focused queues:
+
+```bash
+python3 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault --project "AI Agents"
+python3 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault --shoal "Automation"
+python3 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault --pearl-only
+python3 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault --status drift --exclude-status discarded
+python3 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault --status drift --limit 25
+```
+
+Filtered review sessions are local-only and do not modify files. Different filter groups combine together, while repeated values inside one group broaden that group.
+
 Review Mode can export `memoreef-review-decisions.json` from the browser. The CLI can apply those decisions back to Markdown frontmatter.
 
 Apply exported Review Mode decisions back to Markdown Drop frontmatter:

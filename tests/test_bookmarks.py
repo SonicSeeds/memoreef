@@ -8,7 +8,7 @@ import unittest
 import urllib.error
 from unittest.mock import patch
 
-from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, write_bookmarks_to_vault
+from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, update_markdown_frontmatter, write_bookmarks_to_vault
 from memoreef.cli import main
 
 
@@ -373,6 +373,143 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertEqual(data["version"], 1)
             self.assertEqual(data["stats"]["total"], 1)
             self.assertEqual(len(data["drops"]), 1)
+
+    def update_drop_frontmatter(self, path: Path, updates: dict[str, object]) -> None:
+        content = path.read_text(encoding="utf-8")
+        path.write_text(update_markdown_frontmatter(content, updates), encoding="utf-8")
+
+    def export_session_data(self, vault_path: Path, *args: str):
+        stdout = io.StringIO()
+        output_path = vault_path.parent / "review-session.json"
+        with redirect_stdout(stdout):
+            result = main(["export-review-session", "--vault", str(vault_path), "--output", str(output_path), *args])
+        return result, stdout.getvalue(), json.loads(output_path.read_text(encoding="utf-8"))
+
+    def test_export_review_session_no_filters_writes_default_filters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([Bookmark("One", "https://one.example")], vault_path)
+
+            result, output, data = self.export_session_data(vault_path)
+
+            self.assertEqual(result, 0)
+            self.assertEqual(len(data["drops"]), 1)
+            self.assertEqual(len(data["items"]), 1)
+            self.assertEqual(data["filters"]["project"], [])
+            self.assertEqual(data["filters"]["shoal"], [])
+            self.assertEqual(data["filters"]["pearl_only"], False)
+            self.assertIsNone(data["filters"]["limit"])
+            self.assertIn("- filters: none", output)
+
+    def test_export_review_session_filters_project_shoal_status_tag_folder_and_pearl(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([
+                Bookmark("Match", "https://match.example", projects=["AI Agents"], shoals=["Automation"], status="reef", pearl=True, folders=["Inbox"], tags=["agents"]),
+                Bookmark("Other", "https://other.example", projects=["Other"], shoals=["Automation"], status="drift", folders=["Inbox"], tags=["agents"]),
+            ], vault_path, allow_duplicates=True)
+
+            result, output, data = self.export_session_data(
+                vault_path,
+                "--project",
+                "ai agents",
+                "--shoal",
+                "automation",
+                "--status",
+                "REEF",
+                "--tag",
+                "Agents",
+                "--folder",
+                "inbox",
+                "--pearl-only",
+            )
+
+            self.assertEqual(result, 0)
+            self.assertEqual([item["title"] for item in data["items"]], ["Match"])
+            self.assertIn("project=ai agents", output)
+            self.assertIn("pearl-only=true", output)
+
+    def test_export_review_session_filters_hostname_metadata_and_url_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("Metadata Host", "https://wrong.example/a"),
+                Bookmark("URL Host", "https://fallback.example/b"),
+                Bookmark("No Match", "https://other.example/c"),
+            ], vault_path, allow_duplicates=True)
+            self.update_drop_frontmatter(written[0], {"hostname": "meta.example"})
+
+            result, _output, data = self.export_session_data(
+                vault_path,
+                "--hostname",
+                "META.EXAMPLE",
+                "--hostname",
+                "fallback.example",
+            )
+
+            self.assertEqual(result, 0)
+            self.assertEqual([item["title"] for item in data["items"]], ["Metadata Host", "URL Host"])
+
+    def test_export_review_session_exclude_status_and_and_logic(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([
+                Bookmark("Drift Project", "https://one.example", projects=["AI Agents"], status="drift"),
+                Bookmark("Reef Project", "https://two.example", projects=["AI Agents"], status="reef"),
+                Bookmark("Discarded Project", "https://three.example", projects=["AI Agents"], status="discarded"),
+                Bookmark("Other Drift", "https://four.example", projects=["Other"], status="drift"),
+            ], vault_path, allow_duplicates=True)
+
+            result, _output, data = self.export_session_data(
+                vault_path,
+                "--project",
+                "AI Agents",
+                "--status",
+                "drift",
+                "--status",
+                "reef",
+                "--exclude-status",
+                "discarded",
+            )
+
+            self.assertEqual(result, 0)
+            self.assertEqual([item["title"] for item in data["items"]], ["Drift Project", "Reef Project"])
+
+    def test_export_review_session_limit_applies_after_filtering(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([
+                Bookmark("One", "https://one.example", status="drift"),
+                Bookmark("Two", "https://two.example", status="drift"),
+                Bookmark("Three", "https://three.example", status="drift"),
+            ], vault_path, allow_duplicates=True)
+
+            result, output, data = self.export_session_data(vault_path, "--status", "drift", "--limit", "2")
+
+            self.assertEqual(result, 0)
+            self.assertEqual(len(data["items"]), 2)
+            self.assertEqual(data["filters"]["limit"], 2)
+            self.assertIn("limit=2", output)
+
+    def test_app_workflow_mentions_filtered_review_sessions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+
+            with redirect_stdout(io.StringIO()):
+                result = main(["app", "--vault", str(vault_path)])
+
+            html = (vault_path / "MemoReef" / "app" / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("filtered", html.lower())
+            self.assertIn("export-review-session", html)
+
+    def test_readme_and_tasks_mention_filtered_review_sessions(self):
+        readme = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
+        tasks = (Path(__file__).parent.parent / "docs" / "CODEX_TASKS.md").read_text(encoding="utf-8")
+
+        self.assertIn("filtered review", readme.lower())
+        self.assertIn("Task 19", tasks)
+        self.assertIn("Filtered review sessions", tasks)
 
     def write_decisions(self, path: Path, drop_path: Path, vault_path: Path, decision: str, reviewed_at: str = "2026-06-12T12:45:00Z"):
         relative = drop_path.resolve().relative_to(vault_path.resolve()).as_posix()

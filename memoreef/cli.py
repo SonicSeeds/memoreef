@@ -120,14 +120,141 @@ def timestamp_for_filename() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M%S")
 
 
-def export_review_session(vault: Path, root: str = "MemoReef", output: Path | None = None) -> Path:
+def default_review_filters(
+    project: list[str] | None = None,
+    shoal: list[str] | None = None,
+    status: list[str] | None = None,
+    tag: list[str] | None = None,
+    folder: list[str] | None = None,
+    hostname: list[str] | None = None,
+    pearl_only: bool = False,
+    exclude_status: list[str] | None = None,
+    limit: int | None = None,
+) -> dict[str, object]:
+    return {
+        "project": project or [],
+        "shoal": shoal or [],
+        "status": status or [],
+        "tag": tag or [],
+        "folder": folder or [],
+        "hostname": hostname or [],
+        "pearl_only": pearl_only,
+        "exclude_status": exclude_status or [],
+        "limit": limit,
+    }
+
+
+def normalized_match(value: object, accepted: list[str]) -> bool:
+    if not accepted:
+        return True
+    return str(value).casefold() in {item.casefold() for item in accepted}
+
+
+def normalized_list_match(values: object, accepted: list[str]) -> bool:
+    if not accepted:
+        return True
+    if not isinstance(values, list):
+        return False
+    accepted_values = {item.casefold() for item in accepted}
+    return any(str(value).casefold() in accepted_values for value in values)
+
+
+def review_hostname(drop: dict[str, object]) -> str:
+    hostname = str(drop.get("hostname") or "")
+    if hostname:
+        return hostname.lower()
+    return (urlsplit(str(drop.get("url") or "")).hostname or "").lower()
+
+
+def review_filter_summary(filters: dict[str, object]) -> str:
+    parts: list[str] = []
+    labels = [
+        ("project", "project"),
+        ("shoal", "shoal"),
+        ("status", "status"),
+        ("tag", "tag"),
+        ("folder", "folder"),
+        ("hostname", "hostname"),
+        ("exclude_status", "exclude-status"),
+    ]
+    for key, label in labels:
+        values = filters.get(key)
+        if isinstance(values, list) and values:
+            parts.append(f"{label}={', '.join(str(value) for value in values)}")
+    if filters.get("pearl_only"):
+        parts.append("pearl-only=true")
+    if filters.get("limit") is not None:
+        parts.append(f"limit={filters['limit']}")
+    return ", ".join(parts) if parts else "none"
+
+
+def review_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip() and str(item).strip() != "[]"]
+
+
+def markdown_drop_to_filtered_review_item(path: Path, vault: Path) -> dict[str, object]:
+    base = markdown_drop_to_review_item(path, vault)
+    frontmatter, _body = parse_markdown_frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+    projects = review_list(frontmatter.get("projects"))
+    shoals = review_list(frontmatter.get("shoals"))
+    hostname = str(frontmatter.get("hostname") or "")
+    if not hostname:
+        hostname = urlsplit(str(frontmatter.get("url") or "")).hostname or ""
+    base["projects"] = projects
+    base["shoals"] = shoals
+    base["hostname"] = hostname.lower()
+    return base
+
+
+def filter_values(filters: dict[str, object], key: str) -> list[str]:
+    value = filters.get(key, [])
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
+
+
+def review_item_matches_filters(drop: dict[str, object], filters: dict[str, object]) -> bool:
+    if not normalized_list_match(drop.get("projects"), filter_values(filters, "project")):
+        return False
+    if not normalized_list_match(drop.get("shoals"), filter_values(filters, "shoal")):
+        return False
+    if not normalized_match(drop.get("status", ""), filter_values(filters, "status")):
+        return False
+    if not normalized_list_match(drop.get("tags"), filter_values(filters, "tag")):
+        return False
+    if not normalized_list_match(drop.get("folders"), filter_values(filters, "folder")):
+        return False
+    if not normalized_match(review_hostname(drop), filter_values(filters, "hostname")):
+        return False
+    if filters.get("pearl_only") and not bool(drop.get("pearl", False)):
+        return False
+    exclude_statuses = filter_values(filters, "exclude_status")
+    if exclude_statuses and normalized_match(drop.get("status", ""), exclude_statuses):
+        return False
+    return True
+
+
+def export_review_session(
+    vault: Path,
+    root: str = "MemoReef",
+    output: Path | None = None,
+    filters: dict[str, object] | None = None,
+) -> tuple[Path, dict[str, object]]:
     vault_path = vault.expanduser().resolve()
     drops_dir = vault_path / root / "Drops"
+    filters = filters or default_review_filters()
     drops = []
     if drops_dir.exists():
         for path in sorted(drops_dir.rglob("*.md")):
-            drops.append(markdown_drop_to_review_item(path, vault_path))
+            drop = markdown_drop_to_filtered_review_item(path, vault_path)
+            if review_item_matches_filters(drop, filters):
+                drops.append(drop)
     drops.sort(key=lambda drop: (drop.get("status") != "drift", str(drop.get("path", ""))))
+    limit = filters.get("limit")
+    if isinstance(limit, int) and limit >= 0:
+        drops = drops[:limit]
 
     if output is None:
         output = vault_path / root / "review-sessions" / f"{timestamp_for_filename()}-review-session.json"
@@ -140,14 +267,16 @@ def export_review_session(vault: Path, root: str = "MemoReef", output: Path | No
         "created_at": utc_now_iso(),
         "vault": str(vault_path),
         "source": f"{root}/Drops",
+        "filters": filters,
         "stats": {
             "total": len(drops),
             "drift": drift_count,
         },
+        "items": drops,
         "drops": drops,
     }
     output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return output
+    return output, payload
 
 
 def load_drop_items(vault: Path, root: str = "MemoReef") -> list[dict[str, object]]:
@@ -1590,7 +1719,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <li>Run <code>refresh-metadata</code> to fetch titles, descriptions, canonical URLs, and hostnames.</li>
           <li>Run <code>suggest-gardens</code> to propose existing projects and shoals for unsorted Drops.</li>
           <li>Review the suggestions JSON, then run <code>apply-garden-suggestions --dry-run</code> before applying accepted labels.</li>
-          <li>Run <code>export-review-session</code> and open <code>site/swipe.html</code> for Review Mode.</li>
+          <li>Run <code>export-review-session</code> with optional filtered review queues like <code>--project</code>, <code>--shoal</code>, or <code>--pearl-only</code>, then open <code>site/swipe.html</code> for Review Mode.</li>
           <li>Export decisions from Review Mode, then run <code>apply-review-decisions</code>.</li>
           <li>Create an agent finish plan with <code>plan-agent-finish</code>.</li>
           <li>Draft Agent proposals with <code>draft-agent-proposals</code>.</li>
@@ -1647,6 +1776,15 @@ def build_parser() -> argparse.ArgumentParser:
     review_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     review_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
     review_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults inside the vault.")
+    review_cmd.add_argument("--project", action="append", default=[], help="Include Drops with a matching project. Repeatable.")
+    review_cmd.add_argument("--shoal", action="append", default=[], help="Include Drops with a matching shoal. Repeatable.")
+    review_cmd.add_argument("--status", action="append", default=[], help="Include Drops with a matching status. Repeatable.")
+    review_cmd.add_argument("--tag", action="append", default=[], help="Include Drops with a matching tag. Repeatable.")
+    review_cmd.add_argument("--folder", action="append", default=[], help="Include Drops with a matching folder. Repeatable.")
+    review_cmd.add_argument("--hostname", action="append", default=[], help="Include Drops with a matching hostname. Repeatable.")
+    review_cmd.add_argument("--pearl-only", action="store_true", help="Include only Pearl Drops.")
+    review_cmd.add_argument("--exclude-status", action="append", default=[], help="Exclude Drops with a matching status. Repeatable.")
+    review_cmd.add_argument("--limit", type=int, default=None, help="Cap exported Drops after sorting and filtering.")
 
     apply_cmd = sub.add_parser("apply-review-decisions", help="Apply Review Mode decision JSON to Markdown Drops.")
     apply_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -1748,8 +1886,24 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "export-review-session":
-        output = export_review_session(args.vault, args.root, args.output)
-        print(f"Exported review session to {output}")
+        filters = default_review_filters(
+            project=args.project,
+            shoal=args.shoal,
+            status=args.status,
+            tag=args.tag,
+            folder=args.folder,
+            hostname=args.hostname,
+            pearl_only=args.pearl_only,
+            exclude_status=args.exclude_status,
+            limit=args.limit,
+        )
+        output, payload = export_review_session(args.vault, args.root, args.output, filters)
+        stats = payload.get("stats", {})
+        drops_count = stats.get("total", 0) if isinstance(stats, dict) else 0
+        print("Exported review session:")
+        print(f"- drops: {drops_count}")
+        print(f"- output: {output}")
+        print(f"- filters: {review_filter_summary(filters)}")
         return 0
 
     if args.command == "apply-review-decisions":
