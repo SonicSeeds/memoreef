@@ -339,6 +339,170 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertEqual(data["stats"]["total"], 1)
             self.assertEqual(len(data["drops"]), 1)
 
+    def write_decisions(self, path: Path, drop_path: Path, vault_path: Path, decision: str, reviewed_at: str = "2026-06-12T12:45:00Z"):
+        relative = drop_path.resolve().relative_to(vault_path.resolve()).as_posix()
+        payload = {
+            "version": 1,
+            "reviewed_at": reviewed_at,
+            "decisions": [
+                {
+                    "id": relative,
+                    "path": relative,
+                    "decision": decision,
+                    "status": "reef",
+                    "pearl": decision == "pearl",
+                }
+            ],
+        }
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    def test_apply_review_decisions_keep_updates_frontmatter(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Example Source", "https://example.com")], vault_path)
+            decisions_path = Path(tmp) / "decisions.json"
+            self.write_decisions(decisions_path, written[0], vault_path, "keep")
+
+            with redirect_stdout(stdout):
+                result = main(["apply-review-decisions", "--vault", str(vault_path), "--decisions", str(decisions_path)])
+
+            content = written[0].read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("Applied review decisions:", stdout.getvalue())
+            self.assertIn("- updated: 1", stdout.getvalue())
+            self.assertIn("status: reef", content)
+            self.assertIn("pearl: false", content)
+            self.assertIn('triaged_at: "2026-06-12T12:45:00Z"', content)
+
+    def test_apply_review_decisions_pearl_updates_frontmatter(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Example Source", "https://example.com")], vault_path)
+            decisions_path = Path(tmp) / "decisions.json"
+            self.write_decisions(decisions_path, written[0], vault_path, "pearl")
+
+            with redirect_stdout(stdout):
+                result = main(["apply-review-decisions", "--vault", str(vault_path), "--decisions", str(decisions_path)])
+
+            content = written[0].read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("status: reef", content)
+            self.assertIn("pearl: true", content)
+
+    def test_apply_review_decisions_sink_updates_frontmatter(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Example Source", "https://example.com")], vault_path)
+            decisions_path = Path(tmp) / "decisions.json"
+            self.write_decisions(decisions_path, written[0], vault_path, "sink")
+
+            with redirect_stdout(stdout):
+                result = main(["apply-review-decisions", "--vault", str(vault_path), "--decisions", str(decisions_path)])
+
+            content = written[0].read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("status: discarded", content)
+            self.assertIn("pearl: false", content)
+
+    def test_apply_review_decisions_dry_run_does_not_modify_file(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Example Source", "https://example.com")], vault_path)
+            before = written[0].read_text(encoding="utf-8")
+            decisions_path = Path(tmp) / "decisions.json"
+            self.write_decisions(decisions_path, written[0], vault_path, "pearl")
+
+            with redirect_stdout(stdout):
+                result = main([
+                    "apply-review-decisions",
+                    "--vault",
+                    str(vault_path),
+                    "--decisions",
+                    str(decisions_path),
+                    "--dry-run",
+                ])
+
+            self.assertEqual(result, 0)
+            self.assertEqual(written[0].read_text(encoding="utf-8"), before)
+            self.assertIn("Dry run review decisions:", stdout.getvalue())
+            self.assertIn("- would update: 1", stdout.getvalue())
+
+    def test_apply_review_decisions_missing_file_warns_and_skips(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            vault_path.mkdir()
+            decisions_path = Path(tmp) / "decisions.json"
+            payload = {
+                "version": 1,
+                "reviewed_at": "2026-06-12T12:45:00Z",
+                "decisions": [{"path": "MemoReef/Drops/missing.md", "decision": "keep"}],
+            }
+            decisions_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                result = main(["apply-review-decisions", "--vault", str(vault_path), "--decisions", str(decisions_path)])
+
+            self.assertEqual(result, 0)
+            self.assertIn("- skipped: 1", stdout.getvalue())
+            self.assertIn("file not found", stdout.getvalue())
+
+    def test_apply_review_decisions_blocks_path_traversal(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            vault_path.mkdir()
+            outside = Path(tmp) / "outside.md"
+            outside.write_text("outside", encoding="utf-8")
+            decisions_path = Path(tmp) / "decisions.json"
+            payload = {
+                "version": 1,
+                "reviewed_at": "2026-06-12T12:45:00Z",
+                "decisions": [{"path": "../outside.md", "decision": "keep"}],
+            }
+            decisions_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                result = main(["apply-review-decisions", "--vault", str(vault_path), "--decisions", str(decisions_path)])
+
+            self.assertEqual(result, 0)
+            self.assertEqual(outside.read_text(encoding="utf-8"), "outside")
+            self.assertIn("path is outside MemoReef Drops", stdout.getvalue())
+
+    def test_apply_review_decisions_preserves_existing_fields_and_body(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            bookmark = Bookmark(
+                "Example Source",
+                "https://example.com",
+                folders=["AI Agents"],
+                tags=["research"],
+                projects=["MemoReef"],
+                shoals=["Agent Memory"],
+            )
+            written = write_bookmarks_to_vault([bookmark], vault_path)
+            decisions_path = Path(tmp) / "decisions.json"
+            self.write_decisions(decisions_path, written[0], vault_path, "keep")
+
+            with redirect_stdout(stdout):
+                result = main(["apply-review-decisions", "--vault", str(vault_path), "--decisions", str(decisions_path)])
+
+            content = written[0].read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn('title: "Example Source"', content)
+            self.assertIn('url: "https://example.com"', content)
+            self.assertIn("folders:", content)
+            self.assertIn("tags:", content)
+            self.assertIn("projects:", content)
+            self.assertIn("shoals:", content)
+            self.assertIn("## Summary", content)
+            self.assertIn("## Agent Brief", content)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,6 +12,7 @@ from .bookmarks import (
     parse_bookmarks_html,
     parse_links_csv,
     parse_links_text,
+    update_markdown_frontmatter,
     write_bookmarks_to_vault,
 )
 
@@ -141,6 +142,85 @@ def export_review_session(vault: Path, root: str = "MemoReef", output: Path | No
     return output
 
 
+def review_decision_fields(decision: str) -> dict[str, object] | None:
+    if decision == "sink":
+        return {"status": "discarded", "pearl": False}
+    if decision == "keep":
+        return {"status": "reef", "pearl": False}
+    if decision == "pearl":
+        return {"status": "reef", "pearl": True}
+    return None
+
+
+def apply_review_decisions(
+    vault: Path,
+    decisions: Path,
+    root: str = "MemoReef",
+    dry_run: bool = False,
+) -> tuple[int, int, list[str]]:
+    vault_path = vault.expanduser().resolve()
+    drops_dir = (vault_path / root / "Drops").resolve()
+    payload = json.loads(decisions.expanduser().read_text(encoding="utf-8"))
+    reviewed_at = payload.get("reviewed_at") or utc_now_iso()
+    decision_items = payload.get("decisions")
+
+    warnings: list[str] = []
+    updated = 0
+    skipped = 0
+
+    if not isinstance(decision_items, list):
+        return 0, 1, ["decisions must be a list"]
+
+    for index, item in enumerate(decision_items, start=1):
+        if not isinstance(item, dict):
+            skipped += 1
+            warnings.append(f"decision {index}: malformed decision")
+            continue
+
+        raw_path = item.get("path")
+        raw_decision = item.get("decision")
+        fields = review_decision_fields(str(raw_decision or ""))
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            skipped += 1
+            warnings.append(f"decision {index}: missing path")
+            continue
+        if fields is None:
+            skipped += 1
+            warnings.append(f"{raw_path}: unsupported decision")
+            continue
+
+        relative_path = Path(raw_path)
+        if relative_path.is_absolute():
+            skipped += 1
+            warnings.append(f"{raw_path}: path must be relative to the vault")
+            continue
+
+        target = (vault_path / relative_path).resolve()
+        try:
+            target.relative_to(drops_dir)
+        except ValueError:
+            skipped += 1
+            warnings.append(f"{raw_path}: path is outside MemoReef Drops")
+            continue
+
+        if target.suffix != ".md":
+            skipped += 1
+            warnings.append(f"{raw_path}: not a Markdown Drop")
+            continue
+        if not target.exists():
+            skipped += 1
+            warnings.append(f"{raw_path}: file not found")
+            continue
+
+        fields["triaged_at"] = str(reviewed_at)
+        if not dry_run:
+            content = target.read_text(encoding="utf-8", errors="replace")
+            target.write_text(update_markdown_frontmatter(content, fields), encoding="utf-8")
+        updated += 1
+
+    return updated, skipped, warnings
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="memoreef",
@@ -169,6 +249,12 @@ def build_parser() -> argparse.ArgumentParser:
     review_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     review_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
     review_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults inside the vault.")
+
+    apply_cmd = sub.add_parser("apply-review-decisions", help="Apply Review Mode decision JSON to Markdown Drops.")
+    apply_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    apply_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    apply_cmd.add_argument("--decisions", type=Path, required=True, help="Review decisions JSON exported from Review Mode.")
+    apply_cmd.add_argument("--dry-run", action="store_true", help="Preview updates without modifying Markdown files.")
 
     return parser
 
@@ -211,6 +297,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "export-review-session":
         output = export_review_session(args.vault, args.root, args.output)
         print(f"Exported review session to {output}")
+        return 0
+
+    if args.command == "apply-review-decisions":
+        updated, skipped, warnings = apply_review_decisions(args.vault, args.decisions, args.root, args.dry_run)
+        if args.dry_run:
+            print("Dry run review decisions:")
+            print(f"- would update: {updated}")
+        else:
+            print("Applied review decisions:")
+            print(f"- updated: {updated}")
+        print(f"- skipped: {skipped}")
+        print(f"- warnings: {len(warnings)}")
+        for warning in warnings:
+            print(f"  - {warning}")
         return 0
 
     parser.error("unknown command")

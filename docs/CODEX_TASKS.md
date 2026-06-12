@@ -259,3 +259,25 @@ Connect local Markdown Drops to the static mobile Review Mode prototype without 
 - `site/swipe.html` keeps inline sample data as fallback.
 - Loaded review sessions update counters and cards.
 - Decision export downloads `memoreef-review-decisions.json`.
+
+## Task 9 — Apply review decisions to Markdown Drops
+
+### Goal
+Complete the local-first Review Mode loop by applying exported decision JSON back to Markdown Drop frontmatter.
+
+### Requirements
+
+- Add a CLI command that applies Review Mode decision JSON to Drops.
+- Support a dry run before writing changes.
+- Update `status`, `pearl`, and `triaged_at`.
+- Prevent path traversal so decisions cannot modify files outside the vault Drops folder.
+- Do not move or delete files.
+- Do not assign categories, tags, priority, note locations, duplicate handling, or dead-link handling yet.
+
+### Acceptance criteria
+
+- `python3 -m memoreef.cli apply-review-decisions --vault <vault> --decisions <decisions.json>` updates Drop frontmatter.
+- `--dry-run` reports the planned updates without modifying Markdown files.
+- Missing files and malformed decisions produce warnings and continue.
+- Path traversal attempts are skipped.
+- Existing frontmatter fields and Markdown body are preserved.

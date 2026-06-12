@@ -231,6 +231,37 @@ def markdown_drop_to_review_item(path: Path, vault: str | Path) -> dict[str, obj
     }
 
 
+def frontmatter_value_to_yaml(value: object, quote_string: bool = True) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if quote_string:
+        return yaml_quote(str(value))
+    return str(value)
+
+
+def markdown_frontmatter_to_text(frontmatter: dict[str, object]) -> str:
+    lines = ["---"]
+    unquoted_string_keys = {"type", "status"}
+    for key, value in frontmatter.items():
+        if isinstance(value, list):
+            lines.append(f"{key}:")
+            for item in value:
+                lines.append(f"  - {frontmatter_value_to_yaml(item)}")
+        else:
+            lines.append(f"{key}: {frontmatter_value_to_yaml(value, key not in unquoted_string_keys)}")
+    lines.append("---")
+    return "\n".join(lines)
+
+
+def update_markdown_frontmatter(content: str, updates: dict[str, object]) -> str:
+    frontmatter, body = parse_markdown_frontmatter(content)
+    frontmatter.update(updates)
+    updated = markdown_frontmatter_to_text(frontmatter)
+    if body:
+        return f"{updated}\n{body}"
+    return f"{updated}\n"
+
+
 def canonicalize_url(url: str) -> str:
     parsed = urlsplit(url)
     scheme = parsed.scheme.lower()

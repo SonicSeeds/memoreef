@@ -137,7 +137,16 @@ python3 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault
 open site/swipe.html
 ```
 
-Review Mode can export `memoreef-review-decisions.json` from the browser. Applying those decisions back to Markdown frontmatter is a future task.
+Review Mode can export `memoreef-review-decisions.json` from the browser. The CLI can apply those decisions back to Markdown frontmatter.
+
+Apply exported Review Mode decisions back to Markdown Drop frontmatter:
+
+```bash
+python3 -m memoreef.cli apply-review-decisions --vault /tmp/memoreef-vault --decisions /tmp/memoreef-review-decisions.json --dry-run
+python3 -m memoreef.cli apply-review-decisions --vault /tmp/memoreef-vault --decisions /tmp/memoreef-review-decisions.json
+```
+
+This updates `status`, `pearl`, and `triaged_at` only. It does not move or delete files, and it does not assign categories, tags, priority, or note locations yet.
 
 These are browser-only prototypes with inline sample data. They are not connected to real vault files yet.
 
