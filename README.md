@@ -49,7 +49,8 @@ Implemented:
 - Export and apply local Review Mode decisions.
 - Generate agent finish plans and deterministic proposal drafts.
 - Create duplicate, dead-link, metadata, garden suggestion, and library search reports.
-- Generate a static local app with dashboard, library, and product tour pages.
+- Generate a refined static local app with dashboard, pilot, tour, library, review, reports, briefs, and Drop detail pages.
+- Provide a premium self-contained landing page at `site/index.html` with a cinematic deep-sea MemoReef story.
 
 Not implemented yet:
 
@@ -141,6 +142,8 @@ python3 -m memoreef.cli pilot --csv /path/to/links.csv --vault /tmp/memoreef-pil
 ```
 
 The pilot command imports your export, creates a review session, creates a duplicate report, generates static app pages, and writes `MemoReef/PILOT_README.md`. It is offline-only: no network calls, no AI calls, no backend, and no server.
+
+The generated pilot app pages are self-contained HTML with inline CSS. They are designed as a calm local workspace, while `site/index.html` carries the more cinematic public landing vision.
 
 Review a few items:
 

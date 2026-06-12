@@ -3,39 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MemoReef — Turn bookmark chaos into reusable source memory.</title>
-  <meta name="description" content="MemoReef imports messy browser bookmarks into a private Markdown source library, helps you review what matters, and lets agents answer from saved sources later." />
+  <title>MemoReef - Local source memory for saved links.</title>
+  <meta name="description" content="MemoReef turns chaotic browser bookmarks into a private local Markdown source reef with review, briefs, and agent-ready context." />
   <style>
     :root {
       color-scheme: dark;
-      --ink: #eefcff;
-      --muted: #9ab7c2;
-      --soft: #638391;
-      --deep: #031016;
-      --abyss: #061a24;
-      --reef: #082f3b;
-      --current: #0f6371;
-      --pearl: #f3ead2;
-      --coral: #ff7f6e;
-      --glow: #74f7d4;
-      --violet: #9a87ff;
-      --line: rgba(174, 240, 255, .16);
-      --card: rgba(5, 25, 34, .68);
-      --shadow: 0 28px 90px rgba(0, 0, 0, .45);
-      --radius: 28px;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --ink: #f3fbfb;
+      --muted: #a7bdc2;
+      --dim: #66848b;
+      --surface: #12495c;
+      --deep: #06171f;
+      --abyss: #02070b;
+      --panel: rgba(5, 20, 28, .62);
+      --line: rgba(186, 246, 255, .16);
+      --glow: #79f2dc;
+      --pearl: #f1e8cf;
+      --coral: #ff8d7a;
+      --violet: #b49cff;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
     }
 
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; background: var(--abyss); }
     body {
       margin: 0;
       min-height: 100vh;
       color: var(--ink);
       background:
-        radial-gradient(circle at 20% 10%, rgba(116, 247, 212, .18), transparent 28rem),
-        radial-gradient(circle at 83% 18%, rgba(154, 135, 255, .16), transparent 24rem),
-        linear-gradient(180deg, #092637 0%, #04141d 46%, #02090d 100%);
+        radial-gradient(circle at 28% -10%, rgba(226, 255, 248, .36), transparent 18rem),
+        radial-gradient(circle at 72% 8%, rgba(121, 242, 220, .18), transparent 23rem),
+        linear-gradient(180deg, #15556a 0%, #092936 24%, #04151e 56%, #010408 100%);
       overflow-x: hidden;
     }
 
@@ -45,176 +43,127 @@
       position: fixed;
       inset: 0;
       pointer-events: none;
-      z-index: -1;
+      z-index: -3;
     }
     body::before {
-      background-image:
-        linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
-      background-size: 84px 84px;
-      mask-image: linear-gradient(to bottom, rgba(0,0,0,.7), transparent 80%);
+      background:
+        linear-gradient(105deg, transparent 0 18%, rgba(255,255,255,.16) 22%, transparent 28% 100%),
+        linear-gradient(83deg, transparent 0 60%, rgba(121,242,220,.1) 64%, transparent 71% 100%);
+      opacity: calc(.78 - (var(--depth, 0) * .48));
+      transform: translateY(calc(var(--depth, 0) * -60px));
     }
     body::after {
       background:
-        radial-gradient(ellipse at center bottom, rgba(8, 118, 124, .22), transparent 45%),
-        repeating-radial-gradient(ellipse at 50% 100%, rgba(116,247,212,.08) 0 2px, transparent 2px 18px);
-      opacity: .72;
-      transform: translateY(12%);
+        radial-gradient(ellipse at 50% 105%, rgba(121, 242, 220, calc(.08 + var(--depth, 0) * .18)), transparent 44%),
+        radial-gradient(circle at 18% 72%, rgba(180, 156, 255, .12), transparent 18rem),
+        linear-gradient(180deg, rgba(2,7,11,0), rgba(2,7,11, calc(var(--depth, 0) * .68)));
+      z-index: -2;
     }
 
     .surface {
       position: fixed;
-      left: -10vw;
-      right: -10vw;
-      top: -90px;
-      height: 230px;
-      background:
-        radial-gradient(ellipse at 30% 70%, rgba(255,255,255,.18), transparent 38%),
-        radial-gradient(ellipse at 70% 55%, rgba(116,247,212,.18), transparent 35%),
-        linear-gradient(180deg, rgba(190, 255, 252, .22), rgba(11, 76, 92, .04));
-      filter: blur(10px);
-      animation: surface 9s ease-in-out infinite alternate;
+      inset: -80px -12vw auto;
+      height: 240px;
+      z-index: -1;
       pointer-events: none;
+      background:
+        radial-gradient(ellipse at 34% 74%, rgba(255,255,255,.34), transparent 34%),
+        radial-gradient(ellipse at 72% 60%, rgba(121,242,220,.22), transparent 32%),
+        linear-gradient(180deg, rgba(226,255,248,.32), rgba(18,73,92,.02));
+      filter: blur(12px);
+      animation: surface-drift 10s ease-in-out infinite alternate;
+      opacity: calc(1 - (var(--depth, 0) * .72));
     }
 
-    @keyframes surface {
-      from { transform: translate3d(-1.5%, -4px, 0) skewY(-1deg); }
-      to { transform: translate3d(1.5%, 7px, 0) skewY(1deg); }
+    @keyframes surface-drift {
+      from { transform: translate3d(-1.5%, -5px, 0) rotate(-1deg); }
+      to { transform: translate3d(1.5%, 8px, 0) rotate(1deg); }
     }
 
-    .wrap {
-      width: min(1160px, calc(100% - 40px));
-      margin: 0 auto;
-    }
-
+    .wrap { width: min(1160px, calc(100% - 40px)); margin: 0 auto; }
     header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      padding: 28px 0;
-      gap: 24px;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 22px 0;
+      backdrop-filter: blur(14px);
     }
-
     .brand {
       display: inline-flex;
       align-items: center;
       gap: 12px;
-      font-weight: 760;
-      letter-spacing: -.03em;
       color: var(--ink);
       text-decoration: none;
+      font-weight: 760;
+      letter-spacing: -.03em;
       font-size: 20px;
     }
     .mark {
-      width: 38px;
-      height: 38px;
-      border-radius: 14px;
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
       background:
-        radial-gradient(circle at 65% 36%, var(--pearl) 0 8%, transparent 9%),
-        radial-gradient(circle at 38% 64%, rgba(116,247,212,.95) 0 9%, transparent 10%),
-        conic-gradient(from 210deg, #123f52, #11727d, #74f7d4, #ff7f6e, #123f52);
-      box-shadow: 0 0 32px rgba(116,247,212,.24), inset 0 0 18px rgba(0,0,0,.35);
+        radial-gradient(circle at 68% 32%, var(--pearl) 0 9%, transparent 10%),
+        radial-gradient(circle at 36% 68%, var(--glow) 0 10%, transparent 11%),
+        conic-gradient(from 210deg, #0a2c3c, #126b76, #79f2dc, #ff8d7a, #0a2c3c);
+      box-shadow: 0 0 34px rgba(121,242,220,.26), inset 0 0 18px rgba(0,0,0,.38);
     }
-
-    nav {
-      display: flex;
-      align-items: center;
-      gap: 18px;
-      font-size: 14px;
-      color: var(--muted);
-    }
+    nav { display: flex; gap: 18px; align-items: center; color: var(--muted); font-size: 14px; }
     nav a { color: var(--muted); text-decoration: none; }
     nav a:hover { color: var(--ink); }
 
     .hero {
+      min-height: calc(100vh - 78px);
       display: grid;
-      grid-template-columns: 1.02fr .98fr;
+      grid-template-columns: 1.03fr .97fr;
       align-items: center;
-      min-height: calc(100vh - 96px);
-      gap: 46px;
-      padding: 42px 0 96px;
+      gap: 42px;
+      padding: 42px 0 110px;
     }
-
     .eyebrow {
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      padding: 9px 13px;
+      padding: 8px 12px;
       border: 1px solid var(--line);
       border-radius: 999px;
-      background: rgba(4, 18, 25, .5);
-      color: #bcefe6;
+      color: #c6fff1;
+      background: rgba(2, 10, 15, .32);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.07);
       font-size: 13px;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
     }
-    .dot {
+    .pulse {
       width: 8px;
       height: 8px;
       border-radius: 50%;
       background: var(--glow);
       box-shadow: 0 0 18px var(--glow);
     }
-
     h1 {
       margin: 24px 0 18px;
-      font-size: clamp(54px, 8.3vw, 112px);
-      line-height: .9;
+      font-size: clamp(50px, 8.8vw, 118px);
+      line-height: .88;
       letter-spacing: -.075em;
-      text-wrap: balance;
+      max-width: 820px;
     }
     .gradient-text {
-      background: linear-gradient(96deg, #ffffff 0%, #befdf1 42%, #ffb4a8 92%);
+      color: transparent;
+      background: linear-gradient(100deg, #ffffff 0%, #c5fff3 42%, #f4e8c7 70%, #ffad9f 100%);
       -webkit-background-clip: text;
       background-clip: text;
-      color: transparent;
     }
     .lead {
-      max-width: 640px;
       margin: 0;
-      color: #b7cdd5;
+      max-width: 660px;
+      color: #c0d2d6;
       font-size: clamp(18px, 2vw, 23px);
       line-height: 1.45;
-      text-wrap: pretty;
     }
-    .pain-strip {
-      display: grid;
-      gap: 10px;
-      margin: 24px 0 0;
-      max-width: 650px;
-    }
-    .pain-item {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 10px;
-      align-items: start;
-      color: #d7f3ef;
-      font-size: 15px;
-      line-height: 1.45;
-    }
-    .pain-item::before {
-      content: "";
-      width: 8px;
-      height: 8px;
-      margin-top: 7px;
-      border-radius: 50%;
-      background: var(--coral);
-      box-shadow: 0 0 16px rgba(255,127,110,.46);
-    }
-    .pain-item strong { color: #fffaf3; }
-    .buyer-line {
-      margin: 18px 0 0;
-      max-width: 650px;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.55;
-    }
-    .buyer-line strong { color: var(--ink); }
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-      margin-top: 34px;
-    }
+    .actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 32px; }
     .button {
       display: inline-flex;
       align-items: center;
@@ -224,139 +173,176 @@
       border-radius: 999px;
       border: 1px solid var(--line);
       color: var(--ink);
-      text-decoration: none;
-      font-weight: 700;
       background: rgba(255,255,255,.06);
+      text-decoration: none;
+      font-weight: 720;
       box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
     }
     .button.primary {
-      border-color: rgba(116,247,212,.34);
-      background: linear-gradient(135deg, rgba(116,247,212,.22), rgba(15,99,113,.44));
-      box-shadow: 0 18px 46px rgba(36, 228, 198, .13), inset 0 1px 0 rgba(255,255,255,.16);
+      border-color: rgba(121,242,220,.34);
+      background: linear-gradient(135deg, rgba(121,242,220,.22), rgba(12,92,102,.5));
+      box-shadow: 0 22px 60px rgba(37, 226, 198, .16), inset 0 1px 0 rgba(255,255,255,.16);
     }
 
-    .reef-panel {
+    .command {
+      margin-top: 22px;
+      max-width: 650px;
+      padding: 15px 16px;
+      border: 1px solid rgba(241,232,207,.18);
+      border-radius: 8px;
+      color: var(--pearl);
+      background: rgba(0,0,0,.34);
+      overflow-x: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+    }
+
+    .archive-window {
       position: relative;
       min-height: 620px;
       border: 1px solid var(--line);
-      border-radius: 42px;
-      background:
-        radial-gradient(circle at 48% 78%, rgba(255,127,110,.18), transparent 14rem),
-        radial-gradient(circle at 78% 25%, rgba(116,247,212,.16), transparent 13rem),
-        linear-gradient(180deg, rgba(9, 51, 67, .72), rgba(2, 11, 16, .74));
-      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.07);
+      border-radius: 8px;
       overflow: hidden;
+      background:
+        radial-gradient(circle at 48% 90%, rgba(121,242,220,.18), transparent 16rem),
+        linear-gradient(180deg, rgba(13, 65, 83, .7), rgba(1, 7, 12, .84));
+      box-shadow: 0 30px 100px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08);
     }
-
-    .reef-panel::before {
+    .archive-window::before {
       content: "";
       position: absolute;
       inset: 0;
       background:
-        radial-gradient(circle at 20% 28%, rgba(255,255,255,.14) 0 2px, transparent 3px),
-        radial-gradient(circle at 72% 18%, rgba(116,247,212,.22) 0 2px, transparent 3px),
-        radial-gradient(circle at 86% 64%, rgba(255,127,110,.18) 0 2px, transparent 3px),
-        radial-gradient(circle at 42% 72%, rgba(255,255,255,.10) 0 2px, transparent 3px);
-      animation: drift 12s ease-in-out infinite alternate;
+        radial-gradient(circle at 18% 20%, rgba(255,255,255,.18) 0 2px, transparent 3px),
+        radial-gradient(circle at 82% 28%, rgba(121,242,220,.22) 0 2px, transparent 3px),
+        radial-gradient(circle at 70% 68%, rgba(255,141,122,.2) 0 2px, transparent 3px),
+        radial-gradient(circle at 36% 76%, rgba(255,255,255,.14) 0 2px, transparent 3px);
+      animation: slow-drift 12s ease-in-out infinite alternate;
     }
-    @keyframes drift {
-      from { transform: translateY(0); opacity: .65; }
-      to { transform: translateY(-18px); opacity: 1; }
+    @keyframes slow-drift { to { transform: translate3d(12px, -18px, 0); } }
+    .clutter, .reef-stack { position: absolute; left: 7%; right: 7%; display: grid; gap: 12px; }
+    .clutter { top: 9%; }
+    .reef-stack { bottom: 8%; transform: translateY(calc(var(--depth, 0) * -22px)); }
+    .scrap, .source-card {
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 8px;
+      background: rgba(255,255,255,.07);
+      box-shadow: 0 14px 42px rgba(0,0,0,.22);
     }
+    .scrap {
+      height: 48px;
+      width: 72%;
+      transform: rotate(var(--r));
+      opacity: calc(.8 - var(--depth, 0) * .58);
+    }
+    .scrap:nth-child(2) { margin-left: 14%; width: 61%; }
+    .scrap:nth-child(3) { margin-left: 5%; width: 84%; }
+    .source-card { padding: 16px; background: rgba(4,22,30,.74); }
+    .source-card strong { display: block; letter-spacing: -.02em; }
+    .source-card span { color: var(--muted); font-size: 14px; }
+    .reef-line { height: 6px; margin-top: 12px; border-radius: 99px; background: linear-gradient(90deg, var(--glow), rgba(180,156,255,.8), transparent); }
 
-    .drop-card {
-      position: absolute;
-      width: min(310px, 70%);
-      padding: 18px;
-      border: 1px solid rgba(185, 244, 255, .18);
-      border-radius: 24px;
-      background: rgba(3, 18, 25, .72);
-      backdrop-filter: blur(18px);
-      box-shadow: 0 24px 60px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.08);
-    }
-    .drop-card.one { left: 36px; top: 72px; transform: rotate(-4deg); }
-    .drop-card.two { right: 34px; top: 178px; transform: rotate(3deg); }
-    .drop-card.three { left: 74px; bottom: 84px; transform: rotate(2deg); }
-    .drop-label {
-      color: var(--glow);
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: .12em;
-      font-weight: 800;
-    }
-    .drop-title {
-      margin: 8px 0 8px;
-      font-size: 18px;
-      font-weight: 780;
-      letter-spacing: -.025em;
-    }
-    .drop-meta { color: var(--muted); font-size: 13px; line-height: 1.45; }
-
-    .reef-shape {
-      position: absolute;
-      right: -30px;
-      bottom: -20px;
-      width: 380px;
-      height: 300px;
-      opacity: .78;
-      background:
-        radial-gradient(circle at 32% 66%, rgba(255,127,110,.75) 0 16px, transparent 17px),
-        radial-gradient(circle at 42% 42%, rgba(116,247,212,.7) 0 10px, transparent 11px),
-        radial-gradient(circle at 58% 62%, rgba(255,229,169,.74) 0 12px, transparent 13px),
-        radial-gradient(circle at 65% 35%, rgba(154,135,255,.65) 0 9px, transparent 10px),
-        conic-gradient(from 180deg at 50% 90%, transparent 0 16%, rgba(255,127,110,.3) 17% 20%, transparent 21% 35%, rgba(116,247,212,.24) 36% 40%, transparent 41% 100%);
-      filter: blur(.2px) drop-shadow(0 0 36px rgba(116,247,212,.16));
-      border-radius: 45% 55% 0 0;
-    }
-
-    .command {
-      margin-top: 26px;
-      max-width: 740px;
-      padding: 16px 18px;
-      border-radius: 18px;
-      border: 1px solid var(--line);
-      background: rgba(0,0,0,.32);
-      color: #d8f8f3;
-      font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      overflow-x: auto;
-    }
-
-    .sections {
+    section.depth {
+      min-height: 92vh;
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 18px;
-      padding: 24px 0 86px;
+      align-items: center;
+      padding: 100px 0;
     }
-    .feature {
-      padding: 24px;
+    .section-grid { display: grid; grid-template-columns: .9fr 1.1fr; gap: 42px; align-items: center; }
+    .kicker { color: var(--glow); text-transform: uppercase; letter-spacing: .16em; font-weight: 800; font-size: 12px; }
+    h2 { margin: 12px 0 16px; font-size: clamp(36px, 5.8vw, 76px); line-height: .94; letter-spacing: -.06em; }
+    .section-copy { color: #bdd0d4; font-size: 18px; line-height: 1.6; max-width: 660px; }
+    .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .card {
+      min-height: 164px;
+      padding: 20px;
       border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: rgba(4, 18, 25, .58);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 20px 70px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.05);
     }
-    .feature h2 {
-      margin: 0 0 10px;
-      font-size: 19px;
-      letter-spacing: -.03em;
-    }
-    .feature p { margin: 0; color: var(--muted); line-height: 1.55; }
+    .card b { display: block; margin-bottom: 8px; color: var(--ink); font-size: 18px; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.55; }
 
-    footer {
-      padding: 34px 0 46px;
-      border-top: 1px solid var(--line);
-      color: var(--soft);
-      font-size: 14px;
+    .octopus-stage {
+      position: relative;
+      min-height: 118vh;
+      display: grid;
+      align-items: end;
+      overflow: hidden;
+      margin-top: -10vh;
+      padding-bottom: 14vh;
+    }
+    .tentacle-field {
+      position: absolute;
+      inset: 0 0 16%;
+      opacity: calc(.16 + var(--depth, 0) * .32);
+      transform: translateY(calc(138px - var(--depth, 0) * 165px));
+      pointer-events: none;
+    }
+    .octopus {
+      position: relative;
+      z-index: 0;
+      width: min(980px, 118vw);
+      margin: 0 auto;
+      display: block;
+      filter: blur(.2px) drop-shadow(0 0 52px rgba(121,242,220,.2)) drop-shadow(0 60px 120px rgba(0,0,0,.72));
+      opacity: calc(.07 + var(--depth, 0) * .34);
+      transform: translateY(calc(180px - var(--depth, 0) * 150px)) scale(calc(1.06 + var(--depth, 0) * .08));
+      mix-blend-mode: screen;
+    }
+    .octo-skin { fill: url(#octoGradient); stroke: rgba(211,255,248,.18); stroke-width: .9; }
+    .octo-glow { fill: none; stroke: rgba(121,242,220,.38); stroke-width: 1.4; stroke-linecap: round; stroke-dasharray: 1 22; animation: shimmer 6s linear infinite; }
+    .octo-eye { display: none; }
+    @keyframes shimmer { to { stroke-dashoffset: -90; } }
+
+    .final-cta {
+      position: relative;
+      z-index: 3;
+      margin-top: -30vh;
+      padding: 0 0 130px;
+      text-align: center;
+    }
+    .final-cta .panel {
+      width: min(860px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 34px;
+      border: 1px solid rgba(121,242,220,.22);
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(2, 13, 18, .9), rgba(1, 6, 10, .82));
+      backdrop-filter: blur(22px);
+      box-shadow: 0 34px 130px rgba(0,0,0,.68), 0 0 90px rgba(121,242,220,.08), inset 0 1px 0 rgba(255,255,255,.07);
     }
 
-    @media (max-width: 900px) {
-      nav { display: none; }
-      .hero { grid-template-columns: 1fr; min-height: auto; padding-top: 44px; }
-      .reef-panel { min-height: 520px; }
-      .sections { grid-template-columns: 1fr; }
+    .bubble {
+      position: fixed;
+      width: var(--size);
+      height: var(--size);
+      left: var(--x);
+      top: var(--y);
+      z-index: 50;
+      border: 1px solid rgba(205,255,248,.58);
+      border-radius: 50%;
+      pointer-events: none;
+      animation: bubble-rise 1.7s ease-out forwards;
+      box-shadow: inset 0 0 10px rgba(255,255,255,.18), 0 0 18px rgba(121,242,220,.18);
+    }
+    @keyframes bubble-rise {
+      to { transform: translate3d(var(--drift), -86px, 0) scale(.35); opacity: 0; }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+      *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    }
+    @media (max-width: 840px) {
+      header { position: relative; align-items: flex-start; }
+      nav { display: none; }
+      .hero, .section-grid { grid-template-columns: 1fr; }
+      .hero { padding-top: 18px; }
+      .archive-window { min-height: 520px; }
+      .cards { grid-template-columns: 1fr; }
+      section.depth { padding: 76px 0; }
     }
   </style>
 </head>
@@ -364,71 +350,165 @@
   <div class="surface" aria-hidden="true"></div>
   <header class="wrap">
     <a class="brand" href="#top" aria-label="MemoReef home"><span class="mark" aria-hidden="true"></span>MemoReef</a>
-    <nav aria-label="Page navigation">
-      <a href="#how">How it works</a>
-      <a href="#cli">CLI</a>
-      <a href="https://github.com/sonicseeds/memoreef">GitHub soon</a>
+    <nav aria-label="Landing page navigation">
+      <a href="#problem">Problem</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#briefs">Briefs</a>
+      <a href="#pilot">Pilot</a>
     </nav>
   </header>
 
-  <main id="top" class="wrap">
-    <section class="hero" aria-labelledby="hero-title">
+  <main id="top">
+    <section class="hero wrap" aria-label="MemoReef hero">
       <div>
-        <div class="eyebrow"><span class="dot"></span> Local-first · Markdown-native · Agent-readable</div>
-        <h1 id="hero-title"><span class="gradient-text">Your saved web.</span><br>Actually useful again.</h1>
-        <p class="lead">MemoReef is for people with hundreds of saved links, scattered notes, and “I know I bookmarked that somewhere” energy. It turns browser exports into a private source library your agents can review, search, cite, and build from.</p>
-        <div class="pain-strip" aria-label="MemoReef buyer problems">
-          <div class="pain-item"><div><strong>Stop losing research twice.</strong> <span>Import old bookmarks once, then triage them into keep, pearl, or sink instead of pretending folders are a system.</span></div></div>
-          <div class="pain-item"><div><strong>Make AI answer from your sources.</strong> <span>Keep source URLs, folder context, tags, and Markdown notes together so local agents can cite the material you already collected.</span></div></div>
-          <div class="pain-item"><div><strong>Own the archive.</strong> <span>No new SaaS silo, no monthly hostage situation. Your reef lives as files in your vault.</span></div></div>
-        </div>
-        <p class="buyer-line"><strong>Buyer:</strong> researchers, builders, writers, consultants, and agent operators drowning in saved links but not ready to hand their source memory to another black box.</p>
+        <div class="eyebrow"><span class="pulse" aria-hidden="true"></span>Local-first source memory</div>
+        <h1><span class="gradient-text">Descend from bookmark chaos into a source reef.</span></h1>
+        <p class="lead">MemoReef turns saved links into private Markdown Drops with review state, local reports, searchable context, and agent-ready briefs.</p>
         <div class="actions">
-          <a class="button primary" href="#cli">Try the local CLI</a>
-          <a class="button" href="swipe.html">Open Review Mode</a>
-          <a class="button" href="#how">See the flow</a>
+          <a class="button primary" href="#pilot">Run the pilot</a>
+          <a class="button" href="#workflow">See the workflow</a>
         </div>
-        <pre id="cli" class="command">python3 -m memoreef.cli import bookmarks.html --vault ~/Obsidian/Main</pre>
+        <pre class="command">python3 -m memoreef.cli pilot --bookmarks bookmarks.html --vault /tmp/memoreef-pilot</pre>
       </div>
-
-      <div class="reef-panel" aria-label="MemoReef visual preview">
-        <div class="drop-card one">
-          <div class="drop-label">Drop · Drift</div>
-          <div class="drop-title">Local AI Agents for Small Teams</div>
-          <div class="drop-meta">Imported from browser bookmarks. Waiting for triage inside the Reef.</div>
+      <div class="archive-window" aria-label="Messy sources becoming an organized reef">
+        <div class="clutter" aria-hidden="true">
+          <div class="scrap" style="--r:-4deg"></div>
+          <div class="scrap" style="--r:3deg"></div>
+          <div class="scrap" style="--r:-1deg"></div>
         </div>
-        <div class="drop-card two">
-          <div class="drop-label">Pearl Candidate</div>
-          <div class="drop-title">Obsidian Workflow Notes</div>
-          <div class="drop-meta">Agent-ready Markdown with source URL, folder path, tags, and next action.</div>
+        <div class="reef-stack">
+          <article class="source-card"><strong>Local AI agent playbook</strong><span>Reef · Pearl · AI Agents</span><div class="reef-line"></div></article>
+          <article class="source-card"><strong>Markdown archive patterns</strong><span>Deep · Local knowledge base</span><div class="reef-line"></div></article>
+          <article class="source-card"><strong>Duplicate report</strong><span>Clutter grouped before review</span><div class="reef-line"></div></article>
         </div>
-        <div class="drop-card three">
-          <div class="drop-label">Dive Result</div>
-          <div class="drop-title">Bioluminescent Interfaces</div>
-          <div class="drop-meta">A saved source surfaces later when a project needs it.</div>
-        </div>
-        <div class="reef-shape" aria-hidden="true"></div>
       </div>
     </section>
 
-    <section id="how" class="sections" aria-label="How MemoReef works">
-      <article class="feature">
-        <h2>Import the mess</h2>
-        <p>Start with the ugly reality: a bulk browser bookmark export from Chrome, Brave, Arc, Firefox, or Safari. MemoReef writes each link as a clean Markdown Drop instead of asking you to rebuild your library by hand.</p>
-      </article>
-      <article class="feature">
-        <h2>Review fast</h2>
-        <p>Swipe through old saves in short sessions. Sink dead weight, keep useful material, and mark Pearls worth citing or turning into project fuel.</p>
-      </article>
-      <article class="feature">
-        <h2>Ask your sources</h2>
-        <p>Agents can search your private reef later, synthesize answers from saved material, and point back to the original links. That is the product. The ocean metaphor is just less depressing than a folder called “misc”.</p>
-      </article>
+    <section class="depth wrap" id="problem">
+      <div class="section-grid">
+        <div>
+          <div class="kicker">The surface layer</div>
+          <h2>Saved links become a junk drawer.</h2>
+          <p class="section-copy">Bookmarks mix great sources with duplicates, stale rumors, private files, and half-remembered research. When an agent needs context later, the useful material is still trapped in a browser export.</p>
+        </div>
+        <div class="cards">
+          <div class="card"><b>Duplicates drift together</b><p>Exact URLs, same-domain clusters, and similar titles are reported locally before they waste review time.</p></div>
+          <div class="card"><b>Private sources stay private</b><p>File URLs and personal research remain on disk. The static app opens directly in the browser.</p></div>
+          <div class="card"><b>Status is explicit</b><p>Drift, Reef, Deep, discarded, and Pearl states are written into Markdown frontmatter.</p></div>
+          <div class="card"><b>Nothing requires a server</b><p>The pilot creates files you can inspect, back up, edit, sync, or delete yourself.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="depth wrap" id="workflow">
+      <div class="section-grid">
+        <div>
+          <div class="kicker">The reef layer</div>
+          <h2>Review turns clutter into a local library.</h2>
+          <p class="section-copy">Import a browser export, open the generated pilot app, review a small queue, then regenerate the local pages. The app stays calm and practical while the landing page carries the cinematic ocean.</p>
+        </div>
+        <div class="cards">
+          <div class="card"><b>Markdown Drops</b><p>Each saved source becomes a readable file with frontmatter, source URL, notes, and an agent brief section.</p></div>
+          <div class="card"><b>Review sessions</b><p>Focused JSON queues let you review Drift items, Pearls, projects, shoals, tags, hosts, or small samples.</p></div>
+          <div class="card"><b>Local reports</b><p>Duplicate reports, garden suggestions, search results, and project briefs are generated beside the vault.</p></div>
+          <div class="card"><b>Static app pages</b><p>Dashboard, tour, library, review, reports, briefs, pilot, and Drop detail pages open without a backend.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="depth wrap" id="briefs">
+      <div class="section-grid">
+        <div>
+          <div class="kicker">The handoff layer</div>
+          <h2>Agents get briefs, not a swamp.</h2>
+          <p class="section-copy">Project briefs collect selected Drops into local Markdown with source URLs, summaries, labels, gaps, and instructions that tell an agent to cite sources and avoid invented claims.</p>
+        </div>
+        <div class="cards">
+          <div class="card"><b>Source memory</b><p>Useful saves become reusable context for future work instead of disappearing into browser chrome.</p></div>
+          <div class="card"><b>Pearl selection</b><p>High-value sources can be marked and filtered for citation-quality handoffs.</p></div>
+          <div class="card"><b>Readable forever</b><p>The core archive is Markdown. MemoReef can improve, but your sources are not trapped.</p></div>
+          <div class="card"><b>Offline pilot</b><p>No account, subscription, AI API, network call, or server is needed to test the workflow.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="octopus-stage" aria-label="Deep sea octopus archive">
+      <svg class="tentacle-field" viewBox="0 0 1200 900" aria-hidden="true">
+        <path d="M130 880 C250 690 180 490 390 370 C560 270 450 120 620 52" fill="none" stroke="rgba(121,242,220,.2)" stroke-width="28" stroke-linecap="round" />
+        <path d="M1060 880 C930 700 1030 520 795 390 C640 304 742 122 590 58" fill="none" stroke="rgba(180,156,255,.18)" stroke-width="24" stroke-linecap="round" />
+        <path d="M390 910 C470 710 405 548 560 430 C690 330 660 180 624 60" fill="none" stroke="rgba(255,141,122,.14)" stroke-width="20" stroke-linecap="round" />
+      </svg>
+      <svg class="octopus" viewBox="0 0 920 760" role="img" aria-label="Elegant bioluminescent octopus guarding a deep sea archive">
+        <defs>
+          <radialGradient id="octoGradient" cx="50%" cy="28%" r="72%">
+            <stop offset="0%" stop-color="#d7fff6" stop-opacity=".92" />
+            <stop offset="34%" stop-color="#48cab8" stop-opacity=".78" />
+            <stop offset="68%" stop-color="#1c6274" stop-opacity=".82" />
+            <stop offset="100%" stop-color="#061a24" stop-opacity=".94" />
+          </radialGradient>
+        </defs>
+        <path class="octo-skin" d="M462 38 C340 38 258 132 276 258 C289 349 354 410 460 410 C570 410 637 351 648 258 C663 130 586 38 462 38 Z" />
+        <path class="octo-skin" d="M320 358 C202 438 182 540 80 642 C45 677 52 718 102 716 C192 710 255 565 356 465" />
+        <path class="octo-skin" d="M382 395 C296 503 330 610 260 718 C236 754 288 775 334 728 C407 653 405 520 444 414" />
+        <path class="octo-skin" d="M462 414 C428 538 472 632 444 724 C432 762 487 771 514 724 C558 646 527 531 520 414" />
+        <path class="octo-skin" d="M540 398 C634 507 596 614 682 720 C711 756 760 731 732 690 C660 587 707 479 600 362" />
+        <path class="octo-skin" d="M604 354 C728 424 742 548 838 646 C874 683 856 724 806 713 C704 690 663 554 564 462" />
+        <path class="octo-glow" d="M330 160 C400 128 520 126 592 162" />
+        <path class="octo-glow" d="M304 262 C386 310 548 310 620 260" />
+        <path class="octo-glow" d="M128 662 C210 604 252 500 356 465" />
+        <path class="octo-glow" d="M286 728 C366 648 390 542 444 414" />
+        <path class="octo-glow" d="M488 724 C530 622 512 518 520 414" />
+        <path class="octo-glow" d="M710 704 C650 620 694 494 600 362" />
+        <circle cx="404" cy="230" r="3" fill="rgba(214,255,246,.18)" />
+        <circle cx="520" cy="230" r="2.5" fill="rgba(214,255,246,.14)" />
+      </svg>
+    </section>
+
+    <section class="final-cta" id="pilot">
+      <div class="panel">
+        <div class="kicker">Pilot-ready</div>
+        <h2>Open it locally. Inspect every file.</h2>
+        <p class="section-copy" style="margin-left:auto;margin-right:auto;">MemoReef generates a premium static pilot app for your own bookmark export: dashboard, tour, library, review launcher, reports, briefs, checklist, and Drop detail pages.</p>
+        <pre class="command" style="margin-left:auto;margin-right:auto;text-align:left;">rm -rf /tmp/memoreef-pilot
+python3 -m memoreef.cli pilot --bookmarks examples/bookmarks.html --vault /tmp/memoreef-pilot --review-limit 10
+open /tmp/memoreef-pilot/MemoReef/app/pilot.html</pre>
+        <div class="actions" style="justify-content:center">
+          <a class="button primary" href="#top">Back to surface</a>
+        </div>
+      </div>
     </section>
   </main>
 
-  <footer class="wrap">
-    MemoReef is an early SonicSeeds open-source project. Domain and GitHub wiring pending.
-  </footer>
+  <script>
+    (function () {
+      var root = document.documentElement;
+      function updateDepth() {
+        var max = Math.max(1, document.body.scrollHeight - window.innerHeight);
+        var depth = Math.min(1, Math.max(0, window.scrollY / max));
+        root.style.setProperty("--depth", depth.toFixed(3));
+      }
+      updateDepth();
+      window.addEventListener("scroll", updateDepth, { passive: true });
+      window.addEventListener("resize", updateDepth);
+
+      if (!matchMedia("(pointer: fine)").matches || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      var last = 0;
+      window.addEventListener("pointermove", function (event) {
+        var now = Date.now();
+        if (now - last < 95) return;
+        last = now;
+        var bubble = document.createElement("span");
+        var size = Math.round(6 + Math.random() * 15) + "px";
+        bubble.className = "bubble";
+        bubble.setAttribute("aria-label", "oxygen bubble");
+        bubble.style.setProperty("--x", event.clientX + "px");
+        bubble.style.setProperty("--y", event.clientY + "px");
+        bubble.style.setProperty("--size", size);
+        bubble.style.setProperty("--drift", Math.round((Math.random() - .5) * 54) + "px");
+        document.body.appendChild(bubble);
+        setTimeout(function () { bubble.remove(); }, 1800);
+      }, { passive: true });
+    }());
+  </script>
 </body>
 </html>

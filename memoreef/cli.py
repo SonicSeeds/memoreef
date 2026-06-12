@@ -2663,30 +2663,18 @@ def render_app_dashboard(state: dict[str, object]) -> str:
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
   <title>MemoReef local app</title>
   <style>
-    :root {{ color-scheme: dark; --bg:#06141c; --panel:#0d2330; --line:rgba(255,255,255,.14); --text:#eaf8fb; --muted:#9fb8c2; --pearl:#f6edd7; --green:#67f5d3; }}
-    * {{ box-sizing: border-box; }}
-    body {{ margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: radial-gradient(circle at top left, rgba(103,245,211,.16), transparent 26rem), var(--bg); color:var(--text); }}
-    main {{ width:min(1080px, calc(100% - 32px)); margin:0 auto; padding:42px 0 56px; }}
+    {app_common_css()}
+    main {{ width:min(1080px, calc(100% - 32px)); }}
     header {{ margin-bottom:24px; }}
     .eyebrow {{ color:var(--green); text-transform:uppercase; letter-spacing:.16em; font-size:12px; font-weight:800; }}
-    h1 {{ margin:.25em 0 .1em; font-size:clamp(38px, 8vw, 78px); line-height:.9; letter-spacing:-.07em; }}
-    p {{ color:var(--muted); line-height:1.55; }}
-    code {{ color:var(--pearl); }}
     .grid {{ display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:12px; margin:24px 0; }}
-    .stat, .card {{ border:1px solid var(--line); border-radius:24px; background:rgba(13,35,48,.78); box-shadow:0 18px 60px rgba(0,0,0,.24); }}
+    .stat {{ border:1px solid var(--line); border-radius:8px; background:linear-gradient(180deg, var(--panel), var(--panel2)); box-shadow:0 22px 70px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.045); }}
     .stat {{ padding:18px; }}
     .stat strong {{ display:block; font-size:34px; letter-spacing:-.05em; }}
     .stat span {{ color:var(--muted); font-size:13px; }}
     .sections {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }}
-    .card {{ padding:22px; }}
-    .card h2 {{ margin:0 0 10px; font-size:22px; letter-spacing:-.04em; }}
-    .next {{ border-color:rgba(103,245,211,.35); }}
-    dl {{ margin:0; display:grid; gap:10px; }}
-    dt {{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.12em; }}
-    dd {{ margin:0 0 8px; overflow-wrap:anywhere; }}
-    .app-nav {{ display:flex; flex-wrap:wrap; gap:10px; margin:0 0 24px; }}
-    .app-nav a {{ color:var(--text); text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:8px 12px; background:rgba(13,35,48,.62); }}
-    .app-nav a[aria-current=\"page\"] {{ color:#06141c; background:var(--green); border-color:var(--green); }}
+    .next {{ border-color:rgba(117,234,211,.38); }}
+    dl {{ margin:0; }}
     .workflow ol {{ margin:0; padding-left:20px; color:var(--muted); }}
     .workflow li {{ margin:8px 0; }}
     @media (max-width:760px) {{ .grid, .sections {{ grid-template-columns:1fr; }} }}
@@ -2791,24 +2779,29 @@ def app_nav(current: str, prefix: str = "") -> str:
 
 def app_common_css() -> str:
     return """
-    :root { color-scheme: dark; --bg:#06141c; --panel:#0d2330; --line:rgba(255,255,255,.14); --text:#eaf8fb; --muted:#9fb8c2; --pearl:#f6edd7; --green:#67f5d3; }
+    :root { color-scheme: dark; --bg:#061118; --bg2:#0a1b24; --panel:rgba(12,31,40,.82); --panel2:rgba(6,19,27,.72); --line:rgba(190,242,255,.14); --text:#edf8f8; --muted:#9eb5bb; --dim:#6e878e; --pearl:#f1e6cc; --green:#75ead3; --coral:#ff927e; }
     * { box-sizing:border-box; }
-    body { margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
-    main { width:min(980px, calc(100% - 32px)); margin:0 auto; padding:42px 0 56px; }
-    a { color:var(--green); }
-    h1 { font-size:clamp(34px, 7vw, 64px); margin:.2em 0; letter-spacing:-.05em; }
-    h2 { margin:0 0 10px; }
-    p, li { color:var(--muted); line-height:1.55; }
-    code { color:var(--pearl); }
-    .app-nav { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 24px; }
-    .app-nav a { color:var(--text); text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:8px 12px; background:rgba(13,35,48,.62); }
-    .app-nav a[aria-current="page"] { color:#06141c; background:var(--green); border-color:var(--green); }
-    .panel, .result, .card { border:1px solid var(--line); border-radius:20px; background:rgba(13,35,48,.78); padding:20px; margin:16px 0; }
-    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    body { margin:0; font-family:ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:radial-gradient(circle at 12% -10%, rgba(117,234,211,.14), transparent 24rem), radial-gradient(circle at 85% 8%, rgba(255,146,126,.08), transparent 20rem), linear-gradient(180deg, var(--bg2), var(--bg)); color:var(--text); }
+    body::before { content:""; position:fixed; inset:0; pointer-events:none; background:linear-gradient(180deg, rgba(255,255,255,.035), transparent 38%), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px); background-size:auto, 72px 72px, 72px 72px; mask-image:linear-gradient(to bottom, rgba(0,0,0,.75), transparent 78%); }
+    main { width:min(1040px, calc(100% - 32px)); margin:0 auto; padding:34px 0 58px; position:relative; }
+    a { color:var(--green); text-decoration-thickness:1px; text-underline-offset:3px; }
+    h1 { font-size:clamp(34px, 6.8vw, 66px); line-height:.95; margin:.22em 0 .18em; letter-spacing:-.055em; }
+    h2 { margin:0 0 10px; font-size:clamp(20px, 2.6vw, 28px); line-height:1.05; letter-spacing:-.035em; }
+    p, li { color:var(--muted); line-height:1.58; }
+    strong { color:var(--text); }
+    code { color:var(--pearl); overflow-wrap:anywhere; }
+    pre { border:1px solid rgba(241,230,204,.15); border-radius:8px; background:rgba(0,0,0,.22); padding:14px; overflow:auto; }
+    .app-nav { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 28px; padding:8px; border:1px solid rgba(190,242,255,.1); border-radius:8px; background:rgba(4,14,21,.42); }
+    .app-nav a { color:var(--muted); text-decoration:none; border:1px solid transparent; border-radius:6px; padding:8px 11px; background:transparent; font-size:14px; }
+    .app-nav a:hover { color:var(--text); border-color:var(--line); background:rgba(255,255,255,.04); }
+    .app-nav a[aria-current="page"] { color:#061118; background:var(--green); border-color:var(--green); }
+    .panel, .result, .card { border:1px solid var(--line); border-radius:8px; background:linear-gradient(180deg, var(--panel), var(--panel2)); padding:22px; margin:16px 0; box-shadow:0 22px 70px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.045); }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
     .meta { color:var(--muted); font-size:14px; }
-    dl { display:grid; grid-template-columns:minmax(120px, 180px) 1fr; gap:10px 14px; }
-    dt { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.12em; }
+    dl { display:grid; grid-template-columns:minmax(130px, 190px) 1fr; gap:10px 16px; }
+    dt { color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:.14em; font-weight:760; }
     dd { margin:0; overflow-wrap:anywhere; }
+    ul, ol { padding-left:22px; }
     @media (max-width:760px) { .grid, dl { grid-template-columns:1fr; } }
     """
 
@@ -3460,24 +3453,13 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MemoReef Product Tour</title>
   <style>
-    :root {{ color-scheme: dark; --bg:#07131a; --panel:#102632; --line:rgba(255,255,255,.16); --text:#eef9fb; --muted:#abc0c8; --green:#68f0cd; --pearl:#f4e7c8; }}
-    * {{ box-sizing:border-box; }}
-    body {{ margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:linear-gradient(180deg, #07131a, #0a1b24); color:var(--text); }}
-    main {{ width:min(1040px, calc(100% - 32px)); margin:0 auto; padding:40px 0 56px; }}
-    a {{ color:var(--green); }}
-    h1 {{ margin:.2em 0; font-size:clamp(38px, 8vw, 76px); line-height:.92; }}
-    h2 {{ margin:0 0 10px; font-size:26px; }}
-    p, li {{ color:var(--muted); line-height:1.58; }}
-    code {{ color:var(--pearl); }}
+    {app_common_css()}
     .lede {{ max-width:760px; font-size:18px; }}
     .stats {{ display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:12px; margin:24px 0; }}
-    .stat, section {{ border:1px solid var(--line); background:rgba(16,38,50,.82); border-radius:20px; }}
+    .stat, section {{ border:1px solid var(--line); background:linear-gradient(180deg, var(--panel), var(--panel2)); border-radius:8px; box-shadow:0 22px 70px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.045); }}
     .stat {{ padding:16px; }}
     .stat strong {{ display:block; font-size:34px; }}
     .stat span {{ color:var(--muted); font-size:13px; }}
-    .app-nav {{ display:flex; flex-wrap:wrap; gap:10px; margin:0 0 24px; }}
-    .app-nav a {{ color:var(--text); text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:8px 12px; background:rgba(16,38,50,.62); }}
-    .app-nav a[aria-current="page"] {{ color:#07131a; background:var(--green); border-color:var(--green); }}
     .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }}
     section {{ padding:22px; }}
     ul {{ margin:10px 0 0; padding-left:20px; }}

@@ -1354,8 +1354,29 @@ class BookmarkImportTests(unittest.TestCase):
                 html = page.read_text(encoding="utf-8").lower()
                 self.assertNotIn("<script", html)
                 self.assertNotIn("rel=\"stylesheet\"", html)
+                self.assertNotIn("<link", html)
+                self.assertNotIn("<script src=", html)
                 self.assertNotIn("@import", html)
                 self.assertNotIn("url(", html)
+                self.assertNotIn("cdn", html)
+                if "/drops/" not in page.as_posix():
+                    self.assertNotIn("https://", html)
+                    self.assertNotIn("http://", html)
+
+    def test_landing_page_has_deep_sea_octopus_and_no_external_assets(self):
+        html = (Path(__file__).parent.parent / "site" / "index.html").read_text(encoding="utf-8")
+        lowered = html.lower()
+
+        self.assertIn("octopus", lowered)
+        self.assertIn("oxygen", lowered)
+        self.assertIn("pilot", lowered)
+        self.assertIn("deep sea", lowered)
+        self.assertIn("<svg", lowered)
+        self.assertNotIn("<script src=", lowered)
+        self.assertNotIn("<link", lowered)
+        self.assertNotIn("https://", lowered)
+        self.assertNotIn("http://", lowered)
+        self.assertNotIn("cdn", lowered)
 
     def test_app_command_detects_existing_review_and_proposal_files(self):
         stdout = io.StringIO()

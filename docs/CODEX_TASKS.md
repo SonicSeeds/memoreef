@@ -643,3 +643,26 @@ Make MemoReef easier for an early user to try with their own exported bookmarks 
 - Generated app navigation includes Pilot.
 - Demo creates `MemoReef/app/pilot.html`.
 - Existing tests still pass.
+
+## Task 26 — Premium visual baseline
+
+### Goal
+Create a premium visual baseline for MemoReef before pilot testing without changing the local-first CLI workflow.
+
+### Requirements
+
+- Redesign `site/index.html` as a self-contained cinematic landing page about descending from ocean surface clutter to a deep-sea source reef.
+- Include an elegant octopus/deep-sea visual implemented with local HTML/CSS/SVG/vanilla JS only.
+- Add scroll-reactive depth changes and pointer oxygen bubbles as progressive enhancement while keeping the page attractive without JS.
+- Keep the landing page free of external assets, fonts, scripts, CDNs, network calls, and build tooling.
+- Refine generated static app pages so dashboard, pilot, tour, library, review, reports, briefs, and Drop detail pages feel calmer and more premium.
+- Keep generated app pages self-contained with inline CSS and preserve pilot instructions, feedback questions, navigation, local artifact links, and Drop details.
+- Update README with the premium landing page and refined generated pilot app surface.
+
+### Acceptance criteria
+
+- `site/index.html` mentions octopus, oxygen, pilot, and the deep-sea landing concept.
+- Landing page and generated app pages avoid external asset/script references.
+- Generated pilot/demo app pages still include dashboard, pilot, tour, library, review, reports, briefs, and Drop detail pages.
+- Pilot flow still creates `app/pilot.html`, `app/tour.html`, local reports, review sessions, and pilot feedback guidance.
+- Existing tests still pass.
