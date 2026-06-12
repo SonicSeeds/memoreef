@@ -425,6 +425,33 @@
       background: rgba(103,245,211,.1);
     }
 
+    .bridge-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .load-label,
+    .export-decisions {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: #d9eef3;
+      background: rgba(7, 28, 39, .56);
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      text-align: center;
+    }
+    .load-label input { display: none; }
+    .export-decisions {
+      font: inherit;
+      font-size: 13px;
+    }
+
     .toast {
       position: fixed;
       left: 50%;
@@ -551,7 +578,8 @@
         align-items: start;
       }
       header,
-      .summary { grid-column: 1 / -1; }
+      .summary,
+      .bridge-controls { grid-column: 1 / -1; }
       .actions { align-self: end; }
       .history {
         max-height: 220px;
@@ -592,6 +620,14 @@
       <div class="stat"><strong id="pearlCount">12</strong><span>pearls</span></div>
     </section>
     <p class="agent-note" hidden>Session summary: 37 reviewed · 863 remaining · 12 pearls found.</p>
+
+    <section class="bridge-controls" aria-label="Review session file bridge">
+      <label class="load-label">
+        Load review session JSON
+        <input id="reviewSessionInput" type="file" accept=".json,application/json" />
+      </label>
+      <button class="export-decisions" id="exportDecisionsButton" type="button">Export decisions JSON</button>
+    </section>
 
     <section class="stage" aria-live="polite">
       <div class="card-wrap" id="cardWrap">
@@ -657,7 +693,7 @@
   <script>
     const initialStats = { reviewed: 37, remaining: 863, pearls: 12 };
 
-    const drops = [
+    const sampleDrops = [
       {
         title: 'Local AI Agents for Small Teams',
         summary: 'A practical guide to running autonomous coding and research agents without turning a small team into a dashboard museum.',
@@ -705,6 +741,9 @@
       }
     ];
 
+    let drops = sampleDrops.map(drop => ({ ...drop, tags: [...drop.tags] }));
+    let decisions = [];
+
     const state = {
       index: 0,
       reviewed: initialStats.reviewed,
@@ -734,13 +773,36 @@
       sheet: document.getElementById('sheetBackdrop'),
       sheetTitle: document.getElementById('sheetTitle'),
       sheetCopy: document.getElementById('sheetCopy'),
-      sheetActions: document.getElementById('sheetActions')
+      sheetActions: document.getElementById('sheetActions'),
+      reviewSessionInput: document.getElementById('reviewSessionInput'),
+      exportDecisionsButton: document.getElementById('exportDecisionsButton')
     };
 
     function renderStats() {
       els.reviewed.textContent = state.reviewed;
       els.remaining.textContent = state.remaining;
       els.pearls.textContent = state.pearls;
+    }
+
+    function escapeHtml(value) {
+      return value.replace(/[&<>"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
+    }
+
+    function formatDropContext(drop) {
+      const folders = Array.isArray(drop.folders) && drop.folders.length ? drop.folders.join(' / ') : '';
+      return folders || drop.path || 'Loaded from review session JSON.';
+    }
+
+    function decisionFor(action, drop) {
+      const normalized = action.toLowerCase();
+      const decision = normalized === 'pearl' ? 'pearl' : normalized === 'keep' ? 'keep' : 'sink';
+      return {
+        id: drop.id || drop.path || drop.url || drop.title,
+        path: drop.path || '',
+        decision,
+        status: decision === 'sink' ? 'discarded' : 'reef',
+        pearl: decision === 'pearl'
+      };
     }
 
     function renderCard() {
@@ -758,14 +820,15 @@
 
       els.cardWrap.style.display = '';
       els.done.classList.remove('show');
-      els.title.textContent = drop.title;
-      els.summary.textContent = drop.summary;
-      els.url.href = drop.url;
-      els.url.textContent = drop.url.replace(/^https?:\/\//, '');
-      els.source.textContent = drop.source;
-      els.confidence.textContent = drop.confidence;
-      els.meta.innerHTML = drop.tags.map(tag => `<span>${tag}</span>`).join('');
-      els.note.innerHTML = drop.note;
+      els.title.textContent = drop.title || 'Untitled Drop';
+      els.summary.textContent = drop.summary || '_Not enriched yet._';
+      els.url.href = drop.url || '#';
+      els.url.textContent = (drop.url || drop.path || 'local drop').replace(/^https?:\/\//, '');
+      els.source.textContent = drop.source || drop.path || 'Review session';
+      els.confidence.textContent = drop.confidence || (drop.status ? `status: ${drop.status}` : 'loaded drop');
+      const tags = Array.isArray(drop.tags) ? drop.tags : [];
+      els.meta.innerHTML = tags.map(tag => `<span>${escapeHtml(String(tag))}</span>`).join('');
+      els.note.innerHTML = drop.note || `<b>Source context:</b> ${escapeHtml(formatDropContext(drop))}`;
     }
 
     function clearHints() {
@@ -795,6 +858,7 @@
       const y = action === 'Pearl' ? -150 : 18;
       const rotation = action === 'Sink' ? -18 : action === 'Keep' ? 18 : 0;
       const className = action === 'Sink' ? 'show-sink' : action === 'Keep' ? 'show-keep' : 'show-pearl';
+      decisions.push(decisionFor(action, drop));
 
       clearHints();
       els.card.classList.add(className);
@@ -862,7 +926,69 @@
       showToast('Review paused. The reef waits. It has excellent patience.');
     }
 
+    function normalizeLoadedDrop(drop) {
+      return {
+        id: drop.id || drop.path || drop.url || drop.title,
+        path: drop.path || '',
+        title: drop.title || 'Untitled Drop',
+        summary: drop.summary || '_Not enriched yet._',
+        url: drop.url || '#',
+        source: drop.path || 'Review session JSON',
+        confidence: drop.status ? `status: ${drop.status}` : 'loaded drop',
+        tags: Array.isArray(drop.tags) ? drop.tags : [],
+        folders: Array.isArray(drop.folders) ? drop.folders : [],
+        status: drop.status || 'drift',
+        pearl: Boolean(drop.pearl),
+        note: `<b>Source context:</b> ${escapeHtml(formatDropContext(drop))}`
+      };
+    }
+
+    async function loadReviewSession(file) {
+      if (!file) return;
+      try {
+        const data = JSON.parse(await file.text());
+        if (!data || !Array.isArray(data.drops)) {
+          throw new Error('Missing drops array');
+        }
+        drops = data.drops.map(normalizeLoadedDrop);
+        decisions = [];
+        state.index = 0;
+        state.reviewed = 0;
+        state.remaining = drops.length;
+        state.pearls = drops.filter(drop => drop.pearl).length;
+        state.history = [];
+        els.history.innerHTML = '';
+        els.done.classList.remove('show');
+        renderCard();
+        showToast(`Loaded ${drops.length} Drops from review session JSON.`);
+      } catch (error) {
+        showToast(`Could not load review session JSON: ${error.message}`);
+      } finally {
+        els.reviewSessionInput.value = '';
+      }
+    }
+
+    function exportDecisions() {
+      const payload = {
+        version: 1,
+        reviewed_at: new Date().toISOString(),
+        decisions
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2) + '\n'], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'memoreef-review-decisions.json';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showToast('Exported memoreef-review-decisions.json');
+    }
+
     function restart() {
+      drops = sampleDrops.map(drop => ({ ...drop, tags: [...drop.tags] }));
+      decisions = [];
       state.index = 0;
       state.reviewed = initialStats.reviewed;
       state.remaining = initialStats.remaining;
@@ -920,6 +1046,8 @@
     document.getElementById('agentFinishBtn').addEventListener('click', () => openSheet('agents'));
     document.getElementById('laterBtn').addEventListener('click', () => openSheet('later'));
     document.getElementById('restartBtn').addEventListener('click', restart);
+    els.reviewSessionInput.addEventListener('change', event => loadReviewSession(event.target.files[0]));
+    els.exportDecisionsButton.addEventListener('click', exportDecisions);
     els.sheet.addEventListener('click', event => { if (event.target === els.sheet) closeSheet(); });
 
     els.card.addEventListener('pointerdown', pointerDown);

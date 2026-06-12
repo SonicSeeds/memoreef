@@ -130,6 +130,15 @@ Open the mobile-first Review Mode prototype:
 open site/swipe.html
 ```
 
+Export a local review session JSON from a vault, then open the browser-only Review Mode and load the JSON with the file picker:
+
+```bash
+python3 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault
+open site/swipe.html
+```
+
+Review Mode can export `memoreef-review-decisions.json` from the browser. Applying those decisions back to Markdown frontmatter is a future task.
+
 These are browser-only prototypes with inline sample data. They are not connected to real vault files yet.
 
 ## Near-term roadmap

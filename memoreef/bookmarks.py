@@ -141,6 +141,96 @@ def parse_tag_list(value: str) -> list[str]:
     return tags
 
 
+def parse_markdown_frontmatter(content: str) -> tuple[dict[str, object], str]:
+    lines = content.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}, content
+
+    end = None
+    for i, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            end = i
+            break
+    if end is None:
+        return {}, content
+
+    frontmatter: dict[str, object] = {}
+    frontmatter_lines = lines[1:end]
+    body = "\n".join(lines[end + 1 :])
+    i = 0
+    while i < len(frontmatter_lines):
+        line = frontmatter_lines[i]
+        if not line.strip() or line.startswith(" "):
+            i += 1
+            continue
+        if ":" not in line:
+            i += 1
+            continue
+        key, raw_value = line.split(":", 1)
+        key = key.strip()
+        raw_value = raw_value.strip()
+        if raw_value:
+            frontmatter[key] = parse_frontmatter_value(raw_value)
+            i += 1
+            continue
+
+        values: list[object] = []
+        i += 1
+        while i < len(frontmatter_lines) and frontmatter_lines[i].startswith("  - "):
+            values.append(parse_frontmatter_value(frontmatter_lines[i][4:].strip()))
+            i += 1
+        frontmatter[key] = values
+    return frontmatter, body
+
+
+def parse_frontmatter_value(value: str) -> object:
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        return value[1:-1].replace('\\"', '"')
+    return value
+
+
+def extract_summary(body: str) -> str:
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        if line.strip() != "## Summary":
+            continue
+        summary: list[str] = []
+        for summary_line in lines[i + 1 :]:
+            if summary_line.startswith("## "):
+                break
+            summary.append(summary_line)
+        return "\n".join(summary).strip()
+    return ""
+
+
+def markdown_drop_to_review_item(path: Path, vault: str | Path) -> dict[str, object]:
+    vault_path = Path(vault).expanduser().resolve()
+    relative_path = path.resolve().relative_to(vault_path).as_posix()
+    frontmatter, body = parse_markdown_frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+    folders = frontmatter.get("folders", [])
+    tags = frontmatter.get("tags", [])
+    if not isinstance(folders, list):
+        folders = []
+    if not isinstance(tags, list):
+        tags = []
+
+    return {
+        "id": relative_path,
+        "path": relative_path,
+        "title": str(frontmatter.get("title") or path.stem),
+        "url": str(frontmatter.get("url") or ""),
+        "status": str(frontmatter.get("status") or "drift"),
+        "pearl": bool(frontmatter.get("pearl", False)),
+        "folders": [str(folder) for folder in folders],
+        "tags": [str(tag) for tag in tags],
+        "summary": extract_summary(body),
+    }
+
+
 def canonicalize_url(url: str) -> str:
     parsed = urlsplit(url)
     scheme = parsed.scheme.lower()

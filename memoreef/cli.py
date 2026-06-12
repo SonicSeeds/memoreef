@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
+import json
 from pathlib import Path
 
 from . import __version__
-from .bookmarks import Bookmark, parse_bookmarks_html, parse_links_csv, parse_links_text, write_bookmarks_to_vault
+from .bookmarks import (
+    Bookmark,
+    markdown_drop_to_review_item,
+    parse_bookmarks_html,
+    parse_links_csv,
+    parse_links_text,
+    write_bookmarks_to_vault,
+)
 
 
 def top_level_folder_counts(bookmarks: list[Bookmark]) -> dict[str, int]:
@@ -95,6 +103,44 @@ def import_bookmarks(
     return written
 
 
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def timestamp_for_filename() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M%S")
+
+
+def export_review_session(vault: Path, root: str = "MemoReef", output: Path | None = None) -> Path:
+    vault_path = vault.expanduser().resolve()
+    drops_dir = vault_path / root / "Drops"
+    drops = []
+    if drops_dir.exists():
+        for path in sorted(drops_dir.rglob("*.md")):
+            drops.append(markdown_drop_to_review_item(path, vault_path))
+    drops.sort(key=lambda drop: (drop.get("status") != "drift", str(drop.get("path", ""))))
+
+    if output is None:
+        output = vault_path / root / "review-sessions" / f"{timestamp_for_filename()}-review-session.json"
+    output = output.expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    drift_count = sum(1 for drop in drops if drop.get("status") == "drift")
+    payload = {
+        "version": 1,
+        "created_at": utc_now_iso(),
+        "vault": str(vault_path),
+        "source": f"{root}/Drops",
+        "stats": {
+            "total": len(drops),
+            "drift": drift_count,
+        },
+        "drops": drops,
+    }
+    output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return output
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="memoreef",
@@ -118,6 +164,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     inspect_cmd = sub.add_parser("inspect", help="Inspect a browser bookmark HTML export without writing files.")
     inspect_cmd.add_argument("bookmarks", type=Path, help="Browser bookmark export HTML file.")
+
+    review_cmd = sub.add_parser("export-review-session", help="Export Markdown Drops to review-session JSON.")
+    review_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    review_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    review_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults inside the vault.")
 
     return parser
 
@@ -155,6 +206,11 @@ def main(argv: list[str] | None = None) -> int:
         print("Top-level folders:")
         for folder, count in counts.items():
             print(f"- {folder}: {count}")
+        return 0
+
+    if args.command == "export-review-session":
+        output = export_review_session(args.vault, args.root, args.output)
+        print(f"Exported review session to {output}")
         return 0
 
     parser.error("unknown command")

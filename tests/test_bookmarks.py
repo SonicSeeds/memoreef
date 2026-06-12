@@ -1,5 +1,6 @@
 from contextlib import redirect_stdout
 import io
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -284,6 +285,59 @@ class BookmarkImportTests(unittest.TestCase):
 
             self.assertEqual(result, 0)
             self.assertEqual(list(Path(tmp).iterdir()), [])
+
+    def test_export_review_session_explicit_output(self):
+        stdout = io.StringIO()
+        bookmarks = [
+            Bookmark(
+                "Example Source",
+                "https://example.com",
+                folders=["AI Agents"],
+                tags=["research"],
+            )
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "review-session.json"
+            write_bookmarks_to_vault(bookmarks, vault_path)
+
+            with redirect_stdout(stdout):
+                result = main(["export-review-session", "--vault", str(vault_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            drop = data["drops"][0]
+            self.assertEqual(result, 0)
+            self.assertEqual(data["version"], 1)
+            self.assertIn("created_at", data)
+            self.assertEqual(data["stats"], {"total": 1, "drift": 1})
+            self.assertEqual(drop["id"], drop["path"])
+            self.assertTrue(drop["path"].startswith("MemoReef/Drops/"))
+            self.assertEqual(drop["title"], "Example Source")
+            self.assertEqual(drop["url"], "https://example.com")
+            self.assertEqual(drop["status"], "drift")
+            self.assertEqual(drop["pearl"], False)
+            self.assertEqual(drop["folders"], ["AI Agents"])
+            self.assertEqual(drop["tags"], ["research", "ai-agents"])
+            self.assertEqual(drop["summary"], "_Not enriched yet._")
+
+    def test_export_review_session_default_output_path(self):
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([Bookmark("Example Source", "https://example.com")], vault_path)
+
+            with redirect_stdout(stdout):
+                result = main(["export-review-session", "--vault", str(vault_path)])
+
+            outputs = list((vault_path / "MemoReef" / "review-sessions").glob("*-review-session.json"))
+            self.assertEqual(result, 0)
+            self.assertEqual(len(outputs), 1)
+            data = json.loads(outputs[0].read_text(encoding="utf-8"))
+            self.assertEqual(data["version"], 1)
+            self.assertEqual(data["stats"]["total"], 1)
+            self.assertEqual(len(data["drops"]), 1)
 
 
 if __name__ == "__main__":

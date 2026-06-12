@@ -237,3 +237,25 @@ site/swipe.html
 - Counters update when Sink, Keep, or Pearl is selected.
 - Let agents finish and Continue later show clear static prototype states.
 - Swipe gestures and visible buttons work for the main actions.
+
+## Task 8 — Review session JSON bridge
+
+### Goal
+Connect local Markdown Drops to the static mobile Review Mode prototype without adding a backend.
+
+### Requirements
+
+- Add a CLI command that exports Drops to review-session JSON.
+- Let Review Mode load review-session JSON with a browser file picker.
+- Let Review Mode export decisions JSON from the browser.
+- Keep the flow local-first and browser-only.
+- Do not write decisions back to Markdown yet.
+- Do not add a backend, external dependencies, or build tooling.
+
+### Acceptance criteria
+
+- `export-review-session --vault <vault>` writes a default JSON file under `MemoReef/review-sessions`.
+- `--output` writes the review-session JSON to an explicit path.
+- `site/swipe.html` keeps inline sample data as fallback.
+- Loaded review sessions update counters and cards.
+- Decision export downloads `memoreef-review-decisions.json`.
