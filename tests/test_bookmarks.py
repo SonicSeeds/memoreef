@@ -618,6 +618,77 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertEqual(len(outputs), 1)
             self.assertTrue(explicit.exists())
 
+    def brief_text(self, vault_path: Path, *args: str):
+        stdout = io.StringIO()
+        output_path = vault_path.parent / "project-brief.md"
+        with redirect_stdout(stdout):
+            result = main(["brief", "--vault", str(vault_path), "--output", str(output_path), *args])
+        return result, stdout.getvalue(), output_path.read_text(encoding="utf-8")
+
+    def test_brief_generation_with_project_filter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([
+                Bookmark("Agent Context Source", "https://agent.example/context", projects=["AI Agents"], tags=["agents"], status="reef"),
+                Bookmark("Design Source", "https://design.example/source", projects=["Design Systems"], tags=["design"], status="reef"),
+            ], vault_path, allow_duplicates=True)
+
+            result, output, text = self.brief_text(vault_path, "--project", "AI Agents")
+
+            self.assertEqual(result, 0)
+            self.assertIn("- sources: 1", output)
+            self.assertIn("Agent Context Source", text)
+            self.assertNotIn("Design Source", text)
+            self.assertIn("Applied filters: project=AI Agents", text)
+            self.assertIn("Agent handoff", text)
+            self.assertIn("https://agent.example/context", text)
+
+    def test_brief_respects_pearl_status_tag_and_limit_filters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([
+                Bookmark("First Pearl", "https://one.example", projects=["AI Agents"], tags=["agents"], status="reef", pearl=True),
+                Bookmark("Second Pearl", "https://two.example", projects=["AI Agents"], tags=["agents"], status="reef", pearl=True),
+                Bookmark("Wrong Status", "https://drift.example", projects=["AI Agents"], tags=["agents"], status="drift", pearl=True),
+                Bookmark("Wrong Tag", "https://tag.example", projects=["AI Agents"], tags=["other"], status="reef", pearl=True),
+                Bookmark("Not Pearl", "https://plain.example", projects=["AI Agents"], tags=["agents"], status="reef", pearl=False),
+            ], vault_path, allow_duplicates=True)
+
+            result, _output, text = self.brief_text(
+                vault_path,
+                "--project",
+                "AI Agents",
+                "--status",
+                "reef",
+                "--tag",
+                "agents",
+                "--pearl-only",
+                "--limit",
+                "1",
+            )
+
+            self.assertEqual(result, 0)
+            self.assertIn("Selected sources: 1", text)
+            self.assertIn("First Pearl", text)
+            self.assertNotIn("Second Pearl", text)
+            self.assertNotIn("Wrong Status", text)
+            self.assertNotIn("Wrong Tag", text)
+            self.assertNotIn("Not Pearl", text)
+
+    def test_brief_does_not_modify_drop_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("Read Only Source", "https://readonly.example", projects=["AI Agents"], status="reef"),
+            ], vault_path)
+            before = {path: path.read_text(encoding="utf-8") for path in written}
+
+            result, _output, text = self.brief_text(vault_path, "--project", "AI Agents")
+
+            self.assertEqual(result, 0)
+            self.assertIn("Read Only Source", text)
+            self.assertEqual(before, {path: path.read_text(encoding="utf-8") for path in written})
+
     def test_app_writes_library_page_and_dashboard_mentions_library_search(self):
         with tempfile.TemporaryDirectory() as tmp:
             vault_path = Path(tmp) / "vault"
@@ -1067,6 +1138,7 @@ class BookmarkImportTests(unittest.TestCase):
             duplicate_reports = list((root / "reports").glob("*-duplicate-report.json"))
             garden_reports = list((root / "reports").glob("*-garden-suggestions.json"))
             search_results = list((root / "search").glob("*-search-results.json"))
+            briefs = list((root / "briefs").glob("*project-brief.md"))
             agent_plans = list((root / "agent-plans").glob("*-agent-finish-plan.json"))
             agent_proposals = list((root / "agent-plans").glob("*-agent-proposals.json"))
 
@@ -1093,6 +1165,7 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertTrue(duplicate_reports)
             self.assertTrue(garden_reports)
             self.assertTrue(search_results)
+            self.assertTrue(briefs)
             self.assertTrue(agent_plans)
             self.assertTrue(agent_proposals)
             self.assertTrue((output_path / "memoreef-demo-review-decisions.json").exists())
@@ -1107,6 +1180,10 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("app/tour.html", readme_text)
             self.assertIn("what problem this solves", readme_text.lower())
             self.assertIn("Library/Search", library.read_text(encoding="utf-8"))
+            brief_text = briefs[0].read_text(encoding="utf-8")
+            self.assertIn("Local AI agent playbook for research teams", brief_text)
+            self.assertIn("Agent handoff", brief_text)
+            self.assertIn("project brief", readme_text)
             self.assertIn("Why local Markdown matters", tour_html)
             self.assertIn("Local AI agent playbook for research teams", tour_html)
 
@@ -1130,6 +1207,26 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("memoreef-review-decisions.json", html)
             self.assertIn("2026-06-12-121000-agent-finish-plan.json", html)
             self.assertIn("2026-06-12-122000-agent-proposals.json", html)
+
+    def test_app_and_tour_detect_latest_project_brief(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            brief_dir = vault_path / "MemoReef" / "briefs"
+            brief_dir.mkdir(parents=True)
+            (brief_dir / "2026-06-12-120000-ai-agents-project-brief.md").write_text("# Old Brief\n", encoding="utf-8")
+            (brief_dir / "2026-06-12-121000-ai-agents-project-brief.md").write_text("# Latest Brief\n", encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                result = main(["app", "--vault", str(vault_path)])
+
+            dashboard = (vault_path / "MemoReef" / "app" / "index.html").read_text(encoding="utf-8")
+            tour = (vault_path / "MemoReef" / "app" / "tour.html").read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("MemoReef/briefs/2026-06-12-121000-ai-agents-project-brief.md", dashboard)
+            self.assertNotIn("MemoReef/briefs/2026-06-12-120000-ai-agents-project-brief.md", dashboard)
+            self.assertIn("Latest project brief Markdown", tour)
+            self.assertIn("2026-06-12-121000-ai-agents-project-brief.md", tour)
 
     def write_proposals(self, path: Path, vault_path: Path, proposals):
         normalized = []

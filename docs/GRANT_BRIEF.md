@@ -46,10 +46,10 @@ Open source matters here because the storage model, importers, triage convention
 
 ## Current Status
 
-Currently implemented: a Python CLI package, browser bookmark HTML import, plain URL list import, CSV link import, Obsidian-compatible Markdown Drops, status and frontmatter fields for Drift triage, an import inspection command, import log behavior, a static landing page, and browser-only triage prototypes.
+Currently implemented: a Python CLI package, browser bookmark HTML import, plain URL list import, CSV link import, Obsidian-compatible Markdown Drops, Drift/Reef/Deep/Discarded/Pearl frontmatter fields, import inspection, import logs, local Review Mode JSON export/application, agent finish plans and deterministic proposals, duplicate/link/metadata/garden reports, library search, project brief export, a demo vault, a generated local dashboard/library/tour, a static landing page, and browser-only triage prototypes.
 
-Not implemented yet: article fetching or extraction, automatic summaries and generated tags, dead-link checking, connected filesystem-backed Review Mode, an Obsidian plugin, a browser extension, or an agent search/index layer.
+Not implemented yet: full article extraction, automatic AI-generated summaries and tags, connected filesystem-backed Review Mode, an Obsidian plugin, a browser extension, or a hosted sync/account layer.
 
 ## Next Milestones
 
-The next milestones are to make Review Mode filesystem-backed, improve importer coverage across real browser exports and saved-link formats, add safe article metadata and dead-link checks, define agent briefing exports from curated Drops, and document the storage conventions so other local-first tools can read and build on MemoReef vaults.
+The next milestones are to make Review Mode filesystem-backed, improve importer coverage across real browser exports and saved-link formats, add safer article extraction/summarization, refine generated project briefs from curated Drops, and document the storage conventions so other local-first tools can read and build on MemoReef vaults.

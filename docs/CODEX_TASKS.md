@@ -566,3 +566,30 @@ Generate a static product tour page from the current vault data so a new user ca
 - `demo` creates `MemoReef/app/tour.html`.
 - The tour contains value narrative text and at least one real Drop title from demo/sample data.
 - Existing tests still pass.
+
+## Task 23 — Agent-ready project brief export
+
+### Goal
+Export selected local Markdown Drops into a readable Markdown project brief for agent or human handoff.
+
+### Requirements
+
+- Add `python3 -m memoreef.cli brief --vault <vault> --project "AI Agents"`.
+- Support repeatable `--project`, `--shoal`, `--status`, `--tag`, and `--hostname`.
+- Support `--pearl-only`, `--limit`, and optional `--output`.
+- Write default briefs under `<vault>/MemoReef/briefs/YYYY-MM-DD-HHMMSS-project-brief.md`.
+- Include generated timestamp, applied filters, summary counts, source metadata, source notes/summaries, Agent handoff instructions, and Gaps / next review.
+- Keep the command local-only and read-only against Markdown Drops.
+- Do not call network APIs, LLMs, external services, or add dependencies.
+- Detect and link the latest project brief from the generated dashboard and tour.
+- Make the demo command create a demo project brief.
+- Update README and demo README text.
+
+### Acceptance criteria
+
+- Project-filtered brief generation works.
+- Pearl-only, status, tag, and limit filters work together.
+- Brief generation does not modify Drop Markdown files.
+- Generated app and tour detect the latest brief.
+- Demo creates a brief containing a real demo source title and Agent handoff text.
+- Existing tests still pass.

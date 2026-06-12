@@ -162,6 +162,15 @@ python3 -m memoreef.cli search-library --vault /tmp/memoreef-vault --query "auto
 
 Library search is local-only and read-only. It searches Markdown Drops and writes JSON results under `MemoReef/search` unless `--output` is provided.
 
+Export selected Drops into a Markdown project brief:
+
+```bash
+python3 -m memoreef.cli brief --vault /tmp/memoreef-vault --project "AI Agents"
+python3 -m memoreef.cli brief --vault /tmp/memoreef-vault --project "AI Agents" --pearl-only --limit 10
+```
+
+Project briefs are local-only and read-only against Drops. They write Markdown under `MemoReef/briefs/*-project-brief.md` unless `--output` is provided, include source URLs and Drop metadata, and add an Agent handoff section that tells an agent to use only listed sources, cite URLs, note gaps, and avoid invented claims.
+
 Create a complete local demo vault:
 
 ```bash
@@ -170,7 +179,7 @@ open /tmp/memoreef-demo/MemoReef/app/tour.html
 open /tmp/memoreef-demo/MemoReef/app/index.html
 ```
 
-The demo command writes fictional sample Drops and generates local review, duplicate, garden, search, agent-plan, product tour, and static app artifacts. Open `MemoReef/app/tour.html` first for the generated product story, then use the dashboard and library pages. It does not use a backend, network call, AI call, or secrets.
+The demo command writes fictional sample Drops and generates local review, duplicate, garden, search, project brief, agent-plan, product tour, and static app artifacts. Open `MemoReef/app/tour.html` first for the generated product story, then use the dashboard and library pages. It does not use a backend, network call, AI call, or secrets.
 
 Review Mode can export `memoreef-review-decisions.json` from the browser. The CLI can apply those decisions back to Markdown frontmatter.
 
@@ -258,7 +267,7 @@ open /tmp/memoreef-vault/MemoReef/app/tour.html
 open /tmp/memoreef-vault/MemoReef/app/index.html
 ```
 
-The app command writes `index.html`, `library.html`, and `tour.html`. The tour page is generated from local vault data and explains the product story: messy saves, useful Pearls, clutter reports, agent handoff artifacts, library search, and why local Markdown matters. The dashboard summarizes Drop counts, shows the latest local review/agent artifacts, links to the tour, and points to the next recommended workflow step. It is static HTML and does not start a backend.
+The app command writes `index.html`, `library.html`, and `tour.html`. The tour page is generated from local vault data and explains the product story: messy saves, useful Pearls, clutter reports, agent handoff artifacts, project briefs, library search, and why local Markdown matters. The dashboard summarizes Drop counts, shows the latest local review/agent/search/brief artifacts, links to the tour, and points to the next recommended workflow step. It is static HTML and does not start a backend.
 
 The static site prototypes use inline sample data. The generated local app pages are created from real vault files and local JSON artifacts. None of them start a backend.
 

@@ -389,6 +389,7 @@ def cleanup_previous_demo_files(vault: Path, root: str) -> None:
         root_path / "reports" / "demo-duplicate-report.json",
         root_path / "reports" / "demo-garden-suggestions.json",
         root_path / "search" / "demo-search-results.json",
+        root_path / "briefs" / "demo-ai-agents-project-brief.md",
         root_path / "agent-plans" / "demo-agent-finish-plan.json",
         root_path / "agent-plans" / "demo-agent-proposals.json",
         vault / "memoreef-demo-review-decisions.json",
@@ -437,6 +438,7 @@ Both pages are static files. There is no backend, account, network call, or AI c
 - A duplicate report: `{rel["duplicate_report"]}`.
 - Garden suggestions: `{rel["garden_suggestions"]}`.
 - A search result: `{rel["search_results"]}`.
+- A project brief for agent handoff: `{rel["project_brief"]}`.
 - A demo review-decisions file and agent finish artifacts: `{rel["decisions"]}`, `{rel["agent_plan"]}`, `{rel["agent_proposals"]}`.
 
 ## Local workflow
@@ -445,6 +447,7 @@ Both pages are static files. There is no backend, account, network call, or AI c
 2. Review: run `export-review-session` and open Review Mode to mark Drops as keep, Pearl, or sink.
 3. Agent finish: exported decisions become taste examples for `plan-agent-finish` and `draft-agent-proposals`.
 4. Search/library: run `search-library` to create local JSON search results, then open `MemoReef/app/library.html`.
+5. Brief: run `brief --project "AI Agents"` to turn selected Drops into a Markdown project brief with source URLs and agent handoff rules.
 
 ## Why local Markdown matters
 
@@ -482,6 +485,12 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
         root_path / "search" / "demo-search-results.json",
         filters=default_review_filters(limit=10),
     )
+    project_brief, brief_payload = create_project_brief(
+        vault,
+        root,
+        root_path / "briefs" / "demo-ai-agents-project-brief.md",
+        filters=default_review_filters(project=["AI Agents"], limit=8),
+    )
     decisions = write_demo_decisions(vault, root, review_session)
     agent_plan, plan_payload, _plan_warnings = build_agent_finish_plan(
         vault,
@@ -503,6 +512,7 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
         "duplicate_report": duplicate_report,
         "garden_suggestions": garden_suggestions,
         "search_results": search_results,
+        "project_brief": project_brief,
         "decisions": decisions,
         "agent_plan": agent_plan,
         "agent_proposals": agent_proposals,
@@ -518,6 +528,7 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
         "duplicate_groups": duplicate_payload["summary"]["exact_url_groups"],
         "garden_suggestions": garden_payload["summary"]["suggestions"],
         "search_matches": search_payload["summary"]["matches"],
+        "brief_sources": brief_payload["summary"]["sources"],
         "agent_proposals": proposals_payload["summary"]["proposed"],
         "dashboard": dashboard,
         "tour": tour,
@@ -701,6 +712,21 @@ def search_drop_item(path: Path, vault: Path) -> dict[str, object]:
     return item
 
 
+def markdown_section(body: str, heading: str) -> str:
+    lines = body.splitlines()
+    marker = f"## {heading}"
+    for i, line in enumerate(lines):
+        if line.strip() != marker:
+            continue
+        section: list[str] = []
+        for section_line in lines[i + 1 :]:
+            if section_line.startswith("## "):
+                break
+            section.append(section_line)
+        return "\n".join(section).strip()
+    return ""
+
+
 def score_search_item(drop: dict[str, object], query_terms: list[str]) -> dict[str, object] | None:
     matched_fields: list[str] = []
     score = 0
@@ -819,6 +845,156 @@ def search_library(
         "items": results,
     }
     output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return output, payload
+
+
+def slug_for_filename(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
+    return slug or "sources"
+
+
+def brief_item_from_drop(path: Path, vault: Path) -> dict[str, object]:
+    item = search_drop_item(path, vault)
+    body = str(item.get("body") or "")
+    item["notes"] = markdown_section(body, "Notes")
+    item["agent_brief"] = markdown_section(body, "Agent Brief")
+    return item
+
+
+def brief_list(values: object) -> str:
+    if isinstance(values, list) and values:
+        return ", ".join(str(value) for value in values)
+    return "none"
+
+
+def render_project_brief(vault: Path, root: str, filters: dict[str, object], drops: list[dict[str, object]]) -> str:
+    created_at = utc_now_iso()
+    filter_summary = review_filter_summary(filters)
+    status_counts: dict[str, int] = {}
+    for drop in drops:
+        status = str(drop.get("status") or "drift")
+        status_counts[status] = status_counts.get(status, 0) + 1
+    missing_summaries = [drop for drop in drops if not str(drop.get("summary") or "").strip()]
+    discarded = [drop for drop in drops if str(drop.get("status") or "") == "discarded"]
+
+    lines = [
+        "# MemoReef Project Brief",
+        "",
+        f"- Generated: {created_at}",
+        f"- Vault: `{vault}`",
+        f"- Source: `{root}/Drops`",
+        f"- Applied filters: {filter_summary}",
+        "",
+        "## Summary counts",
+        "",
+        f"- Selected sources: {len(drops)}",
+        f"- Pearls: {sum(1 for drop in drops if bool(drop.get('pearl', False)))}",
+        f"- Missing summaries: {len(missing_summaries)}",
+    ]
+    for status, count in sorted(status_counts.items()):
+        lines.append(f"- Status `{status}`: {count}")
+
+    lines.extend(["", "## Selected sources", ""])
+    if not drops:
+        lines.append("No Drops matched the applied filters.")
+    for index, drop in enumerate(drops, start=1):
+        pearl = "yes" if bool(drop.get("pearl", False)) else "no"
+        lines.extend(
+            [
+                f"### {index}. {drop.get('title') or 'Untitled'}",
+                "",
+                f"- URL: {drop.get('url') or 'none'}",
+                f"- Status: {drop.get('status') or 'drift'}",
+                f"- Pearl: {pearl}",
+                f"- Tags: {brief_list(drop.get('tags'))}",
+                f"- Projects: {brief_list(drop.get('projects'))}",
+                f"- Shoals: {brief_list(drop.get('shoals'))}",
+                f"- Hostname: {drop.get('hostname') or 'none'}",
+                f"- Drop path: `{drop.get('path') or ''}`",
+                "",
+            ]
+        )
+        summary = str(drop.get("summary") or "").strip()
+        notes = str(drop.get("notes") or "").strip()
+        agent_brief = str(drop.get("agent_brief") or "").strip()
+        if summary:
+            lines.extend(["Summary:", "", summary, ""])
+        elif drop.get("page_description"):
+            lines.extend(["Summary:", "", str(drop.get("page_description")), ""])
+        else:
+            lines.extend(["Summary:", "", "No summary found in this Drop.", ""])
+        if notes:
+            lines.extend(["Notes:", "", notes, ""])
+        if agent_brief:
+            lines.extend(["Drop agent brief:", "", agent_brief, ""])
+
+    lines.extend(
+        [
+            "## Agent handoff",
+            "",
+            "- Use only the sources listed in this brief for factual claims.",
+            "- Cite source URLs when making claims or recommendations.",
+            "- Note gaps, uncertainty, stale sources, and missing summaries explicitly.",
+            "- Do not invent claims, citations, authors, dates, quotes, or source coverage.",
+            "- If the listed sources are insufficient, ask for more sources or a wider MemoReef filter.",
+            "",
+            "## Gaps / next review",
+            "",
+        ]
+    )
+    if not drops:
+        lines.append("- No matching sources were selected; broaden filters or import/review more Drops.")
+    if len(drops) < 3:
+        lines.append("- Low source count; consider adding more reviewed sources before agent handoff.")
+    if missing_summaries:
+        titles = ", ".join(str(drop.get("title") or "Untitled") for drop in missing_summaries[:8])
+        lines.append(f"- Missing summaries: {titles}.")
+    if discarded:
+        titles = ", ".join(str(drop.get("title") or "Untitled") for drop in discarded[:8])
+        lines.append(f"- Discarded sources are included by the current filters: {titles}.")
+    if not any(line.startswith("- ") for line in lines[lines.index("## Gaps / next review") + 2 :]):
+        lines.append("- No obvious gaps detected from local Drop metadata.")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def create_project_brief(
+    vault: Path,
+    root: str = "MemoReef",
+    output: Path | None = None,
+    filters: dict[str, object] | None = None,
+) -> tuple[Path, dict[str, object]]:
+    vault_path = vault.expanduser().resolve()
+    drops_dir = vault_path / root / "Drops"
+    filters = filters or default_review_filters()
+    drops: list[dict[str, object]] = []
+    if drops_dir.exists():
+        for path in sorted(drops_dir.rglob("*.md")):
+            drop = brief_item_from_drop(path, vault_path)
+            if review_item_matches_filters(drop, filters):
+                drops.append(drop)
+    drops.sort(key=lambda drop: (drop.get("status") != "drift", str(drop.get("path", ""))))
+    limit = filters.get("limit")
+    if isinstance(limit, int) and limit >= 0:
+        drops = drops[:limit]
+
+    if output is None:
+        project_values = filter_values(filters, "project")
+        name = project_values[0] if project_values else "sources"
+        output = vault_path / root / "briefs" / f"{timestamp_for_filename()}-{slug_for_filename(name)}-project-brief.md"
+    output = output.expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render_project_brief(vault_path, root, filters, drops), encoding="utf-8")
+
+    payload = {
+        "created_at": utc_now_iso(),
+        "filters": filters,
+        "summary": {
+            "sources": len(drops),
+            "pearls": sum(1 for drop in drops if bool(drop.get("pearl", False))),
+            "missing_summaries": sum(1 for drop in drops if not str(drop.get("summary") or "").strip()),
+        },
+        "items": drops,
+    }
     return output, payload
 
 
@@ -2141,6 +2317,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
     latest_garden_suggestions = latest_matching_file(root_path / "reports", ["*-garden-suggestions.json"])
 
     latest_search_results = latest_matching_file(root_path / "search", ["*-search-results.json"])
+    latest_project_brief = latest_matching_file(root_path / "briefs", ["*-project-brief.md"])
     has_metadata = vault_has_metadata(vault_path, root)
 
     return {
@@ -2162,6 +2339,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
         "latest_garden_suggestions": latest_garden_suggestions,
 
         "latest_search_results": latest_search_results,
+        "latest_project_brief": latest_project_brief,
         "next_action": recommended_next_action(
             total,
             drift,
@@ -2230,6 +2408,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
     latest_garden_suggestions = relative_or_none(state.get("latest_garden_suggestions"), vault)
 
     latest_search_results = relative_or_none(state.get("latest_search_results"), vault)
+    latest_project_brief = relative_or_none(state.get("latest_project_brief"), vault)
     next_action = html_escape(str(state.get("next_action", "Continue.")))
     vault_text = html_escape(str(vault))
 
@@ -2306,6 +2485,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <dt>Garden suggestions</dt><dd>{html_escape(latest_garden_suggestions)}</dd>
 
           <dt>Library search</dt><dd>{html_escape(latest_search_results)}</dd>
+          <dt>Project brief</dt><dd>{html_escape(latest_project_brief)}</dd>
         </dl>
       </div>
       <div class=\"card workflow\">
@@ -2319,6 +2499,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <li>Review the suggestions JSON, then run <code>apply-garden-suggestions --dry-run</code> before applying accepted labels.</li>
 
           <li>Run <code>search-library</code> to search the local Library, then open <code>library.html</code>.</li>
+          <li>Run <code>brief --project "AI Agents"</code> to export selected Drops into an agent-ready Markdown project brief.</li>
           <li>Run <code>export-review-session</code> with optional filtered review queues like <code>--project</code>, <code>--shoal</code>, or <code>--pearl-only</code>, then open <code>site/swipe.html</code> for Review Mode.</li>
           <li>Export decisions from Review Mode, then run <code>apply-review-decisions</code>.</li>
           <li>Create an agent finish plan with <code>plan-agent-finish</code>.</li>
@@ -2505,6 +2686,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
     agent_plan_payload = read_json_object(state.get("latest_agent_plan"))
     agent_proposals_payload = read_json_object(state.get("latest_agent_proposals"))
     search_payload = read_json_object(state.get("latest_search_results"))
+    latest_project_brief = state.get("latest_project_brief")
 
     mess_signals = [
         f"{counts.get('total', 0)} total Drops in local Markdown.",
@@ -2567,6 +2749,8 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
         summary = agent_proposals_payload.get("summary", {})
         if isinstance(summary, dict):
             review_lines.append(f"Agent proposals: {summary.get('proposed', 0)} drafted, {summary.get('needs_review', 0)} needing review.")
+    if isinstance(latest_project_brief, Path):
+        review_lines.append("Latest project brief detected for agent or human handoff.")
 
     library_lines: list[str] = []
     if search_payload is not None:
@@ -2579,6 +2763,8 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
             library_lines.append(f"Search examples: {', '.join(search_titles)}.")
     else:
         library_lines.append("No saved search result was detected yet; run search-library to create one.")
+    if isinstance(latest_project_brief, Path):
+        library_lines.append("A Markdown project brief is available from selected local Drops.")
 
     artifact_links = "\n".join(
         link
@@ -2590,6 +2776,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
             linked_file("Latest link check report JSON", state.get("latest_link_check_report"), app_dir),
             linked_file("Latest garden suggestions JSON", state.get("latest_garden_suggestions"), app_dir),
             linked_file("Latest search results JSON", state.get("latest_search_results"), app_dir),
+            linked_file("Latest project brief Markdown", state.get("latest_project_brief"), app_dir),
             linked_file("Latest agent finish plan JSON", state.get("latest_agent_plan"), app_dir),
             linked_file("Latest agent proposals JSON", state.get("latest_agent_proposals"), app_dir),
             linked_file("Latest review decisions JSON", state.get("latest_review_decisions"), app_dir),
@@ -2745,6 +2932,18 @@ def build_parser() -> argparse.ArgumentParser:
     search_cmd.add_argument("--pearl-only", action="store_true", help="Search only Pearl Drops.")
     search_cmd.add_argument("--exclude-status", action="append", default=[], help="Exclude Drops with a matching status. Repeatable.")
 
+    brief_cmd = sub.add_parser("brief", help="Export selected Markdown Drops into a project brief.")
+    brief_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    brief_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    brief_cmd.add_argument("--output", type=Path, default=None, help="Output Markdown path. Defaults inside the vault.")
+    brief_cmd.add_argument("--project", action="append", default=[], help="Include Drops with a matching project. Repeatable.")
+    brief_cmd.add_argument("--shoal", action="append", default=[], help="Include Drops with a matching shoal. Repeatable.")
+    brief_cmd.add_argument("--status", action="append", default=[], help="Include Drops with a matching status. Repeatable.")
+    brief_cmd.add_argument("--tag", action="append", default=[], help="Include Drops with a matching tag. Repeatable.")
+    brief_cmd.add_argument("--hostname", action="append", default=[], help="Include Drops with a matching hostname. Repeatable.")
+    brief_cmd.add_argument("--pearl-only", action="store_true", help="Include only Pearl Drops.")
+    brief_cmd.add_argument("--limit", type=int, default=None, help="Cap exported sources after sorting and filtering.")
+
     apply_cmd = sub.add_parser("apply-review-decisions", help="Apply Review Mode decision JSON to Markdown Drops.")
     apply_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     apply_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
@@ -2890,6 +3089,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- matches: {matches}")
         print(f"- output: {output}")
         print(f"- filters: {search_filter_summary(filters)}")
+        return 0
+
+    if args.command == "brief":
+        filters = default_review_filters(
+            project=args.project,
+            shoal=args.shoal,
+            status=args.status,
+            tag=args.tag,
+            hostname=args.hostname,
+            pearl_only=args.pearl_only,
+            limit=args.limit,
+        )
+        output, payload = create_project_brief(args.vault, args.root, args.output, filters)
+        summary = payload.get("summary", {})
+        sources = summary.get("sources", 0) if isinstance(summary, dict) else 0
+        print("Exported project brief:")
+        print(f"- sources: {sources}")
+        print(f"- output: {output}")
+        print(f"- filters: {review_filter_summary(filters)}")
         return 0
 
     if args.command == "apply-review-decisions":
@@ -3087,6 +3305,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- exact duplicate groups: {summary['duplicate_groups']}")
         print(f"- garden suggestions: {summary['garden_suggestions']}")
         print(f"- search matches: {summary['search_matches']}")
+        print(f"- brief sources: {summary['brief_sources']}")
         print(f"- agent proposals: {summary['agent_proposals']}")
         print(f"- dashboard: {summary['dashboard']}")
         print(f"- readme: {summary['readme']}")
