@@ -1019,14 +1019,20 @@ class BookmarkImportTests(unittest.TestCase):
                 result = main(["app", "--vault", str(vault_path)])
 
             dashboard = vault_path / "MemoReef" / "app" / "index.html"
+            tour = vault_path / "MemoReef" / "app" / "tour.html"
             html = dashboard.read_text(encoding="utf-8")
+            tour_html = tour.read_text(encoding="utf-8")
             self.assertEqual(result, 0)
             self.assertTrue(dashboard.exists())
+            self.assertTrue(tour.exists())
             self.assertIn("MemoReef local app", html)
+            self.assertIn("tour.html", html)
             self.assertIn("Total Drops", html)
             self.assertIn("Drift", html)
             self.assertIn("Review Mode", html)
             self.assertIn("Agent proposals", html)
+            self.assertIn("Why local Markdown matters", tour_html)
+            self.assertIn("Messy saves become source memory", tour_html)
             self.assertIn("Generated MemoReef app dashboard", stdout.getvalue())
 
     def test_app_command_handles_empty_vault(self):
@@ -1056,6 +1062,7 @@ class BookmarkImportTests(unittest.TestCase):
             readme = root / "DEMO_README.md"
             dashboard = root / "app" / "index.html"
             library = root / "app" / "library.html"
+            tour = root / "app" / "tour.html"
             review_sessions = list((root / "review-sessions").glob("*-review-session.json"))
             duplicate_reports = list((root / "reports").glob("*-duplicate-report.json"))
             garden_reports = list((root / "reports").glob("*-garden-suggestions.json"))
@@ -1081,6 +1088,7 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertTrue(readme.exists())
             self.assertTrue(dashboard.exists())
             self.assertTrue(library.exists())
+            self.assertTrue(tour.exists())
             self.assertTrue(review_sessions)
             self.assertTrue(duplicate_reports)
             self.assertTrue(garden_reports)
@@ -1094,8 +1102,13 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("hostname:", combined_text)
             self.assertIn("page_title:", combined_text)
             self.assertIn("Created MemoReef demo vault:", stdout.getvalue())
-            self.assertIn("what problem this solves", readme.read_text(encoding="utf-8").lower())
+            readme_text = readme.read_text(encoding="utf-8")
+            tour_html = tour.read_text(encoding="utf-8")
+            self.assertIn("app/tour.html", readme_text)
+            self.assertIn("what problem this solves", readme_text.lower())
             self.assertIn("Library/Search", library.read_text(encoding="utf-8"))
+            self.assertIn("Why local Markdown matters", tour_html)
+            self.assertIn("Local AI agent playbook for research teams", tour_html)
 
     def test_app_command_detects_existing_review_and_proposal_files(self):
         stdout = io.StringIO()

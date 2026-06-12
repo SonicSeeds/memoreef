@@ -541,3 +541,28 @@ Add a local Library/Search layer for finding useful Drops after import and revie
 - Filters combine with search.
 - `app` writes `library.html`.
 - README and docs mention `search-library`.
+
+## Task 22 — Generated product tour page
+
+### Goal
+Generate a static product tour page from the current vault data so a new user can open one page and understand why MemoReef is useful.
+
+### Requirements
+
+- Make `python3 -m memoreef.cli app --vault <vault>` generate `<vault>/MemoReef/app/tour.html`.
+- Make `python3 -m memoreef.cli demo --output /tmp/memoreef-demo` produce the tour page too.
+- Keep the tour static HTML with no backend, network, external dependencies, or build tooling.
+- Generate the narrative from local vault data and existing local artifacts when present.
+- Include sections for the mess, value, handoff, library, and why local Markdown matters.
+- Link to `index.html`, `library.html`, and latest local review/report/search/agent JSON artifacts when detected.
+- Do not claim unavailable features when related artifacts are missing.
+- Link to `tour.html` from the dashboard.
+- Point demo users to `MemoReef/app/tour.html` prominently.
+
+### Acceptance criteria
+
+- `app` writes `tour.html`.
+- `index.html` links to `tour.html`.
+- `demo` creates `MemoReef/app/tour.html`.
+- The tour contains value narrative text and at least one real Drop title from demo/sample data.
+- Existing tests still pass.

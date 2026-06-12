@@ -30,10 +30,10 @@ MemoReef is not a generic bookmark manager. It is a local-first source reef:
 - **Drops**: saved links or imported bookmarks.
 - **Drift**: unsorted inbox state for new Drops.
 - **Reef**: the living source library in Markdown/Obsidian.
-- **Deep**: searchable long-term archive, planned.
-- **Pearls**: high-value sources, planned.
-- **Shoals**: related source clusters, planned.
-- **Dive**: search/agent retrieval, planned.
+- **Deep**: long-term archive state for saved sources.
+- **Pearls**: high-value sources worth citing or reusing.
+- **Shoals**: related source clusters.
+- **Dive**: local search/library retrieval over saved Drops.
 
 ## Current MVP
 
@@ -46,16 +46,18 @@ Implemented:
 - Write one Markdown file per bookmark.
 - Store files in an Obsidian-ready folder structure.
 - Mark imported items as `status: drift`, `agent_ready: true`, and triage-ready Drop frontmatter.
+- Export and apply local Review Mode decisions.
+- Generate agent finish plans and deterministic proposal drafts.
+- Create duplicate, dead-link, metadata, garden suggestion, and library search reports.
+- Generate a static local app with dashboard, library, and product tour pages.
 
 Not implemented yet:
 
-- Article fetching/extraction.
-- Automatic summaries and generated tags.
-- Dead-link checking.
-- Connected swipe Review Mode UI.
-- Obsidian plugin.
+- Full article extraction/summarization.
+- Automatic AI-generated tags or summaries.
 - Browser extension.
-- Agent search/index.
+- Obsidian plugin.
+- Hosted sync or multi-device account layer.
 
 ## Built with Codex-assisted development
 
@@ -164,11 +166,11 @@ Create a complete local demo vault:
 
 ```bash
 python3 -m memoreef.cli demo --output /tmp/memoreef-demo
-open /tmp/memoreef-demo/MemoReef/DEMO_README.md
+open /tmp/memoreef-demo/MemoReef/app/tour.html
 open /tmp/memoreef-demo/MemoReef/app/index.html
 ```
 
-The demo command writes fictional sample Drops and generates local review, duplicate, garden, search, agent-plan, and static app artifacts. It does not use a backend, network call, AI call, or secrets.
+The demo command writes fictional sample Drops and generates local review, duplicate, garden, search, agent-plan, product tour, and static app artifacts. Open `MemoReef/app/tour.html` first for the generated product story, then use the dashboard and library pages. It does not use a backend, network call, AI call, or secrets.
 
 Review Mode can export `memoreef-review-decisions.json` from the browser. The CLI can apply those decisions back to Markdown frontmatter.
 
@@ -252,12 +254,13 @@ Generate the static local app dashboard:
 
 ```bash
 python3 -m memoreef.cli app --vault /tmp/memoreef-vault
+open /tmp/memoreef-vault/MemoReef/app/tour.html
 open /tmp/memoreef-vault/MemoReef/app/index.html
 ```
 
-The dashboard summarizes Drop counts, shows the latest local review/agent artifacts, and points to the next recommended workflow step. It is static HTML and does not start a backend.
+The app command writes `index.html`, `library.html`, and `tour.html`. The tour page is generated from local vault data and explains the product story: messy saves, useful Pearls, clutter reports, agent handoff artifacts, library search, and why local Markdown matters. The dashboard summarizes Drop counts, shows the latest local review/agent artifacts, links to the tour, and points to the next recommended workflow step. It is static HTML and does not start a backend.
 
-These are browser-only prototypes with inline sample data. They are not connected to real vault files yet.
+The static site prototypes use inline sample data. The generated local app pages are created from real vault files and local JSON artifacts. None of them start a backend.
 
 ## Near-term roadmap
 

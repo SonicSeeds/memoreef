@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from html import escape as html_escape
 from html.parser import HTMLParser
 import json
+import os
 from pathlib import Path
 import re
 import urllib.error
@@ -383,6 +384,7 @@ def cleanup_previous_demo_files(vault: Path, root: str) -> None:
         root_path / "DEMO_README.md",
         root_path / "app" / "index.html",
         root_path / "app" / "library.html",
+        root_path / "app" / "tour.html",
         root_path / "review-sessions" / "demo-review-session.json",
         root_path / "reports" / "demo-duplicate-report.json",
         root_path / "reports" / "demo-garden-suggestions.json",
@@ -409,15 +411,16 @@ Saved links usually become a junk drawer: duplicates, old rumors, private files,
 
 ## Open this first
 
-Open the static dashboard:
+Open the generated product tour first:
+
+```bash
+open {rel["tour"]}
+```
+
+Then open the dashboard and local library page:
 
 ```bash
 open {rel["dashboard"]}
-```
-
-Then open the local library page:
-
-```bash
 open {root}/app/library.html
 ```
 
@@ -491,9 +494,11 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
         root_path / "agent-plans" / "demo-agent-proposals.json",
     )
     dashboard = generate_app_dashboard(vault, root)
+    tour = root_path / "app" / "tour.html"
 
     artifacts = {
         "dashboard": dashboard,
+        "tour": tour,
         "review_session": review_session,
         "duplicate_report": duplicate_report,
         "garden_suggestions": garden_suggestions,
@@ -515,6 +520,7 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
         "search_matches": search_payload["summary"]["matches"],
         "agent_proposals": proposals_payload["summary"]["proposed"],
         "dashboard": dashboard,
+        "tour": tour,
         "readme": readme,
     }
 
@@ -2285,6 +2291,10 @@ def render_app_dashboard(state: dict[str, object]) -> str:
         <p>{next_action}</p>
       </div>
       <div class=\"card\">
+        <h2>Product tour</h2>
+        <p>Open <a href=\"tour.html\">tour.html</a> for a guided story generated from this vault: the mess, the value, handoff artifacts, library search, and why local Markdown matters.</p>
+      </div>
+      <div class=\"card\">
         <h2>Latest local artifacts</h2>
         <dl>
           <dt>Review session JSON</dt><dd>{html_escape(latest_review_session)}</dd>
@@ -2416,6 +2426,260 @@ def render_library_page(vault: Path, root: str = "MemoReef") -> str:
 """
 
 
+def read_json_object(path: object) -> dict[str, object] | None:
+    if not isinstance(path, Path) or not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def app_href(path: object, app_dir: Path) -> str | None:
+    if not isinstance(path, Path) or not path.exists():
+        return None
+    return os.path.relpath(path.resolve(), app_dir.resolve()).replace(os.sep, "/")
+
+
+def linked_file(label: str, path: object, app_dir: Path) -> str:
+    href = app_href(path, app_dir)
+    if href is None:
+        return ""
+    return f'<p><a href="{html_escape(href)}">{html_escape(label)}</a></p>'
+
+
+def html_list(items: list[str]) -> str:
+    if not items:
+        return ""
+    return "<ul>" + "".join(f"<li>{html_escape(item)}</li>" for item in items) + "</ul>"
+
+
+def top_values(drops: list[dict[str, object]], key: str, limit: int = 4) -> list[str]:
+    counts: dict[str, int] = {}
+    for drop in drops:
+        values = drop.get(key, [])
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            text = str(value).strip()
+            if text and text != "[]":
+                counts[text] = counts.get(text, 0) + 1
+    return [name for name, _count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]]
+
+
+def drop_titles(drops: list[dict[str, object]], limit: int = 4) -> list[str]:
+    titles = [str(drop.get("title") or "").strip() for drop in drops]
+    return [title for title in titles if title][:limit]
+
+
+def payload_items(payload: dict[str, object] | None, key: str = "items") -> list[dict[str, object]]:
+    if payload is None:
+        return []
+    raw_items = payload.get(key, [])
+    if not isinstance(raw_items, list):
+        return []
+    return [item for item in raw_items if isinstance(item, dict)]
+
+
+def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
+    vault_path = vault.expanduser().resolve()
+    root_path = vault_path / root
+    app_dir = root_path / "app"
+    state = dashboard_state(vault_path, root)
+    counts = state.get("counts", {})
+    if not isinstance(counts, dict):
+        counts = {}
+    drops = load_garden_drop_items(vault_path, root)
+    title_examples = drop_titles(drops, 5)
+    pearl_titles = drop_titles([drop for drop in drops if bool(drop.get("pearl"))], 4)
+    reef_titles = drop_titles([drop for drop in drops if str(drop.get("status") or "") in {"reef", "deep"}], 4)
+    projects = top_values(drops, "projects")
+    shoals = top_values(drops, "shoals")
+
+    duplicate_payload = read_json_object(state.get("latest_duplicate_report"))
+    link_payload = read_json_object(state.get("latest_link_check_report"))
+    garden_payload = read_json_object(state.get("latest_garden_suggestions"))
+    review_payload = read_json_object(state.get("latest_review_session"))
+    decisions_payload = read_json_object(state.get("latest_review_decisions"))
+    agent_plan_payload = read_json_object(state.get("latest_agent_plan"))
+    agent_proposals_payload = read_json_object(state.get("latest_agent_proposals"))
+    search_payload = read_json_object(state.get("latest_search_results"))
+
+    mess_signals = [
+        f"{counts.get('total', 0)} total Drops in local Markdown.",
+        f"{counts.get('drift', 0)} still in Drift for review.",
+        f"{counts.get('discarded', 0)} already discarded so they do not pollute the Reef.",
+    ]
+    if duplicate_payload is not None:
+        summary = duplicate_payload.get("summary", {})
+        if isinstance(summary, dict):
+            mess_signals.append(
+                "Duplicate report: "
+                f"{summary.get('exact_url_groups', 0)} exact URL groups, "
+                f"{summary.get('same_domain_groups', 0)} same-domain groups, "
+                f"{summary.get('similar_title_groups', 0)} similar-title groups."
+            )
+    if link_payload is not None:
+        summary = link_payload.get("summary", {})
+        if isinstance(summary, dict):
+            mess_signals.append(
+                "Link check report: "
+                f"{summary.get('broken', 0)} broken, {summary.get('suspicious', 0)} suspicious, "
+                f"{summary.get('unknown', 0)} unknown."
+            )
+    if garden_payload is not None:
+        summary = garden_payload.get("summary", {})
+        if isinstance(summary, dict):
+            mess_signals.append(f"Garden suggestions found {summary.get('suggestions', 0)} Drops that may fit existing projects or shoals.")
+
+    value_signals = [
+        f"{counts.get('reef', 0)} Drops are already in the Reef.",
+        f"{counts.get('pearls', 0)} are marked as Pearls.",
+    ]
+    if projects:
+        value_signals.append(f"Projects detected: {', '.join(projects)}.")
+    if shoals:
+        value_signals.append(f"Shoals detected: {', '.join(shoals)}.")
+
+    review_lines: list[str] = []
+    if review_payload is not None:
+        stats = review_payload.get("stats", {})
+        if isinstance(stats, dict):
+            review_lines.append(f"Latest review session contains {stats.get('total', 0)} Drops, including {stats.get('drift', 0)} Drift items.")
+        review_titles = drop_titles(payload_items(review_payload), 3)
+        if review_titles:
+            review_lines.append(f"Review examples: {', '.join(review_titles)}.")
+    if decisions_payload is not None:
+        decisions = decisions_payload.get("decisions", [])
+        if isinstance(decisions, list):
+            counts_by_decision: dict[str, int] = {}
+            for decision in decisions:
+                if isinstance(decision, dict):
+                    name = str(decision.get("decision") or "unknown")
+                    counts_by_decision[name] = counts_by_decision.get(name, 0) + 1
+            review_lines.append("Review decisions recorded: " + ", ".join(f"{key}={value}" for key, value in sorted(counts_by_decision.items())) + ".")
+    if agent_plan_payload is not None:
+        summary = agent_plan_payload.get("summary", {})
+        if isinstance(summary, dict):
+            review_lines.append(f"Agent finish plan: {summary.get('reviewed', 0)} reviewed examples and {summary.get('remaining', 0)} remaining Drops.")
+    if agent_proposals_payload is not None:
+        summary = agent_proposals_payload.get("summary", {})
+        if isinstance(summary, dict):
+            review_lines.append(f"Agent proposals: {summary.get('proposed', 0)} drafted, {summary.get('needs_review', 0)} needing review.")
+
+    library_lines: list[str] = []
+    if search_payload is not None:
+        summary = search_payload.get("summary", {})
+        matches = summary.get("matches", 0) if isinstance(summary, dict) else 0
+        query = str(search_payload.get("query") or "")
+        library_lines.append(f'Latest local search for "{query}" returned {matches} matches.')
+        search_titles = drop_titles(payload_items(search_payload), 4)
+        if search_titles:
+            library_lines.append(f"Search examples: {', '.join(search_titles)}.")
+    else:
+        library_lines.append("No saved search result was detected yet; run search-library to create one.")
+
+    artifact_links = "\n".join(
+        link
+        for link in [
+            linked_file("Open dashboard", app_dir / "index.html", app_dir),
+            linked_file("Open library search page", app_dir / "library.html", app_dir),
+            linked_file("Latest review session JSON", state.get("latest_review_session"), app_dir),
+            linked_file("Latest duplicate report JSON", state.get("latest_duplicate_report"), app_dir),
+            linked_file("Latest link check report JSON", state.get("latest_link_check_report"), app_dir),
+            linked_file("Latest garden suggestions JSON", state.get("latest_garden_suggestions"), app_dir),
+            linked_file("Latest search results JSON", state.get("latest_search_results"), app_dir),
+            linked_file("Latest agent finish plan JSON", state.get("latest_agent_plan"), app_dir),
+            linked_file("Latest agent proposals JSON", state.get("latest_agent_proposals"), app_dir),
+            linked_file("Latest review decisions JSON", state.get("latest_review_decisions"), app_dir),
+        ]
+        if link
+    )
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MemoReef Product Tour</title>
+  <style>
+    :root {{ color-scheme: dark; --bg:#07131a; --panel:#102632; --line:rgba(255,255,255,.16); --text:#eef9fb; --muted:#abc0c8; --green:#68f0cd; --pearl:#f4e7c8; }}
+    * {{ box-sizing:border-box; }}
+    body {{ margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:linear-gradient(180deg, #07131a, #0a1b24); color:var(--text); }}
+    main {{ width:min(1040px, calc(100% - 32px)); margin:0 auto; padding:40px 0 56px; }}
+    a {{ color:var(--green); }}
+    h1 {{ margin:.2em 0; font-size:clamp(38px, 8vw, 76px); line-height:.92; }}
+    h2 {{ margin:0 0 10px; font-size:26px; }}
+    p, li {{ color:var(--muted); line-height:1.58; }}
+    code {{ color:var(--pearl); }}
+    .lede {{ max-width:760px; font-size:18px; }}
+    .stats {{ display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:12px; margin:24px 0; }}
+    .stat, section {{ border:1px solid var(--line); background:rgba(16,38,50,.82); border-radius:20px; }}
+    .stat {{ padding:16px; }}
+    .stat strong {{ display:block; font-size:34px; }}
+    .stat span {{ color:var(--muted); font-size:13px; }}
+    .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }}
+    section {{ padding:22px; }}
+    ul {{ margin:10px 0 0; padding-left:20px; }}
+    .wide {{ grid-column:1 / -1; }}
+    @media (max-width:780px) {{ .stats, .grid {{ grid-template-columns:1fr; }} .wide {{ grid-column:auto; }} }}
+  </style>
+</head>
+<body>
+  <main>
+    <p><a href="index.html">Back to dashboard</a></p>
+    <h1>Messy saves become source memory.</h1>
+    <p class="lede">This static tour was generated from the current vault. It shows why MemoReef exists: scattered saves become reviewed local Markdown, useful Pearls, clutter reports, agent handoff plans, and searchable source memory.</p>
+    <p>Vault: <code>{html_escape(str(vault_path))}</code> · Root: <code>{html_escape(root)}</code></p>
+
+    <div class="stats">
+      <div class="stat"><strong>{html_escape(str(counts.get('total', 0)))}</strong><span>Total Drops</span></div>
+      <div class="stat"><strong>{html_escape(str(counts.get('drift', 0)))}</strong><span>Drift</span></div>
+      <div class="stat"><strong>{html_escape(str(counts.get('reef', 0)))}</strong><span>Reef</span></div>
+      <div class="stat"><strong>{html_escape(str(counts.get('pearls', 0)))}</strong><span>Pearls</span></div>
+      <div class="stat"><strong>{html_escape(str(counts.get('discarded', 0)))}</strong><span>Discarded</span></div>
+    </div>
+
+    <div class="grid">
+      <section>
+        <h2>The mess</h2>
+        <p>MemoReef starts with the honest state of a saved-link backlog.</p>
+        {html_list(mess_signals)}
+      </section>
+      <section>
+        <h2>The value</h2>
+        <p>Useful saves become a Reef with Pearls, projects, and shoals.</p>
+        {html_list(value_signals)}
+        <p>Real Drops in this vault include: {html_escape(', '.join(title_examples) if title_examples else 'none yet')}.</p>
+        <p>Pearl or curated examples include: {html_escape(', '.join(pearl_titles or reef_titles) if (pearl_titles or reef_titles) else 'none yet')}.</p>
+      </section>
+      <section>
+        <h2>The handoff</h2>
+        <p>Review sessions and agent artifacts turn human taste into a finish plan.</p>
+        {html_list(review_lines) if review_lines else '<p>No review or agent handoff artifacts were detected yet.</p>'}
+      </section>
+      <section>
+        <h2>The library</h2>
+        <p>The same Markdown Drops can be searched locally and opened as files.</p>
+        {html_list(library_lines)}
+        <p>Library path: <code>{html_escape((root_path / 'Drops').as_posix())}</code></p>
+      </section>
+      <section class="wide">
+        <h2>Why local Markdown matters</h2>
+        <p>Files remain readable, private, inspectable, and agent-ready. A Drop is not trapped behind a service: it is a Markdown file with frontmatter, source URL, review state, notes, and enough context for a person or local agent to understand what it is for.</p>
+      </section>
+      <section class="wide">
+        <h2>Open local artifacts</h2>
+        {artifact_links or '<p>No linked local artifacts were detected yet.</p>'}
+      </section>
+    </div>
+  </main>
+</body>
+</html>
+"""
+
+
 def generate_app_dashboard(vault: Path, root: str = "MemoReef") -> Path:
     vault_path = vault.expanduser().resolve()
     app_dir = vault_path / root / "app"
@@ -2423,6 +2687,7 @@ def generate_app_dashboard(vault: Path, root: str = "MemoReef") -> Path:
     path = app_dir / "index.html"
     path.write_text(render_app_dashboard(dashboard_state(vault_path, root)), encoding="utf-8")
     (app_dir / "library.html").write_text(render_library_page(vault_path, root), encoding="utf-8")
+    (app_dir / "tour.html").write_text(render_tour_page(vault_path, root), encoding="utf-8")
     return path
 
 
