@@ -46,7 +46,7 @@ Open source matters here because the storage model, importers, triage convention
 
 ## Current Status
 
-Currently implemented: a Python CLI package, browser bookmark HTML import, plain URL list import, CSV link import, Obsidian-compatible Markdown Drops, Drift/Reef/Deep/Discarded/Pearl frontmatter fields, import inspection, import logs, local Review Mode JSON export/application, agent finish plans and deterministic proposals, duplicate/link/metadata/garden reports, library search, project brief export, a demo vault, a generated local dashboard/library/tour with Drop detail, review launcher, reports, and briefs pages, a static landing page, and browser-only triage prototypes.
+Currently implemented: a Python CLI package, browser bookmark HTML import, plain URL list import, CSV link import, Obsidian-compatible Markdown Drops, Drift/Reef/Deep/Discarded/Pearl frontmatter fields, import inspection, import logs, a guided offline pilot command and checklist page, local Review Mode JSON export/application, agent finish plans and deterministic proposals, duplicate/link/metadata/garden reports, library search, project brief export, a demo vault, a generated local dashboard/pilot/library/tour with Drop detail, review launcher, reports, and briefs pages, a static landing page, and browser-only triage prototypes.
 
 Not implemented yet: full article extraction, automatic AI-generated summaries and tags, connected filesystem-backed Review Mode, an Obsidian plugin, a browser extension, or a hosted sync/account layer.
 

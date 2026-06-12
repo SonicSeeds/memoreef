@@ -120,6 +120,52 @@ python3 -m memoreef.cli import-links links.txt --vault /tmp/memoreef-vault
 python3 -m memoreef.cli import-csv links.csv --vault /tmp/memoreef-vault
 ```
 
+## Pilot: try MemoReef with your bookmarks
+
+Export your bookmarks from your browser as an HTML file. In most browsers this is under Bookmark Manager or Library, then Export Bookmarks.
+
+Run the guided local pilot:
+
+```bash
+rm -rf /tmp/memoreef-pilot
+python3 -m memoreef.cli pilot --bookmarks /path/to/bookmarks.html --vault /tmp/memoreef-pilot --review-limit 25
+open /tmp/memoreef-pilot/MemoReef/app/pilot.html
+open /tmp/memoreef-pilot/MemoReef/app/tour.html
+```
+
+Plain URL lists and CSV exports work too:
+
+```bash
+python3 -m memoreef.cli pilot --links /path/to/links.txt --vault /tmp/memoreef-pilot
+python3 -m memoreef.cli pilot --csv /path/to/links.csv --vault /tmp/memoreef-pilot
+```
+
+The pilot command imports your export, creates a review session, creates a duplicate report, generates static app pages, and writes `MemoReef/PILOT_README.md`. It is offline-only: no network calls, no AI calls, no backend, and no server.
+
+Review a few items:
+
+```bash
+open site/swipe.html
+```
+
+Load the review-session JSON from `/tmp/memoreef-pilot/MemoReef/review-sessions/`, export decisions from the browser, then apply them:
+
+```bash
+python3 -m memoreef.cli apply-review-decisions --vault /tmp/memoreef-pilot --decisions /path/to/memoreef-review-decisions.json --dry-run
+python3 -m memoreef.cli apply-review-decisions --vault /tmp/memoreef-pilot --decisions /path/to/memoreef-review-decisions.json
+python3 -m memoreef.cli app --vault /tmp/memoreef-pilot
+```
+
+After review, create a small project brief and reopen the app:
+
+```bash
+python3 -m memoreef.cli brief --vault /tmp/memoreef-pilot --limit 10
+python3 -m memoreef.cli app --vault /tmp/memoreef-pilot
+open /tmp/memoreef-pilot/MemoReef/app/briefs.html
+```
+
+Send back feedback from the checklist in `app/pilot.html`: whether import worked, which steps were confusing, whether useful sources surfaced, what was missing, and whether you would use it again.
+
 Open the static Drift triage prototype:
 
 ```bash
@@ -175,11 +221,12 @@ Create a complete local demo vault:
 
 ```bash
 python3 -m memoreef.cli demo --output /tmp/memoreef-demo
+open /tmp/memoreef-demo/MemoReef/app/pilot.html
 open /tmp/memoreef-demo/MemoReef/app/tour.html
 open /tmp/memoreef-demo/MemoReef/app/index.html
 ```
 
-The demo command writes fictional sample Drops and generates local review, duplicate, garden, search, project brief, agent-plan, product tour, Drop detail, review launcher, reports, briefs, and static app artifacts. Open `MemoReef/app/tour.html` first for the generated product story, then use the dashboard, library, review, reports, briefs, and example Drop detail pages. It does not use a backend, network call, AI call, or secrets.
+The demo command writes fictional sample Drops and generates local review, duplicate, garden, search, project brief, agent-plan, pilot checklist, product tour, Drop detail, review launcher, reports, briefs, and static app artifacts. Open `MemoReef/app/pilot.html` first for the guided checklist, then use the tour, dashboard, library, review, reports, briefs, and example Drop detail pages. It does not use a backend, network call, AI call, or secrets.
 
 Review Mode can export `memoreef-review-decisions.json` from the browser. The CLI can apply those decisions back to Markdown frontmatter.
 
@@ -264,6 +311,7 @@ Generate the static local app dashboard:
 ```bash
 python3 -m memoreef.cli app --vault /tmp/memoreef-vault
 open /tmp/memoreef-vault/MemoReef/app/tour.html
+open /tmp/memoreef-vault/MemoReef/app/pilot.html
 open /tmp/memoreef-vault/MemoReef/app/index.html
 open /tmp/memoreef-vault/MemoReef/app/library.html
 open /tmp/memoreef-vault/MemoReef/app/review.html
@@ -271,7 +319,7 @@ open /tmp/memoreef-vault/MemoReef/app/reports.html
 open /tmp/memoreef-vault/MemoReef/app/briefs.html
 ```
 
-The app command writes `index.html`, `tour.html`, `library.html`, `review.html`, `reports.html`, `briefs.html`, and one generated Drop detail page under `app/drops/` for each local Drop. The tour page is generated from local vault data and explains the product story: messy saves, useful Pearls, clutter reports, agent handoff artifacts, project briefs, library search, Drop detail pages, and why local Markdown matters. The dashboard summarizes Drop counts, shows the latest local review/agent/search/brief artifacts, links to the expanded app pages, and points to the next recommended workflow step. It is static HTML and does not start a backend.
+The app command writes `index.html`, `pilot.html`, `tour.html`, `library.html`, `review.html`, `reports.html`, `briefs.html`, and one generated Drop detail page under `app/drops/` for each local Drop. The pilot page gives early users a guided local checklist; the tour page is generated from local vault data and explains the product story: messy saves, useful Pearls, clutter reports, agent handoff artifacts, project briefs, library search, Drop detail pages, and why local Markdown matters. The dashboard summarizes Drop counts, shows the latest local review/agent/search/brief artifacts, links to the expanded app pages, and points to the next recommended workflow step. It is static HTML and does not start a backend.
 
 The static site prototypes use inline sample data. The generated local app pages are created from real vault files and local JSON artifacts. None of them start a backend.
 

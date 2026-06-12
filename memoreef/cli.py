@@ -388,6 +388,8 @@ def cleanup_previous_demo_files(vault: Path, root: str) -> None:
         root_path / "app" / "review.html",
         root_path / "app" / "reports.html",
         root_path / "app" / "briefs.html",
+        root_path / "app" / "pilot.html",
+        root_path / "PILOT_README.md",
         root_path / "review-sessions" / "demo-review-session.json",
         root_path / "reports" / "demo-duplicate-report.json",
         root_path / "reports" / "demo-garden-suggestions.json",
@@ -422,13 +424,15 @@ Saved links usually become a junk drawer: duplicates, old rumors, private files,
 Open the generated product tour first:
 
 ```bash
+open {rel["pilot"]}
 open {rel["tour"]}
 ```
 
-Then open the dashboard, local library, review launcher, reports, briefs, and example Drop detail pages:
+Then open the dashboard, local library, review launcher, reports, briefs, pilot checklist, and example Drop detail pages:
 
 ```bash
 open {rel["dashboard"]}
+open {root}/app/pilot.html
 open {root}/app/library.html
 open {root}/app/review.html
 open {root}/app/reports.html
@@ -451,6 +455,7 @@ These pages are static files. There is no backend, account, network call, or AI 
 - A search result: `{rel["search_results"]}`.
 - A project brief for agent handoff: `{rel["project_brief"]}`.
 - Static app pages for dashboard, tour, library search, Review Mode instructions, reports, briefs, and one generated detail page per Drop.
+- A pilot checklist page and Markdown checklist: `{rel["pilot"]}`, `{root}/PILOT_README.md`.
 - A demo review-decisions file and agent finish artifacts: `{rel["decisions"]}`, `{rel["agent_plan"]}`, `{rel["agent_proposals"]}`.
 
 ## Local workflow
@@ -514,12 +519,35 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
         agent_plan,
         root_path / "agent-plans" / "demo-agent-proposals.json",
     )
+    pilot_readme = write_pilot_readme(
+        vault,
+        root,
+        {
+            "source_kind": "demo",
+            "source_path": vault / root / "DEMO_README.md",
+            "written_count": len(written),
+            "review_limit": 8,
+            "review_session": review_session,
+            "duplicate_report": duplicate_report,
+            "app_dashboard": root_path / "app" / "index.html",
+            "app_pilot": root_path / "app" / "pilot.html",
+            "commands": [
+                f"python3 -m memoreef.cli demo --output {vault}",
+                f"python3 -m memoreef.cli export-review-session --vault {vault} --root {root} --status drift --limit 8",
+                f"python3 -m memoreef.cli duplicate-report --vault {vault} --root {root}",
+                f"python3 -m memoreef.cli app --vault {vault} --root {root}",
+            ],
+            "skip_reports": False,
+        },
+    )
     dashboard = generate_app_dashboard(vault, root)
     tour = root_path / "app" / "tour.html"
+    pilot = root_path / "app" / "pilot.html"
 
     artifacts = {
         "dashboard": dashboard,
         "tour": tour,
+        "pilot": pilot,
         "review_session": review_session,
         "duplicate_report": duplicate_report,
         "garden_suggestions": garden_suggestions,
@@ -544,6 +572,8 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
         "agent_proposals": proposals_payload["summary"]["proposed"],
         "dashboard": dashboard,
         "tour": tour,
+        "pilot": pilot,
+        "pilot_readme": pilot_readme,
         "readme": readme,
     }
 
@@ -1610,6 +1640,205 @@ def create_duplicate_report(vault: Path, root: str = "MemoReef", output: Path | 
     return output, report
 
 
+def repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def pilot_readme_text(vault: Path, root: str, summary: dict[str, object]) -> str:
+    vault_path = vault.expanduser().resolve()
+    root_path = vault_path / root
+    source_kind = str(summary.get("source_kind") or "source")
+    source_path = Path(str(summary.get("source_path") or "")).expanduser()
+    written_count = int(summary.get("written_count") or 0)
+    review_limit = int(summary.get("review_limit") or 25)
+    review_session = Path(str(summary.get("review_session") or root_path / "review-sessions"))
+    duplicate_report = summary.get("duplicate_report")
+    app_pilot = root_path / "app" / "pilot.html"
+    app_tour = root_path / "app" / "tour.html"
+    app_dashboard = root_path / "app" / "index.html"
+    review_mode = repo_root() / "site" / "swipe.html"
+    commands = [str(command) for command in summary.get("commands", []) if str(command).strip()]
+    duplicate_line = f"- Duplicate report: `{duplicate_report}`" if duplicate_report else "- Duplicate report: skipped by `--skip-reports`."
+    commands_text = "\n".join(f"- `{command}`" for command in commands) if commands else "- No command summary recorded."
+
+    return f"""# MemoReef Pilot Checklist
+
+## Start here
+
+Open the generated pilot page first:
+
+```bash
+open {app_pilot}
+```
+
+Then open the product tour and dashboard:
+
+```bash
+open {app_tour}
+open {app_dashboard}
+```
+
+## What was generated
+
+- Source type: `{source_kind}`
+- Source file: `{source_path.expanduser().resolve()}`
+- Imported Drops: {written_count}
+- Review limit: {review_limit}
+- Review session JSON: `{review_session}`
+{duplicate_line}
+- Static app folder: `{root_path / "app"}`
+
+## Commands already run
+
+{commands_text}
+
+## Review a few items
+
+Open Review Mode:
+
+```bash
+open {review_mode}
+```
+
+Use the file picker on that page to load:
+
+```text
+{review_session}
+```
+
+Review a few Drops, then export the decisions JSON from the browser. The browser usually saves it as `memoreef-review-decisions.json`.
+
+## Apply decisions and regenerate the app
+
+First do a dry run:
+
+```bash
+python3 -m memoreef.cli apply-review-decisions --vault {vault_path} --root {root} --decisions /path/to/memoreef-review-decisions.json --dry-run
+```
+
+Then apply deliberately:
+
+```bash
+python3 -m memoreef.cli apply-review-decisions --vault {vault_path} --root {root} --decisions /path/to/memoreef-review-decisions.json
+python3 -m memoreef.cli app --vault {vault_path} --root {root}
+```
+
+## Create a project brief after review
+
+Use a project name from your Drops if you have one, or start broad:
+
+```bash
+python3 -m memoreef.cli brief --vault {vault_path} --root {root} --limit 10
+python3 -m memoreef.cli app --vault {vault_path} --root {root}
+open {root_path / "app" / "briefs.html"}
+```
+
+## Privacy note
+
+All pilot files stay local. The pilot command imports your export, creates Markdown Drops, writes JSON reports, and generates static HTML pages inside `{root_path}`. It does not call the network, does not call AI or LLM APIs, and does not start a server.
+
+## Feedback questions
+
+- Did your bookmarks, links, or CSV import successfully?
+- Which step was confusing or too manual?
+- Did Review Mode help you find useful sources?
+- Which source details were missing or hard to trust?
+- What feature would make this worth using again?
+- Would you use MemoReef again for a real saved-link backlog?
+"""
+
+
+def write_pilot_readme(vault: Path, root: str, summary: dict[str, object]) -> Path:
+    vault_path = vault.expanduser().resolve()
+    path = vault_path / root / "PILOT_README.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(pilot_readme_text(vault_path, root, summary), encoding="utf-8")
+    return path
+
+
+def run_pilot(
+    vault: Path,
+    root: str,
+    source_kind: str,
+    source_path: Path,
+    allow_duplicates: bool = False,
+    review_limit: int = 25,
+    skip_reports: bool = False,
+) -> dict[str, object]:
+    if source_kind == "bookmarks":
+        bookmarks = parse_bookmarks_html(source_path)
+        import_command = f"python3 -m memoreef.cli import {source_path} --vault {vault} --root {root}"
+    elif source_kind == "links":
+        bookmarks = parse_links_text(source_path)
+        import_command = f"python3 -m memoreef.cli import-links {source_path} --vault {vault} --root {root}"
+    elif source_kind == "csv":
+        bookmarks = parse_links_csv(source_path)
+        import_command = f"python3 -m memoreef.cli import-csv {source_path} --vault {vault} --root {root}"
+    else:
+        raise ValueError(f"unsupported pilot source kind: {source_kind}")
+
+    if allow_duplicates:
+        import_command += " --allow-duplicates"
+    written = import_bookmarks(bookmarks, source_path, vault, root, allow_duplicates)
+    review_filters = default_review_filters(status=["drift"], limit=review_limit)
+    review_session, review_payload = export_review_session(vault, root, None, review_filters)
+    duplicate_report: Path | None = None
+    duplicate_payload: dict[str, object] | None = None
+    if not skip_reports:
+        duplicate_report, duplicate_payload = create_duplicate_report(vault, root)
+    commands = [
+        import_command,
+        f"python3 -m memoreef.cli export-review-session --vault {vault} --root {root} --status drift --limit {review_limit}",
+    ]
+    if skip_reports:
+        commands.append("# duplicate-report skipped by --skip-reports")
+    else:
+        commands.append(f"python3 -m memoreef.cli duplicate-report --vault {vault} --root {root}")
+
+    summary: dict[str, object] = {
+        "source_kind": source_kind,
+        "source_path": source_path,
+        "written_count": len(written),
+        "review_limit": review_limit,
+        "review_session": review_session,
+        "review_items": review_payload.get("stats", {}).get("total", 0) if isinstance(review_payload.get("stats"), dict) else 0,
+        "duplicate_report": duplicate_report,
+        "duplicate_groups": duplicate_payload.get("summary", {}).get("exact_url_groups", 0)
+        if isinstance(duplicate_payload, dict) and isinstance(duplicate_payload.get("summary"), dict)
+        else 0,
+        "commands": commands,
+        "skip_reports": skip_reports,
+    }
+    pilot_readme = write_pilot_readme(vault, root, summary)
+    app_dashboard = generate_app_dashboard(vault, root)
+    commands.append(f"python3 -m memoreef.cli app --vault {vault} --root {root}")
+    summary.update(
+        {
+            "pilot_readme": pilot_readme,
+            "app_dashboard": app_dashboard,
+            "app_pilot": vault.expanduser().resolve() / root / "app" / "pilot.html",
+            "app_tour": vault.expanduser().resolve() / root / "app" / "tour.html",
+        }
+    )
+    write_pilot_readme(vault, root, summary)
+    return summary
+
+
+def pilot_check(vault: Path, root: str = "MemoReef") -> tuple[bool, list[str]]:
+    vault_path = vault.expanduser().resolve()
+    root_path = vault_path / root
+    checks = [
+        ("Drops", any((root_path / "Drops").rglob("*.md")) if (root_path / "Drops").exists() else False),
+        ("PILOT_README.md", (root_path / "PILOT_README.md").exists()),
+        ("app/index.html", (root_path / "app" / "index.html").exists()),
+        ("app/pilot.html", (root_path / "app" / "pilot.html").exists()),
+        ("app/tour.html", (root_path / "app" / "tour.html").exists()),
+        ("review session", any((root_path / "review-sessions").glob("*-review-session.json")) if (root_path / "review-sessions").exists() else False),
+    ]
+    messages = [f"{'ok' if passed else 'missing'}: {name}" for name, passed in checks]
+    return all(passed for _name, passed in checks), messages
+
+
 def classify_http_status(status: int | None) -> str:
     if status is None:
         return "unknown"
@@ -2543,6 +2772,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
 
 APP_NAV_ITEMS = [
     ("dashboard", "Dashboard", "index.html"),
+    ("pilot", "Pilot", "pilot.html"),
     ("tour", "Tour", "tour.html"),
     ("library", "Library", "library.html"),
     ("review", "Review", "review.html"),
@@ -2945,6 +3175,100 @@ def render_review_page(vault: Path, root: str = "MemoReef") -> str:
 """
 
 
+def render_pilot_page(vault: Path, root: str = "MemoReef") -> str:
+    vault_path = vault.expanduser().resolve()
+    root_path = vault_path / root
+    app_dir = root_path / "app"
+    state = dashboard_state(vault_path, root)
+    counts = state.get("counts", {})
+    if not isinstance(counts, dict):
+        counts = {}
+    pilot_readme = root_path / "PILOT_README.md"
+    latest_review_session = state.get("latest_review_session")
+    latest_duplicate_report = state.get("latest_duplicate_report")
+    latest_project_brief = state.get("latest_project_brief")
+    review_mode = repo_root() / "site" / "swipe.html"
+
+    detected = [
+        f"{counts.get('total', 0)} Markdown Drops",
+        f"{counts.get('drift', 0)} Drift items ready for review",
+        "Pilot README detected" if pilot_readme.exists() else "No PILOT_README.md detected yet",
+        "Review session detected" if isinstance(latest_review_session, Path) else "No review session detected yet",
+        "Duplicate report detected" if isinstance(latest_duplicate_report, Path) else "No duplicate report detected yet",
+        "Project brief detected" if isinstance(latest_project_brief, Path) else "No project brief detected yet",
+    ]
+    review_session_text = str(latest_review_session) if isinstance(latest_review_session, Path) else str(root_path / "review-sessions")
+    duplicate_link = linked_file("Latest duplicate report JSON", latest_duplicate_report, app_dir)
+    readme_link = linked_file("Open pilot Markdown checklist", pilot_readme, app_dir)
+    brief_link = linked_file("Latest project brief", latest_project_brief, app_dir)
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MemoReef Pilot Checklist</title>
+  <style>{app_common_css()}</style>
+</head>
+<body>
+  <main>
+    {app_nav("pilot")}
+    <h1>Pilot checklist</h1>
+    <section class="panel">
+      <h2>Start here</h2>
+      <p>This page is the guided local pilot surface. It shows what MemoReef generated, which files to open, how to review a few Drops, and what feedback to send back.</p>
+      <p>Vault: <code>{html_escape(str(vault_path))}</code></p>
+      {readme_link}
+    </section>
+    <section class="grid">
+      <div class="card">
+        <h2>Generated or detected</h2>
+        {html_list(detected)}
+        {duplicate_link}
+      </div>
+      <div class="card">
+        <h2>Open these files</h2>
+        <p><code>{html_escape(str(app_dir / "pilot.html"))}</code></p>
+        <p><code>{html_escape(str(app_dir / "tour.html"))}</code></p>
+        <p><code>{html_escape(str(app_dir / "index.html"))}</code></p>
+        <p><code>{html_escape(str(app_dir / "review.html"))}</code></p>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Review Mode</h2>
+      <ol>
+        <li>Open <code>{html_escape(str(review_mode))}</code> in your browser.</li>
+        <li>Use the file picker to load this review-session JSON: <code>{html_escape(review_session_text)}</code>.</li>
+        <li>Review a few items and export decisions from the browser.</li>
+        <li>Apply them with <code>python3 -m memoreef.cli apply-review-decisions --vault {html_escape(str(vault_path))} --root {html_escape(root)} --decisions /path/to/memoreef-review-decisions.json</code>.</li>
+        <li>Regenerate pages with <code>python3 -m memoreef.cli app --vault {html_escape(str(vault_path))} --root {html_escape(root)}</code>.</li>
+      </ol>
+    </section>
+    <section class="panel">
+      <h2>Project brief</h2>
+      <p>After review, create a local Markdown brief for a project or a small sample of sources:</p>
+      <p><code>python3 -m memoreef.cli brief --vault {html_escape(str(vault_path))} --root {html_escape(root)} --limit 10</code></p>
+      <p><code>python3 -m memoreef.cli app --vault {html_escape(str(vault_path))} --root {html_escape(root)}</code></p>
+      {brief_link}
+    </section>
+    <section class="panel">
+      <h2>Feedback</h2>
+      <ul>
+        <li>Did import succeed with your real export?</li>
+        <li>Which step was confusing?</li>
+        <li>Did you find sources worth keeping?</li>
+        <li>Which source details were missing?</li>
+        <li>What feature did you expect but not find?</li>
+        <li>Would you use MemoReef again for your saved links?</li>
+      </ul>
+      <p>Privacy reminder: this pilot is offline-only. Files stay local; no backend, network call, AI call, account, or server is used.</p>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
 def read_json_object(path: object) -> dict[str, object] | None:
     if not isinstance(path, Path) or not path.exists():
         return None
@@ -3224,6 +3548,7 @@ def generate_app_dashboard(vault: Path, root: str = "MemoReef") -> Path:
     drops_dir.mkdir(parents=True, exist_ok=True)
     path = app_dir / "index.html"
     path.write_text(render_app_dashboard(dashboard_state(vault_path, root)), encoding="utf-8")
+    (app_dir / "pilot.html").write_text(render_pilot_page(vault_path, root), encoding="utf-8")
     (app_dir / "library.html").write_text(render_library_page(vault_path, root), encoding="utf-8")
     (app_dir / "review.html").write_text(render_review_page(vault_path, root), encoding="utf-8")
     (app_dir / "reports.html").write_text(render_reports_page(vault_path, root), encoding="utf-8")
@@ -3327,6 +3652,21 @@ def build_parser() -> argparse.ArgumentParser:
     duplicate_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     duplicate_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
     duplicate_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults inside the vault.")
+
+    pilot_cmd = sub.add_parser("pilot", help="Run an offline guided local pilot setup.")
+    pilot_source = pilot_cmd.add_mutually_exclusive_group(required=True)
+    pilot_source.add_argument("--bookmarks", type=Path, help="Browser bookmark export HTML file.")
+    pilot_source.add_argument("--links", type=Path, help="Text file with one URL per line.")
+    pilot_source.add_argument("--csv", type=Path, help="CSV file with title,url,source,tags columns.")
+    pilot_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    pilot_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    pilot_cmd.add_argument("--allow-duplicates", action="store_true", help="Write duplicate URLs instead of skipping them.")
+    pilot_cmd.add_argument("--review-limit", type=int, default=25, help="Maximum Drops in the pilot review session. Default: 25")
+    pilot_cmd.add_argument("--skip-reports", action="store_true", help="Skip local report generation.")
+
+    pilot_check_cmd = sub.add_parser("pilot-check", help="Check whether a vault has pilot-ready local artifacts.")
+    pilot_check_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    pilot_check_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
 
     check_links_cmd = sub.add_parser("check-links", help="Create a local link check report for Markdown Drops.")
     check_links_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -3546,6 +3886,50 @@ def main(argv: list[str] | None = None) -> int:
         for warning in warnings:
             print(f"  - {warning}")
         return 0
+
+    if args.command == "pilot":
+        if args.review_limit < 0:
+            print("--review-limit must be 0 or greater.")
+            return 1
+        if args.bookmarks is not None:
+            source_kind = "bookmarks"
+            source_path = args.bookmarks
+        elif args.links is not None:
+            source_kind = "links"
+            source_path = args.links
+        else:
+            source_kind = "csv"
+            source_path = args.csv
+        summary = run_pilot(
+            args.vault,
+            args.root,
+            source_kind,
+            source_path,
+            args.allow_duplicates,
+            args.review_limit,
+            args.skip_reports,
+        )
+        duplicate_report = summary.get("duplicate_report")
+        print("Created MemoReef pilot vault:")
+        print(f"- vault: {Path(args.vault).expanduser().resolve()}")
+        print(f"- imported drops: {summary['written_count']}")
+        print(f"- review session: {summary['review_session']}")
+        if duplicate_report:
+            print(f"- duplicate report: {duplicate_report}")
+        else:
+            print("- duplicate report: skipped")
+        print(f"- pilot README: {summary['pilot_readme']}")
+        print(f"- open pilot page: {summary['app_pilot']}")
+        print(f"- open tour: {summary['app_tour']}")
+        print(f"- Review Mode: {repo_root() / 'site' / 'swipe.html'}")
+        return 0
+
+    if args.command == "pilot-check":
+        ok, messages = pilot_check(args.vault, args.root)
+        print("MemoReef pilot check:")
+        for message in messages:
+            print(f"- {message}")
+        return 0 if ok else 1
 
     if args.command == "check-links":
         output, report = create_link_check_report(

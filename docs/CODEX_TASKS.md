@@ -618,3 +618,28 @@ Turn the generated static app into a more complete local v0.2 app surface while 
 - Demo creates all new pages and at least one Drop detail page with a real demo title.
 - Generated pages do not require network calls, external assets, external dependencies, or a backend.
 - Existing tests still pass.
+
+## Task 25 — Guided local pilot
+
+### Goal
+Make MemoReef easier for an early user to try with their own exported bookmarks without understanding internal commands.
+
+### Requirements
+
+- Add `python3 -m memoreef.cli pilot --bookmarks <bookmarks.html> --vault <vault>`.
+- Support `--links <links.txt>` and `--csv <links.csv>` as mutually exclusive alternatives.
+- Keep the pilot pipeline offline-only: import, review-session export, duplicate report, static app generation, and pilot checklist.
+- Write `<vault>/MemoReef/PILOT_README.md` with start-here instructions, commands already run, next commands, privacy note, and feedback questions.
+- Generate `<vault>/MemoReef/app/pilot.html` and link it from app navigation.
+- Make `demo` include the pilot README and pilot page.
+- Add a read-only `pilot-check` command for missing pilot artifacts.
+- Update README, demo README text, and grant status language.
+
+### Acceptance criteria
+
+- Pilot imports bookmark HTML, links text, and CSV sources.
+- Pilot writes Drops, review session JSON, duplicate report unless skipped, static app pages, `PILOT_README.md`, and `app/pilot.html`.
+- Pilot does not call the network and does not modify files outside the selected vault.
+- Generated app navigation includes Pilot.
+- Demo creates `MemoReef/app/pilot.html`.
+- Existing tests still pass.

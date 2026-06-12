@@ -717,6 +717,117 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("Agent Workflow", detail)
             self.assertIn("Markdown path", detail)
 
+    def test_pilot_command_imports_bookmarks_and_creates_guided_artifacts(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "pilot-vault"
+            source = Path(__file__).parent.parent / "examples" / "bookmarks.html"
+            before = source.read_text(encoding="utf-8")
+
+            with patch("memoreef.cli.urllib.request.urlopen", side_effect=AssertionError("network call")):
+                with redirect_stdout(stdout):
+                    result = main(["pilot", "--bookmarks", str(source), "--vault", str(vault_path), "--review-limit", "2"])
+
+            root = vault_path / "MemoReef"
+            drops = list((root / "Drops").glob("*.md"))
+            review_sessions = list((root / "review-sessions").glob("*-review-session.json"))
+            duplicate_reports = list((root / "reports").glob("*-duplicate-report.json"))
+            pilot_readme = root / "PILOT_README.md"
+            pilot_page = root / "app" / "pilot.html"
+            self.assertEqual(result, 0)
+            self.assertTrue(drops)
+            self.assertEqual(len(review_sessions), 1)
+            self.assertEqual(len(duplicate_reports), 1)
+            self.assertTrue((root / "app" / "index.html").exists())
+            self.assertTrue((root / "app" / "tour.html").exists())
+            self.assertTrue(pilot_page.exists())
+            self.assertTrue(pilot_readme.exists())
+            self.assertEqual(source.read_text(encoding="utf-8"), before)
+            self.assertIn("Created MemoReef pilot vault:", stdout.getvalue())
+            self.assertIn("Start here", pilot_readme.read_text(encoding="utf-8"))
+            self.assertIn("feedback", pilot_page.read_text(encoding="utf-8").lower())
+
+    def test_pilot_supports_links_and_csv_inputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            links = base / "links.txt"
+            links.write_text("https://links.example/one\nhttps://links.example/two\n", encoding="utf-8")
+            csv_path = base / "links.csv"
+            csv_path.write_text("title,url,source,tags\nCSV Source,https://csv.example/one,test,alpha beta\n", encoding="utf-8")
+            links_vault = base / "links-vault"
+            csv_vault = base / "csv-vault"
+
+            with redirect_stdout(io.StringIO()):
+                links_result = main(["pilot", "--links", str(links), "--vault", str(links_vault), "--skip-reports"])
+            with redirect_stdout(io.StringIO()):
+                csv_result = main(["pilot", "--csv", str(csv_path), "--vault", str(csv_vault), "--review-limit", "1"])
+
+            self.assertEqual(links_result, 0)
+            self.assertEqual(csv_result, 0)
+            self.assertTrue(list((links_vault / "MemoReef" / "Drops").glob("*.md")))
+            self.assertFalse((links_vault / "MemoReef" / "reports").exists())
+            self.assertTrue(list((csv_vault / "MemoReef" / "Drops").glob("*.md")))
+            self.assertTrue((csv_vault / "MemoReef" / "app" / "pilot.html").exists())
+
+    def test_pilot_does_not_modify_files_outside_selected_vault(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            source = base / "links.txt"
+            outside = base / "outside.txt"
+            source.write_text("https://offline.example/source\n", encoding="utf-8")
+            outside.write_text("do not touch\n", encoding="utf-8")
+            before_source = source.read_text(encoding="utf-8")
+            before_outside = outside.read_text(encoding="utf-8")
+
+            with patch("memoreef.cli.urllib.request.urlopen", side_effect=AssertionError("network call")):
+                with redirect_stdout(io.StringIO()):
+                    result = main(["pilot", "--links", str(source), "--vault", str(base / "vault")])
+
+            self.assertEqual(result, 0)
+            self.assertEqual(source.read_text(encoding="utf-8"), before_source)
+            self.assertEqual(outside.read_text(encoding="utf-8"), before_outside)
+
+    def test_app_generates_pilot_page_and_nav_links(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([Bookmark("Pilot Source", "https://pilot.example")], vault_path)
+            (vault_path / "MemoReef" / "PILOT_README.md").write_text("# MemoReef Pilot Checklist\n\n## Start here\n", encoding="utf-8")
+
+            with redirect_stdout(io.StringIO()):
+                result = main(["app", "--vault", str(vault_path)])
+
+            app_dir = vault_path / "MemoReef" / "app"
+            index = (app_dir / "index.html").read_text(encoding="utf-8")
+            tour = (app_dir / "tour.html").read_text(encoding="utf-8")
+            pilot = (app_dir / "pilot.html").read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("pilot.html", index)
+            self.assertIn("pilot.html", tour)
+            self.assertIn("Pilot checklist", pilot)
+            self.assertIn("Review Mode", pilot)
+
+    def test_pilot_check_reports_missing_and_ready_artifacts(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+
+            with redirect_stdout(stdout):
+                missing = main(["pilot-check", "--vault", str(vault_path)])
+
+            self.assertEqual(missing, 1)
+            self.assertIn("missing: Drops", stdout.getvalue())
+
+            links = Path(tmp) / "links.txt"
+            links.write_text("https://ready.example/source\n", encoding="utf-8")
+            with redirect_stdout(io.StringIO()):
+                main(["pilot", "--links", str(links), "--vault", str(vault_path)])
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                ready = main(["pilot-check", "--vault", str(vault_path)])
+
+            self.assertEqual(ready, 0)
+            self.assertIn("ok: app/pilot.html", stdout.getvalue())
+
     def test_readme_and_tasks_mention_search_library(self):
         readme = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
         tasks = (Path(__file__).parent.parent / "docs" / "CODEX_TASKS.md").read_text(encoding="utf-8")
@@ -1159,6 +1270,7 @@ class BookmarkImportTests(unittest.TestCase):
             review = root / "app" / "review.html"
             reports = root / "app" / "reports.html"
             app_briefs = root / "app" / "briefs.html"
+            pilot = root / "app" / "pilot.html"
             detail_pages = list((root / "app" / "drops").glob("*.html"))
             review_sessions = list((root / "review-sessions").glob("*-review-session.json"))
             duplicate_reports = list((root / "reports").glob("*-duplicate-report.json"))
@@ -1190,6 +1302,8 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertTrue(review.exists())
             self.assertTrue(reports.exists())
             self.assertTrue(app_briefs.exists())
+            self.assertTrue(pilot.exists())
+            self.assertTrue((root / "PILOT_README.md").exists())
             self.assertTrue(detail_pages)
             self.assertTrue(review_sessions)
             self.assertTrue(duplicate_reports)
@@ -1208,6 +1322,7 @@ class BookmarkImportTests(unittest.TestCase):
             readme_text = readme.read_text(encoding="utf-8")
             tour_html = tour.read_text(encoding="utf-8")
             self.assertIn("app/tour.html", readme_text)
+            self.assertIn("app/pilot.html", readme_text)
             self.assertIn("app/review.html", readme_text)
             self.assertIn("app/reports.html", readme_text)
             self.assertIn("app/briefs.html", readme_text)
@@ -1220,6 +1335,7 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("Local AI agent playbook for research teams", brief_text)
             self.assertIn("Agent handoff", brief_text)
             self.assertIn("project brief", readme_text)
+            self.assertIn("Pilot checklist", pilot.read_text(encoding="utf-8"))
             self.assertIn("Why local Markdown matters", tour_html)
             self.assertIn("Local AI agent playbook for research teams", tour_html)
             self.assertTrue(any("Local AI agent playbook for research teams" in path.read_text(encoding="utf-8") for path in detail_pages))
