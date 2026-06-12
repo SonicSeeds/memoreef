@@ -702,11 +702,20 @@ class BookmarkImportTests(unittest.TestCase):
             app_dir = vault_path / "MemoReef" / "app"
             index = (app_dir / "index.html").read_text(encoding="utf-8")
             library = (app_dir / "library.html").read_text(encoding="utf-8")
+            detail_pages = list((app_dir / "drops").glob("*.html"))
             self.assertEqual(result, 0)
             self.assertIn("Library/Search", index)
             self.assertIn("library.html", index)
+            self.assertIn("review.html", index)
+            self.assertIn("reports.html", index)
+            self.assertIn("briefs.html", index)
             self.assertIn("search-library", library)
             self.assertIn("Agent Workflow", library)
+            self.assertIn("drops/", library)
+            self.assertTrue(detail_pages)
+            detail = detail_pages[0].read_text(encoding="utf-8")
+            self.assertIn("Agent Workflow", detail)
+            self.assertIn("Markdown path", detail)
 
     def test_readme_and_tasks_mention_search_library(self):
         readme = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
@@ -1091,19 +1100,32 @@ class BookmarkImportTests(unittest.TestCase):
 
             dashboard = vault_path / "MemoReef" / "app" / "index.html"
             tour = vault_path / "MemoReef" / "app" / "tour.html"
+            review = vault_path / "MemoReef" / "app" / "review.html"
+            reports = vault_path / "MemoReef" / "app" / "reports.html"
+            briefs = vault_path / "MemoReef" / "app" / "briefs.html"
             html = dashboard.read_text(encoding="utf-8")
             tour_html = tour.read_text(encoding="utf-8")
             self.assertEqual(result, 0)
             self.assertTrue(dashboard.exists())
             self.assertTrue(tour.exists())
+            self.assertTrue(review.exists())
+            self.assertTrue(reports.exists())
+            self.assertTrue(briefs.exists())
+            self.assertTrue(list((vault_path / "MemoReef" / "app" / "drops").glob("*.html")))
             self.assertIn("MemoReef local app", html)
             self.assertIn("tour.html", html)
+            self.assertIn("review.html", html)
+            self.assertIn("reports.html", html)
+            self.assertIn("briefs.html", html)
             self.assertIn("Total Drops", html)
             self.assertIn("Drift", html)
             self.assertIn("Review Mode", html)
             self.assertIn("Agent proposals", html)
             self.assertIn("Why local Markdown matters", tour_html)
             self.assertIn("Messy saves become source memory", tour_html)
+            self.assertIn("review.html", tour_html)
+            self.assertIn("reports.html", tour_html)
+            self.assertIn("briefs.html", tour_html)
             self.assertIn("Generated MemoReef app dashboard", stdout.getvalue())
 
     def test_app_command_handles_empty_vault(self):
@@ -1134,6 +1156,10 @@ class BookmarkImportTests(unittest.TestCase):
             dashboard = root / "app" / "index.html"
             library = root / "app" / "library.html"
             tour = root / "app" / "tour.html"
+            review = root / "app" / "review.html"
+            reports = root / "app" / "reports.html"
+            app_briefs = root / "app" / "briefs.html"
+            detail_pages = list((root / "app" / "drops").glob("*.html"))
             review_sessions = list((root / "review-sessions").glob("*-review-session.json"))
             duplicate_reports = list((root / "reports").glob("*-duplicate-report.json"))
             garden_reports = list((root / "reports").glob("*-garden-suggestions.json"))
@@ -1161,6 +1187,10 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertTrue(dashboard.exists())
             self.assertTrue(library.exists())
             self.assertTrue(tour.exists())
+            self.assertTrue(review.exists())
+            self.assertTrue(reports.exists())
+            self.assertTrue(app_briefs.exists())
+            self.assertTrue(detail_pages)
             self.assertTrue(review_sessions)
             self.assertTrue(duplicate_reports)
             self.assertTrue(garden_reports)
@@ -1178,14 +1208,38 @@ class BookmarkImportTests(unittest.TestCase):
             readme_text = readme.read_text(encoding="utf-8")
             tour_html = tour.read_text(encoding="utf-8")
             self.assertIn("app/tour.html", readme_text)
+            self.assertIn("app/review.html", readme_text)
+            self.assertIn("app/reports.html", readme_text)
+            self.assertIn("app/briefs.html", readme_text)
             self.assertIn("what problem this solves", readme_text.lower())
             self.assertIn("Library/Search", library.read_text(encoding="utf-8"))
+            self.assertIn("Review Mode", review.read_text(encoding="utf-8"))
+            self.assertIn("duplicate report", reports.read_text(encoding="utf-8").lower())
+            self.assertIn("project brief", app_briefs.read_text(encoding="utf-8").lower())
             brief_text = briefs[0].read_text(encoding="utf-8")
             self.assertIn("Local AI agent playbook for research teams", brief_text)
             self.assertIn("Agent handoff", brief_text)
             self.assertIn("project brief", readme_text)
             self.assertIn("Why local Markdown matters", tour_html)
             self.assertIn("Local AI agent playbook for research teams", tour_html)
+            self.assertTrue(any("Local AI agent playbook for research teams" in path.read_text(encoding="utf-8") for path in detail_pages))
+
+    def test_generated_app_pages_do_not_use_external_assets_or_scripts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([Bookmark("Offline Source", "https://offline.example")], vault_path)
+
+            with redirect_stdout(io.StringIO()):
+                result = main(["app", "--vault", str(vault_path)])
+
+            self.assertEqual(result, 0)
+            app_dir = vault_path / "MemoReef" / "app"
+            for page in app_dir.rglob("*.html"):
+                html = page.read_text(encoding="utf-8").lower()
+                self.assertNotIn("<script", html)
+                self.assertNotIn("rel=\"stylesheet\"", html)
+                self.assertNotIn("@import", html)
+                self.assertNotIn("url(", html)
 
     def test_app_command_detects_existing_review_and_proposal_files(self):
         stdout = io.StringIO()

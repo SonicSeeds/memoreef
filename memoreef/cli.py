@@ -385,6 +385,9 @@ def cleanup_previous_demo_files(vault: Path, root: str) -> None:
         root_path / "app" / "index.html",
         root_path / "app" / "library.html",
         root_path / "app" / "tour.html",
+        root_path / "app" / "review.html",
+        root_path / "app" / "reports.html",
+        root_path / "app" / "briefs.html",
         root_path / "review-sessions" / "demo-review-session.json",
         root_path / "reports" / "demo-duplicate-report.json",
         root_path / "reports" / "demo-garden-suggestions.json",
@@ -396,6 +399,10 @@ def cleanup_previous_demo_files(vault: Path, root: str) -> None:
     ]
     for path in known_files:
         if path.exists() and path.is_file():
+            path.unlink()
+    app_drops = root_path / "app" / "drops"
+    if app_drops.exists():
+        for path in sorted(app_drops.glob("*.html")):
             path.unlink()
 
 
@@ -418,14 +425,18 @@ Open the generated product tour first:
 open {rel["tour"]}
 ```
 
-Then open the dashboard and local library page:
+Then open the dashboard, local library, review launcher, reports, briefs, and example Drop detail pages:
 
 ```bash
 open {rel["dashboard"]}
 open {root}/app/library.html
+open {root}/app/review.html
+open {root}/app/reports.html
+open {root}/app/briefs.html
+open {root}/app/drops
 ```
 
-Both pages are static files. There is no backend, account, network call, or AI call.
+These pages are static files. There is no backend, account, network call, or AI call.
 
 ## What is in this demo
 
@@ -439,6 +450,7 @@ Both pages are static files. There is no backend, account, network call, or AI c
 - Garden suggestions: `{rel["garden_suggestions"]}`.
 - A search result: `{rel["search_results"]}`.
 - A project brief for agent handoff: `{rel["project_brief"]}`.
+- Static app pages for dashboard, tour, library search, Review Mode instructions, reports, briefs, and one generated detail page per Drop.
 - A demo review-decisions file and agent finish artifacts: `{rel["decisions"]}`, `{rel["agent_plan"]}`, `{rel["agent_proposals"]}`.
 
 ## Local workflow
@@ -2443,6 +2455,9 @@ def render_app_dashboard(state: dict[str, object]) -> str:
     dl {{ margin:0; display:grid; gap:10px; }}
     dt {{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.12em; }}
     dd {{ margin:0 0 8px; overflow-wrap:anywhere; }}
+    .app-nav {{ display:flex; flex-wrap:wrap; gap:10px; margin:0 0 24px; }}
+    .app-nav a {{ color:var(--text); text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:8px 12px; background:rgba(13,35,48,.62); }}
+    .app-nav a[aria-current=\"page\"] {{ color:#06141c; background:var(--green); border-color:var(--green); }}
     .workflow ol {{ margin:0; padding-left:20px; color:var(--muted); }}
     .workflow li {{ margin:8px 0; }}
     @media (max-width:760px) {{ .grid, .sections {{ grid-template-columns:1fr; }} }}
@@ -2450,6 +2465,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
 </head>
 <body>
   <main>
+    {app_nav("dashboard")}
     <header>
       <div class=\"eyebrow\">MemoReef local app</div>
       <h1>Your source reef, locally visible.</h1>
@@ -2471,7 +2487,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
       </div>
       <div class=\"card\">
         <h2>Product tour</h2>
-        <p>Open <a href=\"tour.html\">tour.html</a> for a guided story generated from this vault: the mess, the value, handoff artifacts, library search, and why local Markdown matters.</p>
+        <p>Open <a href=\"tour.html\">tour.html</a> for a guided story generated from this vault: the mess, the value, Drop detail pages, reports, briefs, review handoff, library search, and why local Markdown matters.</p>
       </div>
       <div class=\"card\">
         <h2>Latest local artifacts</h2>
@@ -2500,6 +2516,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
 
           <li>Run <code>search-library</code> to search the local Library, then open <code>library.html</code>.</li>
           <li>Run <code>brief --project "AI Agents"</code> to export selected Drops into an agent-ready Markdown project brief.</li>
+          <li>Open <code>briefs.html</code> and <code>reports.html</code> to inspect generated handoff Markdown and local report JSON.</li>
           <li>Run <code>export-review-session</code> with optional filtered review queues like <code>--project</code>, <code>--shoal</code>, or <code>--pearl-only</code>, then open <code>site/swipe.html</code> for Review Mode.</li>
           <li>Export decisions from Review Mode, then run <code>apply-review-decisions</code>.</li>
           <li>Create an agent finish plan with <code>plan-agent-finish</code>.</li>
@@ -2509,12 +2526,12 @@ def render_app_dashboard(state: dict[str, object]) -> str:
       </div>
       <div class=\"card\">
         <h2>Library/Search</h2>
-        <p>Open <a href=\"library.html\">library.html</a> for local search guidance and the latest saved search results.</p>
+        <p>Open <a href=\"library.html\">library.html</a> for local search guidance, the latest saved search results, and links to generated Drop detail pages.</p>
       </div>
       <div class=\"card\">
         <h2>Review Mode</h2>
-        <p>Open <code>site/swipe.html</code>, load the latest review session JSON, review a taste sample, then export <code>memoreef-review-decisions.json</code>.</p>
-        <p>Reports are written locally under <code>{html_escape(root)}/reports/*-duplicate-report.json</code>, <code>{html_escape(root)}/reports/*-link-check-report.json</code>, and <code>{html_escape(root)}/reports/*-garden-suggestions.json</code>.</p>
+        <p>Open <a href=\"review.html\">review.html</a> for the browser-only Review Mode launcher and the exact apply command. The static app never writes review decisions directly.</p>
+        <p>Reports are summarized on <a href=\"reports.html\">reports.html</a>; project briefs are listed on <a href=\"briefs.html\">briefs.html</a>.</p>
         <p>This dashboard is static HTML. No backend, no network, no subscription.</p>
       </div>
     </section>
@@ -2522,6 +2539,79 @@ def render_app_dashboard(state: dict[str, object]) -> str:
 </body>
 </html>
 """
+
+
+APP_NAV_ITEMS = [
+    ("dashboard", "Dashboard", "index.html"),
+    ("tour", "Tour", "tour.html"),
+    ("library", "Library", "library.html"),
+    ("review", "Review", "review.html"),
+    ("reports", "Reports", "reports.html"),
+    ("briefs", "Briefs", "briefs.html"),
+]
+
+
+def app_nav(current: str, prefix: str = "") -> str:
+    links = []
+    for key, label, href in APP_NAV_ITEMS:
+        current_attr = ' aria-current="page"' if key == current else ""
+        links.append(f'<a href="{html_escape(prefix + href)}"{current_attr}>{html_escape(label)}</a>')
+    return '<nav class="app-nav" aria-label="MemoReef app navigation">' + "".join(links) + "</nav>"
+
+
+def app_common_css() -> str:
+    return """
+    :root { color-scheme: dark; --bg:#06141c; --panel:#0d2330; --line:rgba(255,255,255,.14); --text:#eaf8fb; --muted:#9fb8c2; --pearl:#f6edd7; --green:#67f5d3; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
+    main { width:min(980px, calc(100% - 32px)); margin:0 auto; padding:42px 0 56px; }
+    a { color:var(--green); }
+    h1 { font-size:clamp(34px, 7vw, 64px); margin:.2em 0; letter-spacing:-.05em; }
+    h2 { margin:0 0 10px; }
+    p, li { color:var(--muted); line-height:1.55; }
+    code { color:var(--pearl); }
+    .app-nav { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 24px; }
+    .app-nav a { color:var(--text); text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:8px 12px; background:rgba(13,35,48,.62); }
+    .app-nav a[aria-current="page"] { color:#06141c; background:var(--green); border-color:var(--green); }
+    .panel, .result, .card { border:1px solid var(--line); border-radius:20px; background:rgba(13,35,48,.78); padding:20px; margin:16px 0; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .meta { color:var(--muted); font-size:14px; }
+    dl { display:grid; grid-template-columns:minmax(120px, 180px) 1fr; gap:10px 14px; }
+    dt { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.12em; }
+    dd { margin:0; overflow-wrap:anywhere; }
+    @media (max-width:760px) { .grid, dl { grid-template-columns:1fr; } }
+    """
+
+
+def drop_detail_filename(drop: dict[str, object]) -> str:
+    return f"{slug_for_filename(str(drop.get('path') or drop.get('title') or 'drop'))}.html"
+
+
+def drop_detail_href(drop: dict[str, object], prefix: str = "drops/") -> str:
+    return prefix + drop_detail_filename(drop)
+
+
+def drop_detail_href_for_path(path: object, prefix: str = "drops/") -> str | None:
+    if not isinstance(path, str) or not path.strip():
+        return None
+    return prefix + f"{slug_for_filename(path)}.html"
+
+
+def app_drop_items(vault: Path, root: str = "MemoReef") -> list[dict[str, object]]:
+    vault_path = vault.expanduser().resolve()
+    drops_dir = vault_path / root / "Drops"
+    drops: list[dict[str, object]] = []
+    if not drops_dir.exists():
+        return drops
+    for path in sorted(drops_dir.rglob("*.md")):
+        drops.append(brief_item_from_drop(path, vault_path))
+    return drops
+
+
+def format_label_list(value: object) -> str:
+    if isinstance(value, list) and value:
+        return ", ".join(str(item) for item in value)
+    return "none"
 
 
 def latest_search_payload(vault: Path, root: str = "MemoReef") -> dict[str, object] | None:
@@ -2556,6 +2646,8 @@ def render_library_page(vault: Path, root: str = "MemoReef") -> str:
         projects = ", ".join(str(value) for value in item.get("projects", [])) if isinstance(item.get("projects"), list) else ""
         shoals = ", ".join(str(value) for value in item.get("shoals", [])) if isinstance(item.get("shoals"), list) else ""
         pearl = "Pearl" if item.get("pearl") else "Drop"
+        detail_href = drop_detail_href_for_path(item.get("path"))
+        detail_link = f'<p><a href="{html_escape(detail_href)}">Open Drop detail</a></p>' if detail_href else ""
         result_cards.append(
             f"""
       <article class=\"result\">
@@ -2563,6 +2655,7 @@ def render_library_page(vault: Path, root: str = "MemoReef") -> str:
         <p class=\"meta\">{html_escape(str(item.get('hostname') or ''))} · {html_escape(str(item.get('status') or 'drift'))} · {pearl}</p>
         <p>{html_escape(str(item.get('snippet') or ''))}</p>
         <p class=\"meta\">Projects: {html_escape(projects or 'none')} · Shoals: {html_escape(shoals or 'none')}</p>
+        {detail_link}
       </article>"""
         )
     results_html = "\n".join(result_cards) if result_cards else "<p>No saved search results yet.</p>"
@@ -2574,22 +2667,13 @@ def render_library_page(vault: Path, root: str = "MemoReef") -> str:
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
   <title>MemoReef Library Search</title>
   <style>
-    :root {{ color-scheme: dark; --bg:#06141c; --panel:#0d2330; --line:rgba(255,255,255,.14); --text:#eaf8fb; --muted:#9fb8c2; --pearl:#f6edd7; --green:#67f5d3; }}
-    * {{ box-sizing:border-box; }}
-    body {{ margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }}
-    main {{ width:min(920px, calc(100% - 32px)); margin:0 auto; padding:42px 0 56px; }}
-    a {{ color:var(--green); }}
-    h1 {{ font-size:clamp(36px, 7vw, 68px); margin:.2em 0; letter-spacing:-.06em; }}
-    p {{ color:var(--muted); line-height:1.55; }}
-    code {{ color:var(--pearl); }}
-    .panel, .result {{ border:1px solid var(--line); border-radius:20px; background:rgba(13,35,48,.78); padding:20px; margin:16px 0; }}
+    {app_common_css()}
     .result h2 {{ margin:0 0 6px; }}
-    .meta {{ color:var(--muted); font-size:14px; }}
   </style>
 </head>
 <body>
   <main>
-    <p><a href=\"index.html\">Back to dashboard</a></p>
+    {app_nav("library")}
     <h1>Library/Search</h1>
     <section class=\"panel\">
       <p>Search your local Markdown Drops without a backend:</p>
@@ -2601,6 +2685,260 @@ def render_library_page(vault: Path, root: str = "MemoReef") -> str:
       <p>Query: <code>{html_escape(query or 'none')}</code> · Matches: <strong>{matches}</strong></p>
     </section>
     {results_html}
+  </main>
+</body>
+</html>
+"""
+
+
+def render_drop_detail_page(vault: Path, root: str, drop: dict[str, object]) -> str:
+    app_dir = vault / root / "app"
+    drop_path = vault / str(drop.get("path") or "")
+    markdown_href = app_href(drop_path, app_dir) or ""
+    markdown_link = f'<a href="{html_escape(markdown_href)}">{html_escape(str(drop.get("path") or ""))}</a>' if markdown_href else html_escape(str(drop.get("path") or ""))
+    url = str(drop.get("url") or "")
+    url_html = f'<a href="{html_escape(url)}">{html_escape(url)}</a>' if url else "none"
+    summary = str(drop.get("summary") or drop.get("page_description") or "").strip()
+    notes = str(drop.get("notes") or "").strip()
+    agent_brief = str(drop.get("agent_brief") or "").strip()
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{html_escape(str(drop.get('title') or 'MemoReef Drop'))}</title>
+  <style>
+    {app_common_css()}
+    pre {{ white-space:pre-wrap; color:var(--muted); line-height:1.55; font-family:inherit; }}
+  </style>
+</head>
+<body>
+  <main>
+    {app_nav("library", "../")}
+    <p><a href="../library.html">Back to library</a> · <a href="../tour.html">Tour</a></p>
+    <h1>{html_escape(str(drop.get('title') or 'Untitled Drop'))}</h1>
+    <section class="panel">
+      <dl>
+        <dt>URL</dt><dd>{url_html}</dd>
+        <dt>Status</dt><dd>{html_escape(str(drop.get('status') or 'drift'))}</dd>
+        <dt>Pearl</dt><dd>{'yes' if bool(drop.get('pearl', False)) else 'no'}</dd>
+        <dt>Tags</dt><dd>{html_escape(format_label_list(drop.get('tags')))}</dd>
+        <dt>Projects</dt><dd>{html_escape(format_label_list(drop.get('projects')))}</dd>
+        <dt>Shoals</dt><dd>{html_escape(format_label_list(drop.get('shoals')))}</dd>
+        <dt>Hostname</dt><dd>{html_escape(str(drop.get('hostname') or 'none'))}</dd>
+        <dt>Markdown path</dt><dd>{markdown_link}</dd>
+      </dl>
+    </section>
+    <section class="panel">
+      <h2>Summary</h2>
+      <p>{html_escape(summary or 'No summary found in this Drop.')}</p>
+    </section>
+    <section class="panel">
+      <h2>Notes</h2>
+      <pre>{html_escape(notes or 'No notes found in this Drop.')}</pre>
+    </section>
+    <section class="panel">
+      <h2>Agent brief</h2>
+      <pre>{html_escape(agent_brief or 'No agent brief found in this Drop.')}</pre>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
+def brief_title_and_summary(path: Path) -> dict[str, object]:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    title = path.stem
+    for line in text.splitlines():
+        if line.startswith("# "):
+            title = line[2:].strip() or title
+            break
+    source_count = None
+    filters = None
+    for line in text.splitlines():
+        match = re.match(r"- Selected sources:\s*(\d+)", line)
+        if match:
+            source_count = int(match.group(1))
+        if line.startswith("- Applied filters:"):
+            filters = line.split(":", 1)[1].strip()
+    return {"title": title, "source_count": source_count, "filters": filters}
+
+
+def render_briefs_page(vault: Path, root: str = "MemoReef") -> str:
+    vault_path = vault.expanduser().resolve()
+    root_path = vault_path / root
+    app_dir = root_path / "app"
+    brief_paths = sorted(
+        [path for path in (root_path / "briefs").glob("*.md") if path.is_file()] if (root_path / "briefs").exists() else [],
+        key=lambda path: (path.stat().st_mtime, path.name),
+        reverse=True,
+    )
+    cards = []
+    for path in brief_paths:
+        summary = brief_title_and_summary(path)
+        href = app_href(path, app_dir) or ""
+        source_count = summary.get("source_count")
+        source_text = str(source_count) if source_count is not None else "unknown"
+        cards.append(
+            f"""
+      <article class="card">
+        <h2>{html_escape(str(summary.get('title') or path.stem))}</h2>
+        <p class="meta"><a href="{html_escape(href)}">{html_escape(path.resolve().relative_to(vault_path).as_posix())}</a></p>
+        <p>Sources: <strong>{html_escape(source_text)}</strong> · Filters: <code>{html_escape(str(summary.get('filters') or 'unknown'))}</code></p>
+      </article>"""
+        )
+    cards_html = "\n".join(cards) if cards else "<p>No project brief Markdown files were detected yet.</p>"
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MemoReef Project Briefs</title>
+  <style>{app_common_css()}</style>
+</head>
+<body>
+  <main>
+    {app_nav("briefs")}
+    <h1>Project briefs</h1>
+    <section class="panel">
+      <p>MemoReef project brief Markdown files are local, readable handoff documents generated from selected Drops.</p>
+      <p><code>python3 -m memoreef.cli brief --vault {html_escape(str(vault_path))} --project "AI Agents"</code></p>
+    </section>
+    {cards_html}
+  </main>
+</body>
+</html>
+"""
+
+
+def report_summary(path: Path) -> dict[str, object]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"kind": "report", "summary": "unparseable JSON"}
+    if not isinstance(payload, dict):
+        return {"kind": "report", "summary": "unparseable JSON"}
+    name = path.name
+    if "duplicate" in name:
+        kind = "duplicate report"
+    elif "link-check" in name:
+        kind = "link-check report"
+    elif "garden" in name:
+        kind = "garden suggestions"
+    elif "metadata" in name:
+        kind = "metadata report"
+    else:
+        kind = "local report"
+    summary = payload.get("summary")
+    if isinstance(summary, dict):
+        useful = ", ".join(f"{key}={value}" for key, value in sorted(summary.items()))
+    else:
+        useful = "no summary object"
+    return {"kind": kind, "summary": useful}
+
+
+def render_reports_page(vault: Path, root: str = "MemoReef") -> str:
+    vault_path = vault.expanduser().resolve()
+    root_path = vault_path / root
+    app_dir = root_path / "app"
+    reports_dir = root_path / "reports"
+    report_paths = sorted(
+        [path for path in reports_dir.glob("*.json") if path.is_file()] if reports_dir.exists() else [],
+        key=lambda path: (path.stat().st_mtime, path.name),
+        reverse=True,
+    )
+    cards = []
+    for path in report_paths:
+        summary = report_summary(path)
+        href = app_href(path, app_dir) or ""
+        cards.append(
+            f"""
+      <article class="card">
+        <h2>{html_escape(str(summary.get('kind') or 'local report'))}</h2>
+        <p class="meta"><a href="{html_escape(href)}">{html_escape(path.resolve().relative_to(vault_path).as_posix())}</a></p>
+        <p>{html_escape(str(summary.get('summary') or 'no summary'))}</p>
+      </article>"""
+        )
+    cards_html = "\n".join(cards) if cards else "<p>No local report JSON files were detected yet.</p>"
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MemoReef Reports</title>
+  <style>{app_common_css()}</style>
+</head>
+<body>
+  <main>
+    {app_nav("reports")}
+    <h1>Reports</h1>
+    <section class="panel">
+      <p>Local reports surface duplicate groups, link-check results, garden suggestions, and metadata-related JSON when present.</p>
+    </section>
+    {cards_html}
+  </main>
+</body>
+</html>
+"""
+
+
+def render_review_page(vault: Path, root: str = "MemoReef") -> str:
+    vault_path = vault.expanduser().resolve()
+    root_path = vault_path / root
+    app_dir = root_path / "app"
+    session_paths = sorted(
+        [path for path in (root_path / "review-sessions").glob("*.json") if path.is_file()] if (root_path / "review-sessions").exists() else [],
+        key=lambda path: (path.stat().st_mtime, path.name),
+        reverse=True,
+    )
+    decision_paths = sorted(
+        [path for path in vault_path.rglob("*review-decisions*.json") if path.is_file()],
+        key=lambda path: (path.stat().st_mtime, path.name),
+        reverse=True,
+    )
+
+    def artifact_list(paths: list[Path]) -> str:
+        if not paths:
+            return "<p>None detected yet.</p>"
+        items = []
+        for path in paths:
+            href = app_href(path, app_dir) or ""
+            items.append(f'<li><a href="{html_escape(href)}">{html_escape(path.resolve().relative_to(vault_path).as_posix())}</a></li>')
+        return "<ul>" + "".join(items) + "</ul>"
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MemoReef Review Mode</title>
+  <style>{app_common_css()}</style>
+</head>
+<body>
+  <main>
+    {app_nav("review")}
+    <h1>Review Mode</h1>
+    <section class="panel">
+      <p>Review Mode is browser-only in v0.2. This static app can list local files, but it cannot write decisions to the filesystem directly.</p>
+      <ol>
+        <li>Open the repo file <code>site/swipe.html</code> in your browser.</li>
+        <li>Load a review-session JSON file with the page file picker.</li>
+        <li>Review Drops and export a decisions JSON file from the browser.</li>
+        <li>Apply decisions with <code>python3 -m memoreef.cli apply-review-decisions --vault {html_escape(str(vault_path))} --decisions /path/to/memoreef-review-decisions.json</code>.</li>
+      </ol>
+    </section>
+    <section class="grid">
+      <div class="card">
+        <h2>Review-session JSON</h2>
+        {artifact_list(session_paths)}
+      </div>
+      <div class="card">
+        <h2>Review-decision JSON</h2>
+        {artifact_list(decision_paths)}
+      </div>
+    </section>
   </main>
 </body>
 </html>
@@ -2765,12 +3103,19 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
         library_lines.append("No saved search result was detected yet; run search-library to create one.")
     if isinstance(latest_project_brief, Path):
         library_lines.append("A Markdown project brief is available from selected local Drops.")
+    detail_examples = [
+        f'<a href="{html_escape(drop_detail_href(drop))}">{html_escape(str(drop.get("title") or "Untitled"))}</a>'
+        for drop in drops[:5]
+    ]
 
     artifact_links = "\n".join(
         link
         for link in [
             linked_file("Open dashboard", app_dir / "index.html", app_dir),
             linked_file("Open library search page", app_dir / "library.html", app_dir),
+            linked_file("Open Review Mode launcher", app_dir / "review.html", app_dir),
+            linked_file("Open reports page", app_dir / "reports.html", app_dir),
+            linked_file("Open project briefs page", app_dir / "briefs.html", app_dir),
             linked_file("Latest review session JSON", state.get("latest_review_session"), app_dir),
             linked_file("Latest duplicate report JSON", state.get("latest_duplicate_report"), app_dir),
             linked_file("Latest link check report JSON", state.get("latest_link_check_report"), app_dir),
@@ -2806,6 +3151,9 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
     .stat {{ padding:16px; }}
     .stat strong {{ display:block; font-size:34px; }}
     .stat span {{ color:var(--muted); font-size:13px; }}
+    .app-nav {{ display:flex; flex-wrap:wrap; gap:10px; margin:0 0 24px; }}
+    .app-nav a {{ color:var(--text); text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:8px 12px; background:rgba(16,38,50,.62); }}
+    .app-nav a[aria-current="page"] {{ color:#07131a; background:var(--green); border-color:var(--green); }}
     .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }}
     section {{ padding:22px; }}
     ul {{ margin:10px 0 0; padding-left:20px; }}
@@ -2815,7 +3163,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
 </head>
 <body>
   <main>
-    <p><a href="index.html">Back to dashboard</a></p>
+    {app_nav("tour")}
     <h1>Messy saves become source memory.</h1>
     <p class="lede">This static tour was generated from the current vault. It shows why MemoReef exists: scattered saves become reviewed local Markdown, useful Pearls, clutter reports, agent handoff plans, and searchable source memory.</p>
     <p>Vault: <code>{html_escape(str(vault_path))}</code> · Root: <code>{html_escape(root)}</code></p>
@@ -2839,6 +3187,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
         <p>Useful saves become a Reef with Pearls, projects, and shoals.</p>
         {html_list(value_signals)}
         <p>Real Drops in this vault include: {html_escape(', '.join(title_examples) if title_examples else 'none yet')}.</p>
+        <p>Detail pages: {', '.join(detail_examples) if detail_examples else 'none yet'}.</p>
         <p>Pearl or curated examples include: {html_escape(', '.join(pearl_titles or reef_titles) if (pearl_titles or reef_titles) else 'none yet')}.</p>
       </section>
       <section>
@@ -2871,9 +3220,16 @@ def generate_app_dashboard(vault: Path, root: str = "MemoReef") -> Path:
     vault_path = vault.expanduser().resolve()
     app_dir = vault_path / root / "app"
     app_dir.mkdir(parents=True, exist_ok=True)
+    drops_dir = app_dir / "drops"
+    drops_dir.mkdir(parents=True, exist_ok=True)
     path = app_dir / "index.html"
     path.write_text(render_app_dashboard(dashboard_state(vault_path, root)), encoding="utf-8")
     (app_dir / "library.html").write_text(render_library_page(vault_path, root), encoding="utf-8")
+    (app_dir / "review.html").write_text(render_review_page(vault_path, root), encoding="utf-8")
+    (app_dir / "reports.html").write_text(render_reports_page(vault_path, root), encoding="utf-8")
+    (app_dir / "briefs.html").write_text(render_briefs_page(vault_path, root), encoding="utf-8")
+    for drop in app_drop_items(vault_path, root):
+        (drops_dir / drop_detail_filename(drop)).write_text(render_drop_detail_page(vault_path, root, drop), encoding="utf-8")
     (app_dir / "tour.html").write_text(render_tour_page(vault_path, root), encoding="utf-8")
     return path
 

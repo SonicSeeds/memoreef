@@ -593,3 +593,28 @@ Export selected local Markdown Drops into a readable Markdown project brief for 
 - Generated app and tour detect the latest brief.
 - Demo creates a brief containing a real demo source title and Agent handoff text.
 - Existing tests still pass.
+
+## Task 24 — Generated app completion surface
+
+### Goal
+Turn the generated static app into a more complete local v0.2 app surface while preserving CLI-first workflows.
+
+### Requirements
+
+- Make `python3 -m memoreef.cli app --vault <vault>` generate one Drop detail page per Markdown Drop under `<vault>/MemoReef/app/drops/`.
+- Add generated static pages for Review Mode instructions, local reports, and project briefs: `review.html`, `reports.html`, and `briefs.html`.
+- Add simple app navigation across dashboard, tour, library, review, reports, and briefs.
+- Link library and tour Drop references to generated Drop detail pages when possible.
+- Keep the pages static, deterministic, local-only, and dependency-free.
+- Do not claim that the generated static app can write review decisions directly to the filesystem.
+- Make `demo` generate the expanded app surface and include enough local artifacts for review, reports, and briefs pages to be useful.
+- Update README, demo README text, and grant status language if stale.
+
+### Acceptance criteria
+
+- `app` writes Drop detail pages, `review.html`, `reports.html`, and `briefs.html`.
+- Library links at least one Drop detail page.
+- Dashboard and tour navigation include review, reports, and briefs.
+- Demo creates all new pages and at least one Drop detail page with a real demo title.
+- Generated pages do not require network calls, external assets, external dependencies, or a backend.
+- Existing tests still pass.
