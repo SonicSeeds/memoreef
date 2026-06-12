@@ -148,6 +148,14 @@ python3 -m memoreef.cli apply-review-decisions --vault /tmp/memoreef-vault --dec
 
 This updates `status`, `pearl`, and `triaged_at` only. It does not move or delete files, and it does not assign categories, tags, priority, or note locations yet.
 
+Create an agent finish plan for the remaining unreviewed Drops:
+
+```bash
+python3 -m memoreef.cli plan-agent-finish --vault /tmp/memoreef-vault --decisions /tmp/memoreef-review-decisions.json
+```
+
+The agent finish plan JSON groups reviewed taste examples into Pearl, Keep, and Sink, then lists the remaining Drops for a later agent task. It does not modify Markdown, and it does not classify the remaining Drops yet.
+
 These are browser-only prototypes with inline sample data. They are not connected to real vault files yet.
 
 ## Near-term roadmap

@@ -142,6 +142,16 @@ def export_review_session(vault: Path, root: str = "MemoReef", output: Path | No
     return output
 
 
+def load_drop_items(vault: Path, root: str = "MemoReef") -> list[dict[str, object]]:
+    vault_path = vault.expanduser().resolve()
+    drops_dir = vault_path / root / "Drops"
+    drops = []
+    if drops_dir.exists():
+        for path in sorted(drops_dir.rglob("*.md")):
+            drops.append(markdown_drop_to_review_item(path, vault_path))
+    return drops
+
+
 def review_decision_fields(decision: str) -> dict[str, object] | None:
     if decision == "sink":
         return {"status": "discarded", "pearl": False}
@@ -221,6 +231,99 @@ def apply_review_decisions(
     return updated, skipped, warnings
 
 
+AGENT_FINISH_INSTRUCTIONS = [
+    "Use pearl decisions as strongest positive taste examples.",
+    "Use keep decisions as acceptable but ordinary examples.",
+    "Use sink decisions as negative examples.",
+    "For remaining Drops, propose status, pearl, tags, priority, and note location in a later task.",
+    "Do not delete or move files without explicit user approval.",
+]
+
+
+def review_taste_example(drop: dict[str, object]) -> dict[str, object]:
+    return {
+        "id": drop.get("id", ""),
+        "path": drop.get("path", ""),
+        "title": drop.get("title", ""),
+        "url": drop.get("url", ""),
+        "summary": drop.get("summary", ""),
+        "tags": drop.get("tags", []),
+        "folders": drop.get("folders", []),
+    }
+
+
+def build_agent_finish_plan(
+    vault: Path,
+    decisions: Path,
+    root: str = "MemoReef",
+    output: Path | None = None,
+) -> tuple[Path, dict[str, object], list[str]]:
+    vault_path = vault.expanduser().resolve()
+    drops = load_drop_items(vault_path, root)
+    drops_by_path = {str(drop.get("path", "")): drop for drop in drops}
+    decisions_path = decisions.expanduser().resolve()
+    payload = json.loads(decisions_path.read_text(encoding="utf-8"))
+    decision_items = payload.get("decisions")
+
+    taste_examples: dict[str, list[dict[str, object]]] = {"pearl": [], "keep": [], "sink": []}
+    reviewed_paths: set[str] = set()
+    warnings: list[str] = []
+
+    if not isinstance(decision_items, list):
+        warnings.append("decisions must be a list")
+        decision_items = []
+
+    for index, item in enumerate(decision_items, start=1):
+        if not isinstance(item, dict):
+            warnings.append(f"decision {index}: malformed decision")
+            continue
+
+        raw_path = item.get("path")
+        raw_decision = item.get("decision")
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            warnings.append(f"decision {index}: missing path")
+            continue
+        if not isinstance(raw_decision, str) or raw_decision not in taste_examples:
+            warnings.append(f"{raw_path}: unsupported decision")
+            continue
+
+        reviewed_paths.add(raw_path)
+        drop = drops_by_path.get(raw_path)
+        if drop is None:
+            warnings.append(f"{raw_path}: file not found")
+            continue
+        taste_examples[raw_decision].append(review_taste_example(drop))
+
+    remaining_drops = [drop for drop in drops if str(drop.get("path", "")) not in reviewed_paths]
+    reviewed_count = sum(len(items) for items in taste_examples.values())
+
+    if output is None:
+        output = vault_path / root / "agent-plans" / f"{timestamp_for_filename()}-agent-finish-plan.json"
+    output = output.expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    plan = {
+        "version": 1,
+        "created_at": utc_now_iso(),
+        "vault": str(vault_path),
+        "source": f"{root}/Drops",
+        "decisions_source": str(decisions_path),
+        "summary": {
+            "reviewed": reviewed_count,
+            "remaining": len(remaining_drops),
+            "pearls": len(taste_examples["pearl"]),
+            "kept": len(taste_examples["keep"]),
+            "sunk": len(taste_examples["sink"]),
+        },
+        "taste_examples": taste_examples,
+        "remaining_drops": remaining_drops,
+        "agent_instructions": AGENT_FINISH_INSTRUCTIONS,
+        "warnings": warnings,
+    }
+    output.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+    return output, plan, warnings
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="memoreef",
@@ -255,6 +358,12 @@ def build_parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
     apply_cmd.add_argument("--decisions", type=Path, required=True, help="Review decisions JSON exported from Review Mode.")
     apply_cmd.add_argument("--dry-run", action="store_true", help="Preview updates without modifying Markdown files.")
+
+    plan_cmd = sub.add_parser("plan-agent-finish", help="Create an agent finish plan for unreviewed Drops.")
+    plan_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    plan_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    plan_cmd.add_argument("--decisions", type=Path, required=True, help="Review decisions JSON exported from Review Mode.")
+    plan_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults inside the vault.")
 
     return parser
 
@@ -309,6 +418,20 @@ def main(argv: list[str] | None = None) -> int:
             print(f"- updated: {updated}")
         print(f"- skipped: {skipped}")
         print(f"- warnings: {len(warnings)}")
+        for warning in warnings:
+            print(f"  - {warning}")
+        return 0
+
+    if args.command == "plan-agent-finish":
+        output, plan, warnings = build_agent_finish_plan(args.vault, args.decisions, args.root, args.output)
+        summary = plan.get("summary", {})
+        reviewed = summary.get("reviewed", 0) if isinstance(summary, dict) else 0
+        remaining = summary.get("remaining", 0) if isinstance(summary, dict) else 0
+        print("Created agent finish plan:")
+        print(f"- reviewed examples: {reviewed}")
+        print(f"- remaining drops: {remaining}")
+        print(f"- warnings: {len(warnings)}")
+        print(f"- output: {output}")
         for warning in warnings:
             print(f"  - {warning}")
         return 0

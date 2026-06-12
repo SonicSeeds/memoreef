@@ -281,3 +281,26 @@ Complete the local-first Review Mode loop by applying exported decision JSON bac
 - Missing files and malformed decisions produce warnings and continue.
 - Path traversal attempts are skipped.
 - Existing frontmatter fields and Markdown body are preserved.
+
+## Task 10 — Agent finish plan for remaining Drops
+
+### Goal
+Create a structured local handoff for agents to finish sorting Drops after the user reviews a taste sample.
+
+### Requirements
+
+- Add a CLI command that writes an agent finish plan JSON.
+- Include reviewed taste examples grouped by decision: pearl, keep, sink.
+- Include remaining unreviewed Drops.
+- Include concise agent instructions.
+- Do not modify Markdown files.
+- Do not classify remaining Drops yet.
+- Do not add a backend, network calls, external dependencies, or LLM calls.
+
+### Acceptance criteria
+
+- `python3 -m memoreef.cli plan-agent-finish --vault <vault> --decisions <decisions.json>` writes a plan under `MemoReef/agent-plans`.
+- `--output` writes the plan JSON to an explicit path.
+- Missing files and malformed decisions produce warnings and continue.
+- Reviewed Drops are excluded from `remaining_drops`.
+- Markdown Drop files are not modified.

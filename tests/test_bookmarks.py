@@ -503,6 +503,106 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("## Summary", content)
             self.assertIn("## Agent Brief", content)
 
+    def write_plan_decisions(self, path: Path, vault_path: Path, items: list[tuple[Path, str]]):
+        decisions = []
+        for drop_path, decision in items:
+            relative = drop_path.resolve().relative_to(vault_path.resolve()).as_posix()
+            decisions.append({"id": relative, "path": relative, "decision": decision})
+        path.write_text(json.dumps({"version": 1, "reviewed_at": "2026-06-12T13:00:00Z", "decisions": decisions}), encoding="utf-8")
+
+    def test_plan_agent_finish_explicit_output_groups_examples_and_remaining(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "agent-finish-plan.json"
+            bookmarks = [
+                Bookmark("Pearl Source", "https://pearl.example", folders=["AI Agents"]),
+                Bookmark("Keep Source", "https://keep.example", folders=["Research"]),
+                Bookmark("Sink Source", "https://sink.example", folders=["Noise"]),
+                Bookmark("Remaining Source", "https://remaining.example", folders=["Later"]),
+            ]
+            written = write_bookmarks_to_vault(bookmarks, vault_path)
+            decisions_path = Path(tmp) / "decisions.json"
+            self.write_plan_decisions(decisions_path, vault_path, [(written[0], "pearl"), (written[1], "keep"), (written[2], "sink")])
+
+            with redirect_stdout(stdout):
+                result = main(["plan-agent-finish", "--vault", str(vault_path), "--decisions", str(decisions_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(data["summary"]["reviewed"], 3)
+            self.assertEqual(data["summary"]["remaining"], 1)
+            self.assertEqual(data["summary"]["pearls"], 1)
+            self.assertEqual(data["summary"]["kept"], 1)
+            self.assertEqual(data["summary"]["sunk"], 1)
+            self.assertEqual(len(data["taste_examples"]["pearl"]), 1)
+            self.assertEqual(len(data["taste_examples"]["keep"]), 1)
+            self.assertEqual(len(data["taste_examples"]["sink"]), 1)
+            self.assertEqual(len(data["remaining_drops"]), 1)
+            self.assertTrue(data["agent_instructions"])
+            self.assertIn("Created agent finish plan:", stdout.getvalue())
+
+    def test_plan_agent_finish_default_output_path(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Example Source", "https://example.com")], vault_path)
+            decisions_path = Path(tmp) / "decisions.json"
+            self.write_plan_decisions(decisions_path, vault_path, [(written[0], "keep")])
+
+            with redirect_stdout(stdout):
+                result = main(["plan-agent-finish", "--vault", str(vault_path), "--decisions", str(decisions_path)])
+
+            outputs = list((vault_path / "MemoReef" / "agent-plans").glob("*-agent-finish-plan.json"))
+            self.assertEqual(result, 0)
+            self.assertEqual(len(outputs), 1)
+            data = json.loads(outputs[0].read_text(encoding="utf-8"))
+            self.assertEqual(data["summary"]["reviewed"], 1)
+            self.assertEqual(data["summary"]["remaining"], 0)
+
+    def test_plan_agent_finish_missing_and_malformed_decisions_warn(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([Bookmark("Example Source", "https://example.com")], vault_path)
+            output_path = Path(tmp) / "agent-finish-plan.json"
+            decisions_path = Path(tmp) / "decisions.json"
+            payload = {
+                "version": 1,
+                "decisions": [
+                    "bad item",
+                    {"path": "MemoReef/Drops/missing.md", "decision": "keep"},
+                    {"path": "MemoReef/Drops/also-missing.md", "decision": "strange"},
+                ],
+            }
+            decisions_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                result = main(["plan-agent-finish", "--vault", str(vault_path), "--decisions", str(decisions_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(data["summary"]["reviewed"], 0)
+            self.assertEqual(data["summary"]["remaining"], 1)
+            self.assertEqual(len(data["warnings"]), 3)
+            self.assertIn("- warnings: 3", stdout.getvalue())
+
+    def test_plan_agent_finish_does_not_modify_markdown_drops(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Example Source", "https://example.com")], vault_path)
+            before = written[0].read_text(encoding="utf-8")
+            decisions_path = Path(tmp) / "decisions.json"
+            output_path = Path(tmp) / "agent-finish-plan.json"
+            self.write_plan_decisions(decisions_path, vault_path, [(written[0], "pearl")])
+
+            with redirect_stdout(stdout):
+                result = main(["plan-agent-finish", "--vault", str(vault_path), "--decisions", str(decisions_path), "--output", str(output_path)])
+
+            self.assertEqual(result, 0)
+            self.assertEqual(written[0].read_text(encoding="utf-8"), before)
+
 
 if __name__ == "__main__":
     unittest.main()
