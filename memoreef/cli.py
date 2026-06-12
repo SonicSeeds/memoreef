@@ -112,6 +112,413 @@ def import_bookmarks(
     return written
 
 
+DEMO_REVIEWED_AT = "2026-06-12T09:00:00Z"
+
+
+def demo_bookmarks() -> list[Bookmark]:
+    return [
+        Bookmark(
+            "Local AI agent playbook for research teams",
+            "https://example.com/ai-agents/local-agent-playbook",
+            source="memo-demo",
+            status="reef",
+            pearl=True,
+            folders=["Research", "AI Agents"],
+            tags=["ai-agents", "local-first", "workflow"],
+            projects=["AI Agents"],
+            shoals=["Automation"],
+            triaged_at=DEMO_REVIEWED_AT,
+        ),
+        Bookmark(
+            "Agent workflow checklist for saved links",
+            "https://example.com/ai-agents/workflow-checklist?utm_source=newsletter",
+            source="memo-demo",
+            status="drift",
+            folders=["Research", "AI Agents"],
+            tags=["ai-agents", "review", "checklist"],
+        ),
+        Bookmark(
+            "How small teams build local knowledge bases",
+            "https://example.com/knowledge/local-markdown-archive",
+            source="memo-demo",
+            status="reef",
+            folders=["Knowledge Management"],
+            tags=["markdown", "local-first", "archive"],
+            projects=["Local Knowledge Base"],
+            shoals=["Markdown Archive"],
+            triaged_at=DEMO_REVIEWED_AT,
+        ),
+        Bookmark(
+            "Markdown archive patterns that survive app churn",
+            "https://example.com/knowledge/markdown-archive-patterns",
+            source="memo-demo",
+            status="deep",
+            pearl=True,
+            folders=["Knowledge Management"],
+            tags=["markdown", "durability", "notes"],
+            projects=["Local Knowledge Base"],
+            shoals=["Markdown Archive"],
+            triaged_at=DEMO_REVIEWED_AT,
+        ),
+        Bookmark(
+            "Design systems bookmark audit",
+            "https://design.example.com/articles/bookmark-audit",
+            source="memo-demo",
+            status="reef",
+            folders=["Product Design"],
+            tags=["design-systems", "audit"],
+            projects=["Product Research"],
+            shoals=["Design Systems"],
+            triaged_at=DEMO_REVIEWED_AT,
+        ),
+        Bookmark(
+            "Design system component checklist",
+            "https://design.example.com/articles/component-checklist",
+            source="memo-demo",
+            status="drift",
+            folders=["Product Design"],
+            tags=["design-systems", "checklist"],
+        ),
+        Bookmark(
+            "SQLite full text search notes",
+            "https://engineering.example.net/sqlite/full-text-search",
+            source="memo-demo",
+            status="drift",
+            folders=["Engineering"],
+            tags=["search", "sqlite", "local-first"],
+        ),
+        Bookmark(
+            "Searchable personal archives with plain files",
+            "https://engineering.example.net/search/plain-file-archives",
+            source="memo-demo",
+            status="deep",
+            folders=["Engineering"],
+            tags=["search", "archive", "markdown"],
+            projects=["Local Knowledge Base"],
+            shoals=["Search"],
+            triaged_at=DEMO_REVIEWED_AT,
+        ),
+        Bookmark(
+            "Noise article with vague productivity tricks",
+            "https://clickbait.example.org/productivity/one-weird-trick",
+            source="memo-demo",
+            status="discarded",
+            folders=["Inbox"],
+            tags=["productivity", "noise"],
+            triaged_at=DEMO_REVIEWED_AT,
+        ),
+        Bookmark(
+            "Outdated launch rumor",
+            "https://rumors.example.org/launch/old-rumor",
+            source="memo-demo",
+            status="discarded",
+            folders=["Inbox"],
+            tags=["rumor", "stale"],
+            triaged_at=DEMO_REVIEWED_AT,
+        ),
+        Bookmark(
+            "Local AI agent playbook for research teams duplicate",
+            "https://example.com/ai-agents/local-agent-playbook?utm_medium=social",
+            source="memo-demo",
+            status="drift",
+            folders=["Inbox"],
+            tags=["ai-agents", "duplicate"],
+        ),
+        Bookmark(
+            "MemoReef pricing research spreadsheet",
+            "file:///Users/demo/research/pricing-links.csv",
+            source="memo-demo",
+            status="drift",
+            folders=["Inbox"],
+            tags=["pricing", "local-file"],
+        ),
+    ]
+
+
+DEMO_METADATA: dict[str, dict[str, str]] = {
+    "Local AI agent playbook for research teams": {
+        "hostname": "example.com",
+        "page_title": "Local AI agent playbook for research teams",
+        "page_description": "A practical guide to turning scattered research links into local agent-ready context.",
+        "canonical_url": "https://example.com/ai-agents/local-agent-playbook",
+    },
+    "Agent workflow checklist for saved links": {
+        "hostname": "example.com",
+        "page_title": "Agent workflow checklist for saved links",
+        "page_description": "A checklist for reviewing saved AI workflow links before handing them to an agent.",
+        "canonical_url": "https://example.com/ai-agents/workflow-checklist",
+    },
+    "How small teams build local knowledge bases": {
+        "hostname": "example.com",
+        "page_title": "How small teams build local knowledge bases",
+        "page_description": "Why Markdown vaults make team research portable, searchable, and durable.",
+        "canonical_url": "https://example.com/knowledge/local-markdown-archive",
+    },
+    "Markdown archive patterns that survive app churn": {
+        "hostname": "example.com",
+        "page_title": "Markdown archive patterns that survive app churn",
+        "page_description": "Patterns for storing useful links and notes in plain files that outlive SaaS tools.",
+        "canonical_url": "https://example.com/knowledge/markdown-archive-patterns",
+    },
+    "Design systems bookmark audit": {
+        "hostname": "design.example.com",
+        "page_title": "Design systems bookmark audit",
+        "page_description": "A method for separating durable design system references from transient inspiration.",
+        "canonical_url": "https://design.example.com/articles/bookmark-audit",
+    },
+    "Design system component checklist": {
+        "hostname": "design.example.com",
+        "page_title": "Design system component checklist",
+        "page_description": "Reusable criteria for evaluating component libraries and design system references.",
+        "canonical_url": "https://design.example.com/articles/component-checklist",
+    },
+    "SQLite full text search notes": {
+        "hostname": "engineering.example.net",
+        "page_title": "SQLite full text search notes",
+        "page_description": "Implementation notes for fast local search over Markdown Drops.",
+        "canonical_url": "https://engineering.example.net/sqlite/full-text-search",
+    },
+    "Searchable personal archives with plain files": {
+        "hostname": "engineering.example.net",
+        "page_title": "Searchable personal archives with plain files",
+        "page_description": "How plain files and local indexes keep saved research usable without a backend.",
+        "canonical_url": "https://engineering.example.net/search/plain-file-archives",
+    },
+}
+
+
+DEMO_SUMMARIES: dict[str, str] = {
+    "Local AI agent playbook for research teams": "A strong Pearl example: local-first AI agent workflows, research triage, and durable handoff context.",
+    "Agent workflow checklist for saved links": "A messy inbox Drop that looks related to the AI Agents project but has not been reviewed yet.",
+    "How small teams build local knowledge bases": "A kept reference about using Markdown to make saved links portable and searchable.",
+    "Markdown archive patterns that survive app churn": "A deep Pearl for the long-term archive: plain Markdown, stable URLs, and future agent readability.",
+    "Design systems bookmark audit": "A curated product research source about cleaning up design system bookmarks.",
+    "Design system component checklist": "An unreviewed same-domain candidate that garden suggestions can connect to Product Research.",
+    "SQLite full text search notes": "A technical Drop about local search that should remain available without a backend.",
+    "Searchable personal archives with plain files": "A deep reference about search, plain files, and local archive durability.",
+    "Noise article with vague productivity tricks": "A discarded example showing that MemoReef tracks negative taste as well as good sources.",
+    "Outdated launch rumor": "A discarded stale link that should not pollute agent context.",
+    "Local AI agent playbook for research teams duplicate": "A duplicate-looking Drift Drop saved from another channel, useful for duplicate reports.",
+    "MemoReef pricing research spreadsheet": "A local file URL representing private research that must never leave the machine.",
+}
+
+
+def replace_markdown_section(body: str, heading: str, replacement: str) -> str:
+    pattern = re.compile(rf"(^## {re.escape(heading)}\n)(.*?)(?=^## |\Z)", re.MULTILINE | re.DOTALL)
+    return pattern.sub(rf"\1\n{replacement.strip()}\n\n", body)
+
+
+def enrich_demo_drop(path: Path, vault: Path) -> None:
+    content = path.read_text(encoding="utf-8", errors="replace")
+    frontmatter, body = parse_markdown_frontmatter(content)
+    title = str(frontmatter.get("title") or path.stem)
+    updates: dict[str, object] = {
+        "demo": True,
+        "metadata_status": "demo",
+        "metadata_refreshed_at": DEMO_REVIEWED_AT,
+    }
+    updates.update(DEMO_METADATA.get(title, {}))
+    summary = DEMO_SUMMARIES.get(title, "A sample saved link in the MemoReef demo vault.")
+    body = replace_markdown_section(body, "Summary", summary)
+    body = replace_markdown_section(
+        body,
+        "Notes",
+        "\n".join(
+            [
+                "- Demo Drop: realistic but fictional source.",
+                "- Shows how saved links become searchable Markdown with review state.",
+                "- Safe to inspect locally; no network or AI call is required.",
+            ]
+        ),
+    )
+    body = replace_markdown_section(
+        body,
+        "Agent Brief",
+        "\n".join(
+            [
+                f"- Status: {frontmatter.get('status', 'drift')}",
+                f"- Pearl: {'yes' if frontmatter.get('pearl') is True else 'no'}",
+                "- Use the frontmatter, summary, tags, projects, and shoals as local context.",
+                f"- Relative path: {path.resolve().relative_to(vault.resolve()).as_posix()}",
+            ]
+        ),
+    )
+    path.write_text(update_markdown_frontmatter(f"---\n---\n{body}", {**frontmatter, **updates}), encoding="utf-8")
+
+
+def write_demo_decisions(vault: Path, root: str, review_session: Path) -> Path:
+    drops = load_drop_items(vault, root)
+    decisions: list[dict[str, str]] = []
+    wanted = {
+        "Local AI agent playbook for research teams": "pearl",
+        "How small teams build local knowledge bases": "keep",
+        "Noise article with vague productivity tricks": "sink",
+    }
+    for drop in drops:
+        title = str(drop.get("title") or "")
+        decision = wanted.get(title)
+        if decision:
+            decisions.append({"path": str(drop.get("path") or ""), "decision": decision})
+    path = vault / "memoreef-demo-review-decisions.json"
+    payload = {
+        "version": 1,
+        "reviewed_at": DEMO_REVIEWED_AT,
+        "review_session": str(review_session),
+        "decisions": decisions,
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def cleanup_previous_demo_files(vault: Path, root: str) -> None:
+    root_path = vault / root
+    drops_dir = root_path / "Drops"
+    if drops_dir.exists():
+        for path in sorted(drops_dir.glob("*.md")):
+            frontmatter, _body = parse_markdown_frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+            if frontmatter.get("demo") is True:
+                path.unlink()
+
+    known_files = [
+        root_path / "DEMO_README.md",
+        root_path / "app" / "index.html",
+        root_path / "app" / "library.html",
+        root_path / "review-sessions" / "demo-review-session.json",
+        root_path / "reports" / "demo-duplicate-report.json",
+        root_path / "reports" / "demo-garden-suggestions.json",
+        root_path / "search" / "demo-search-results.json",
+        root_path / "agent-plans" / "demo-agent-finish-plan.json",
+        root_path / "agent-plans" / "demo-agent-proposals.json",
+        vault / "memoreef-demo-review-decisions.json",
+    ]
+    for path in known_files:
+        if path.exists() and path.is_file():
+            path.unlink()
+
+
+def demo_readme_text(vault: Path, root: str, artifacts: dict[str, Path]) -> str:
+    root_path = vault / root
+    rel = {name: path.resolve().relative_to(vault.resolve()).as_posix() for name, path in artifacts.items()}
+    return f"""# MemoReef Demo Vault
+
+MemoReef is a local-first Markdown archive for saved links and bookmarks. It turns a messy browser backlog into plain-text Drops with review status, tags, projects, shoals, metadata, reports, search output, and agent-readable context.
+
+## What problem this solves
+
+Saved links usually become a junk drawer: duplicates, old rumors, private files, good references, and half-reviewed research all sit together. MemoReef keeps that material local, makes it reviewable, and records enough structure that a human or coding agent can understand what is worth keeping.
+
+## Open this first
+
+Open the static dashboard:
+
+```bash
+open {rel["dashboard"]}
+```
+
+Then open the local library page:
+
+```bash
+open {root}/app/library.html
+```
+
+Both pages are static files. There is no backend, account, network call, or AI call.
+
+## What is in this demo
+
+- At least 12 realistic sample Drops under `{root}/Drops`.
+- Mixed statuses: `drift`, `reef`, `deep`, and `discarded`.
+- Pearl examples for high-value saved links.
+- Projects, shoals, folders, tags, hostnames, titles, descriptions, and canonical URLs.
+- Duplicate and same-domain examples for local reports.
+- A review session JSON: `{rel["review_session"]}`.
+- A duplicate report: `{rel["duplicate_report"]}`.
+- Garden suggestions: `{rel["garden_suggestions"]}`.
+- A search result: `{rel["search_results"]}`.
+- A demo review-decisions file and agent finish artifacts: `{rel["decisions"]}`, `{rel["agent_plan"]}`, `{rel["agent_proposals"]}`.
+
+## Local workflow
+
+1. Import: real usage starts with `import`, `import-links`, or `import-csv`. This demo preloads sample Drops so you can inspect the result immediately.
+2. Review: run `export-review-session` and open Review Mode to mark Drops as keep, Pearl, or sink.
+3. Agent finish: exported decisions become taste examples for `plan-agent-finish` and `draft-agent-proposals`.
+4. Search/library: run `search-library` to create local JSON search results, then open `MemoReef/app/library.html`.
+
+## Why local Markdown matters
+
+The core archive is readable without MemoReef. Each Drop is a Markdown file with frontmatter, a source URL, a summary, notes, and an agent brief. That means your saved research can be searched, backed up, synced, edited, reviewed, or handed to another local tool without exporting from a hosted service.
+
+## Prototype vs production-ready
+
+This demo is production-shaped but still a prototype. The sample data is fictional, metadata is prefilled instead of fetched, and the app is static HTML. The local file workflow, Markdown Drops, review sessions, reports, garden suggestions, search results, and agent finish artifacts are real CLI outputs generated without network access.
+
+Generated vault root: `{root_path}`
+"""
+
+
+def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]:
+    vault = output.expanduser().resolve()
+    vault.mkdir(parents=True, exist_ok=True)
+    cleanup_previous_demo_files(vault, root)
+    written = write_bookmarks_to_vault(demo_bookmarks(), vault, root, allow_duplicates=True)
+    for path in written:
+        enrich_demo_drop(path, vault)
+
+    root_path = vault / root
+    review_session, review_payload = export_review_session(
+        vault,
+        root,
+        root_path / "review-sessions" / "demo-review-session.json",
+        filters=default_review_filters(status=["drift"], limit=8),
+    )
+    duplicate_report, duplicate_payload = create_duplicate_report(vault, root, root_path / "reports" / "demo-duplicate-report.json")
+    garden_suggestions, garden_payload = create_garden_suggestions_report(vault, root, root_path / "reports" / "demo-garden-suggestions.json")
+    search_results, search_payload = search_library(
+        vault,
+        "agent workflow markdown search",
+        root,
+        root_path / "search" / "demo-search-results.json",
+        filters=default_review_filters(limit=10),
+    )
+    decisions = write_demo_decisions(vault, root, review_session)
+    agent_plan, plan_payload, _plan_warnings = build_agent_finish_plan(
+        vault,
+        decisions,
+        root,
+        root_path / "agent-plans" / "demo-agent-finish-plan.json",
+    )
+    agent_proposals, proposals_payload, _proposal_warnings = draft_agent_proposals(
+        agent_plan,
+        root_path / "agent-plans" / "demo-agent-proposals.json",
+    )
+    dashboard = generate_app_dashboard(vault, root)
+
+    artifacts = {
+        "dashboard": dashboard,
+        "review_session": review_session,
+        "duplicate_report": duplicate_report,
+        "garden_suggestions": garden_suggestions,
+        "search_results": search_results,
+        "decisions": decisions,
+        "agent_plan": agent_plan,
+        "agent_proposals": agent_proposals,
+    }
+    readme = vault / root / "DEMO_README.md"
+    readme.write_text(demo_readme_text(vault, root, artifacts), encoding="utf-8")
+
+    return {
+        "vault": vault,
+        "root": root,
+        "drops": len(written),
+        "review_items": review_payload["stats"]["total"],
+        "duplicate_groups": duplicate_payload["summary"]["exact_url_groups"],
+        "garden_suggestions": garden_payload["summary"]["suggestions"],
+        "search_matches": search_payload["summary"]["matches"],
+        "agent_proposals": proposals_payload["summary"]["proposed"],
+        "dashboard": dashboard,
+        "readme": readme,
+    }
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -2134,6 +2541,10 @@ def build_parser() -> argparse.ArgumentParser:
     app_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     app_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
 
+    demo_cmd = sub.add_parser("demo", help="Create a complete local MemoReef demo vault.")
+    demo_cmd.add_argument("--output", type=Path, required=True, help="Directory where the demo vault should be created.")
+    demo_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the demo vault. Default: MemoReef")
+
     return parser
 
 
@@ -2400,6 +2811,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "app":
         output = generate_app_dashboard(args.vault, args.root)
         print(f"Generated MemoReef app dashboard: {output}")
+        return 0
+
+    if args.command == "demo":
+        summary = create_demo_vault(args.output, args.root)
+        print("Created MemoReef demo vault:")
+        print(f"- vault: {summary['vault']}")
+        print(f"- drops: {summary['drops']}")
+        print(f"- review session items: {summary['review_items']}")
+        print(f"- exact duplicate groups: {summary['duplicate_groups']}")
+        print(f"- garden suggestions: {summary['garden_suggestions']}")
+        print(f"- search matches: {summary['search_matches']}")
+        print(f"- agent proposals: {summary['agent_proposals']}")
+        print(f"- dashboard: {summary['dashboard']}")
+        print(f"- readme: {summary['readme']}")
         return 0
 
     parser.error("unknown command")

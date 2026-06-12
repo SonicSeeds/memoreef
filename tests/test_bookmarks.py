@@ -8,7 +8,7 @@ import unittest
 import urllib.error
 from unittest.mock import patch
 
-from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, update_markdown_frontmatter, write_bookmarks_to_vault
+from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, parse_markdown_frontmatter, update_markdown_frontmatter, write_bookmarks_to_vault
 from memoreef.cli import main
 
 
@@ -1042,6 +1042,60 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertIn("Import bookmarks", html)
             self.assertIn("Total Drops", html)
+
+    def test_demo_command_creates_complete_demo_vault(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            output_path = Path(tmp) / "memoreef-demo"
+
+            with redirect_stdout(stdout):
+                result = main(["demo", "--output", str(output_path)])
+
+            root = output_path / "MemoReef"
+            drops = sorted((root / "Drops").glob("*.md"))
+            readme = root / "DEMO_README.md"
+            dashboard = root / "app" / "index.html"
+            library = root / "app" / "library.html"
+            review_sessions = list((root / "review-sessions").glob("*-review-session.json"))
+            duplicate_reports = list((root / "reports").glob("*-duplicate-report.json"))
+            garden_reports = list((root / "reports").glob("*-garden-suggestions.json"))
+            search_results = list((root / "search").glob("*-search-results.json"))
+            agent_plans = list((root / "agent-plans").glob("*-agent-finish-plan.json"))
+            agent_proposals = list((root / "agent-plans").glob("*-agent-proposals.json"))
+
+            statuses = set()
+            pearls = 0
+            combined_text = ""
+            for drop in drops:
+                text = drop.read_text(encoding="utf-8")
+                combined_text += text
+                frontmatter, _body = parse_markdown_frontmatter(text)
+                statuses.add(frontmatter.get("status"))
+                if frontmatter.get("pearl") is True:
+                    pearls += 1
+
+            self.assertEqual(result, 0)
+            self.assertGreaterEqual(len(drops), 12)
+            self.assertTrue({"drift", "reef", "deep", "discarded"}.issubset(statuses))
+            self.assertGreaterEqual(pearls, 2)
+            self.assertTrue(readme.exists())
+            self.assertTrue(dashboard.exists())
+            self.assertTrue(library.exists())
+            self.assertTrue(review_sessions)
+            self.assertTrue(duplicate_reports)
+            self.assertTrue(garden_reports)
+            self.assertTrue(search_results)
+            self.assertTrue(agent_plans)
+            self.assertTrue(agent_proposals)
+            self.assertTrue((output_path / "memoreef-demo-review-decisions.json").exists())
+            self.assertIn("projects:", combined_text)
+            self.assertIn("shoals:", combined_text)
+            self.assertIn("tags:", combined_text)
+            self.assertIn("hostname:", combined_text)
+            self.assertIn("page_title:", combined_text)
+            self.assertIn("Created MemoReef demo vault:", stdout.getvalue())
+            self.assertIn("what problem this solves", readme.read_text(encoding="utf-8").lower())
+            self.assertIn("Library/Search", library.read_text(encoding="utf-8"))
 
     def test_app_command_detects_existing_review_and_proposal_files(self):
         stdout = io.StringIO()

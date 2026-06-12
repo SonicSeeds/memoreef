@@ -160,6 +160,16 @@ python3 -m memoreef.cli search-library --vault /tmp/memoreef-vault --query "auto
 
 Library search is local-only and read-only. It searches Markdown Drops and writes JSON results under `MemoReef/search` unless `--output` is provided.
 
+Create a complete local demo vault:
+
+```bash
+python3 -m memoreef.cli demo --output /tmp/memoreef-demo
+open /tmp/memoreef-demo/MemoReef/DEMO_README.md
+open /tmp/memoreef-demo/MemoReef/app/index.html
+```
+
+The demo command writes fictional sample Drops and generates local review, duplicate, garden, search, agent-plan, and static app artifacts. It does not use a backend, network call, AI call, or secrets.
+
 Review Mode can export `memoreef-review-decisions.json` from the browser. The CLI can apply those decisions back to Markdown frontmatter.
 
 Apply exported Review Mode decisions back to Markdown Drop frontmatter:
