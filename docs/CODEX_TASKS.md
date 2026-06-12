@@ -350,3 +350,27 @@ Make MemoReef feel like a usable local app by generating a static dashboard for 
 - The dashboard handles empty vaults.
 - The dashboard detects existing local review and proposal files.
 - The dashboard contains Review Mode and Agent proposals guidance.
+
+## Task 13 — Apply agent proposals to Markdown Drops
+
+### Goal
+Complete the local agent finish loop by applying accepted agent proposal JSON back to Drop frontmatter.
+
+### Requirements
+
+- Add `python3 -m memoreef.cli apply-agent-proposals --vault <vault> --proposals <agent-proposals.json>`.
+- Support `--dry-run`.
+- Skip proposals marked `requires_user_review: true` by default.
+- Support `--include-needs-review` to apply those proposals deliberately.
+- Update only `status`, `pearl`, `priority`, `note_location`, `agent_proposed_at`, and `agent_confidence`.
+- Prevent path traversal.
+- Do not move or delete files.
+- Do not apply rationale into Markdown.
+- Do not overwrite tags from `suggested_tags`.
+
+### Acceptance criteria
+
+- Accepted proposals update Markdown Drop frontmatter.
+- Dry run reports proposed updates without modifying Markdown.
+- Missing files, malformed proposals, invalid statuses, and path traversal warn and skip.
+- Existing frontmatter fields and Markdown body are preserved.

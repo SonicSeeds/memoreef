@@ -477,6 +477,101 @@ def draft_agent_proposals(plan: Path, output: Path | None = None) -> tuple[Path,
     return output, proposal_payload, warnings
 
 
+def apply_agent_proposals(
+    vault: Path,
+    proposals: Path,
+    root: str = "MemoReef",
+    dry_run: bool = False,
+    include_needs_review: bool = False,
+) -> tuple[int, int, list[str]]:
+    vault_path = vault.expanduser().resolve()
+    proposals_path = proposals.expanduser().resolve()
+    payload = json.loads(proposals_path.read_text(encoding="utf-8"))
+    proposal_items = payload.get("proposals")
+
+    warnings: list[str] = []
+    updated = 0
+    skipped = 0
+
+    if not isinstance(proposal_items, list):
+        return 0, 1, ["proposals must be a list"]
+
+    for index, item in enumerate(proposal_items, start=1):
+        if not isinstance(item, dict):
+            skipped += 1
+            warnings.append(f"proposal {index}: malformed proposal")
+            continue
+
+        raw_path = item.get("path")
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            skipped += 1
+            warnings.append(f"proposal {index}: missing path")
+            continue
+
+        if item.get("requires_user_review") is True and not include_needs_review:
+            skipped += 1
+            continue
+
+        proposed_status = item.get("proposed_status")
+        if proposed_status not in {"reef", "discarded", "drift"}:
+            skipped += 1
+            warnings.append(f"{raw_path}: unsupported proposed_status")
+            continue
+
+        proposed_pearl = item.get("proposed_pearl")
+        if not isinstance(proposed_pearl, bool):
+            warnings.append(f"{raw_path}: proposed_pearl must be boolean; using false")
+            proposed_pearl = False
+
+        relative_path = Path(raw_path)
+        if relative_path.is_absolute():
+            skipped += 1
+            warnings.append(f"{raw_path}: path must be relative to the vault")
+            continue
+
+        target = (vault_path / relative_path).resolve()
+        try:
+            target.relative_to(vault_path)
+        except ValueError:
+            skipped += 1
+            warnings.append(f"{raw_path}: path is outside the vault")
+            continue
+
+        if target.suffix != ".md":
+            skipped += 1
+            warnings.append(f"{raw_path}: not a Markdown Drop")
+            continue
+        if not target.exists():
+            skipped += 1
+            warnings.append(f"{raw_path}: file not found")
+            continue
+
+        priority = item.get("priority")
+        if not isinstance(priority, str) or not priority.strip():
+            priority = "normal" if proposed_status == "reef" else "low"
+        note_location = item.get("suggested_note_location")
+        if not isinstance(note_location, str) or not note_location.strip():
+            note_location = "MemoReef/Pearls" if proposed_pearl else "MemoReef/Reef" if proposed_status == "reef" else "MemoReef/Discarded" if proposed_status == "discarded" else "MemoReef/Drops"
+        confidence = item.get("confidence")
+        if not isinstance(confidence, str) or not confidence.strip():
+            confidence = "unknown"
+
+        updates = {
+            "status": proposed_status,
+            "pearl": proposed_pearl,
+            "priority": priority,
+            "note_location": note_location,
+            "agent_proposed_at": utc_now_iso(),
+            "agent_confidence": confidence,
+        }
+        if not dry_run:
+            content = target.read_text(encoding="utf-8", errors="replace")
+            target.write_text(update_markdown_frontmatter(content, updates), encoding="utf-8")
+        updated += 1
+
+    return updated, skipped, warnings
+
+
 def latest_file(paths: list[Path]) -> Path | None:
     existing = [path for path in paths if path.exists()]
     if not existing:
@@ -560,7 +655,7 @@ def recommended_next_action(
     if latest_agent_plan is not None and latest_agent_proposals is None:
         return "Draft agent proposals from the latest agent finish plan."
     if latest_agent_proposals is not None:
-        return "Review the latest Agent proposals. Applying proposals is a future task."
+        return "Dry run apply-agent-proposals, then apply accepted Agent proposals."
     return "Continue reviewing Drift Drops in Review Mode."
 
 
@@ -654,6 +749,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <li>Export decisions from Review Mode, then run <code>apply-review-decisions</code>.</li>
           <li>Create an agent finish plan with <code>plan-agent-finish</code>.</li>
           <li>Draft Agent proposals with <code>draft-agent-proposals</code>.</li>
+          <li>Dry run accepted Agent proposal updates with <code>apply-agent-proposals --dry-run</code>, then apply deliberately.</li>
         </ol>
       </div>
       <div class=\"card\">
@@ -721,6 +817,13 @@ def build_parser() -> argparse.ArgumentParser:
     proposals_cmd = sub.add_parser("draft-agent-proposals", help="Draft proposals from an agent finish plan.")
     proposals_cmd.add_argument("--plan", type=Path, required=True, help="Agent finish plan JSON.")
     proposals_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults next to the plan.")
+
+    apply_proposals_cmd = sub.add_parser("apply-agent-proposals", help="Apply accepted agent proposal JSON to Markdown Drops.")
+    apply_proposals_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    apply_proposals_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    apply_proposals_cmd.add_argument("--proposals", type=Path, required=True, help="Agent proposals JSON from draft-agent-proposals.")
+    apply_proposals_cmd.add_argument("--dry-run", action="store_true", help="Preview updates without modifying Markdown files.")
+    apply_proposals_cmd.add_argument("--include-needs-review", action="store_true", help="Also apply proposals marked requires_user_review.")
 
     app_cmd = sub.add_parser("app", help="Generate a static MemoReef local app dashboard.")
     app_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -807,6 +910,26 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- needs review: {needs_review}")
         print(f"- warnings: {len(warnings)}")
         print(f"- output: {output}")
+        for warning in warnings:
+            print(f"  - {warning}")
+        return 0
+
+    if args.command == "apply-agent-proposals":
+        updated, skipped, warnings = apply_agent_proposals(
+            args.vault,
+            args.proposals,
+            args.root,
+            args.dry_run,
+            args.include_needs_review,
+        )
+        if args.dry_run:
+            print("Dry run agent proposals:")
+            print(f"- would update: {updated}")
+        else:
+            print("Applied agent proposals:")
+            print(f"- updated: {updated}")
+        print(f"- skipped: {skipped}")
+        print(f"- warnings: {len(warnings)}")
         for warning in warnings:
             print(f"  - {warning}")
         return 0

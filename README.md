@@ -162,7 +162,16 @@ Draft agent proposals from an agent finish plan:
 python3 -m memoreef.cli draft-agent-proposals --plan /tmp/agent-finish-plan.json
 ```
 
-The agent proposals JSON suggests status, Pearl state, confidence, priority, note location, and rationale for each remaining Drop using deterministic local heuristics. It does not modify Markdown; applying proposals is a future task.
+The agent proposals JSON suggests status, Pearl state, confidence, priority, note location, and rationale for each remaining Drop using deterministic local heuristics.
+
+Apply accepted agent proposals back to Markdown Drop frontmatter:
+
+```bash
+python3 -m memoreef.cli apply-agent-proposals --vault /tmp/memoreef-vault --proposals /tmp/agent-proposals.json --dry-run
+python3 -m memoreef.cli apply-agent-proposals --vault /tmp/memoreef-vault --proposals /tmp/agent-proposals.json
+```
+
+Proposals marked `requires_user_review: true` are skipped by default. Pass `--include-needs-review` to apply them deliberately. This updates frontmatter only and does not move, delete, or retag files.
 
 Generate the static local app dashboard:
 

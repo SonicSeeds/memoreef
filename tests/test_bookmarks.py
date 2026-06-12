@@ -758,6 +758,123 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("2026-06-12-121000-agent-finish-plan.json", html)
             self.assertIn("2026-06-12-122000-agent-proposals.json", html)
 
+    def write_proposals(self, path: Path, vault_path: Path, proposals):
+        normalized = []
+        for drop_path, status, pearl, requires_review, extra in proposals:
+            item = {
+                "id": str(drop_path.resolve().relative_to(vault_path.resolve())),
+                "path": str(drop_path.resolve().relative_to(vault_path.resolve())),
+                "proposed_status": status,
+                "proposed_pearl": pearl,
+                "confidence": extra.get("confidence", "high"),
+                "priority": extra.get("priority", "normal"),
+                "suggested_note_location": extra.get("suggested_note_location", "MemoReef/Reef"),
+                "suggested_tags": extra.get("suggested_tags", ["ignored"]),
+                "requires_user_review": requires_review,
+            }
+            normalized.append(item)
+        path.write_text(json.dumps({"version": 1, "proposals": normalized}), encoding="utf-8")
+
+    def test_apply_agent_proposals_updates_frontmatter(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Example", "https://example.com", tags=["original"], folders=["Inbox"])], vault_path)
+            proposals_path = Path(tmp) / "agent-proposals.json"
+            self.write_proposals(proposals_path, vault_path, [(written[0], "reef", False, False, {"priority": "normal", "suggested_note_location": "MemoReef/Reef", "confidence": "high", "suggested_tags": ["new-tag"]})])
+
+            with redirect_stdout(stdout):
+                result = main(["apply-agent-proposals", "--vault", str(vault_path), "--proposals", str(proposals_path)])
+
+            text = written[0].read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("status: reef", text)
+            self.assertIn("pearl: false", text)
+            self.assertIn('priority: "normal"', text)
+            self.assertIn('note_location: "MemoReef/Reef"', text)
+            self.assertIn("agent_proposed_at:", text)
+            self.assertIn('agent_confidence: "high"', text)
+            self.assertIn('  - "original"', text)
+            self.assertNotIn("new-tag", text)
+            self.assertIn("# Example", text)
+
+    def test_apply_agent_proposals_pearl_and_discarded(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Pearl", "https://pearl.example"), Bookmark("Noise", "https://noise.example")], vault_path)
+            proposals_path = Path(tmp) / "agent-proposals.json"
+            self.write_proposals(proposals_path, vault_path, [
+                (written[0], "reef", True, False, {"priority": "high", "suggested_note_location": "MemoReef/Pearls"}),
+                (written[1], "discarded", False, False, {"priority": "low", "suggested_note_location": "MemoReef/Discarded"}),
+            ])
+
+            with redirect_stdout(stdout):
+                result = main(["apply-agent-proposals", "--vault", str(vault_path), "--proposals", str(proposals_path)])
+
+            self.assertEqual(result, 0)
+            self.assertIn("status: reef", written[0].read_text(encoding="utf-8"))
+            self.assertIn("pearl: true", written[0].read_text(encoding="utf-8"))
+            self.assertIn("status: discarded", written[1].read_text(encoding="utf-8"))
+            self.assertIn("pearl: false", written[1].read_text(encoding="utf-8"))
+
+    def test_apply_agent_proposals_dry_run_and_needs_review(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Review", "https://review.example")], vault_path)
+            before = written[0].read_text(encoding="utf-8")
+            proposals_path = Path(tmp) / "agent-proposals.json"
+            self.write_proposals(proposals_path, vault_path, [(written[0], "reef", False, True, {})])
+
+            with redirect_stdout(stdout):
+                dry_result = main(["apply-agent-proposals", "--vault", str(vault_path), "--proposals", str(proposals_path), "--dry-run", "--include-needs-review"])
+            self.assertEqual(dry_result, 0)
+            self.assertEqual(written[0].read_text(encoding="utf-8"), before)
+            self.assertIn("Dry run agent proposals", stdout.getvalue())
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                skipped_result = main(["apply-agent-proposals", "--vault", str(vault_path), "--proposals", str(proposals_path)])
+            self.assertEqual(skipped_result, 0)
+            self.assertIn("- skipped: 1", stdout.getvalue())
+            self.assertEqual(written[0].read_text(encoding="utf-8"), before)
+
+            with redirect_stdout(io.StringIO()):
+                applied_result = main(["apply-agent-proposals", "--vault", str(vault_path), "--proposals", str(proposals_path), "--include-needs-review"])
+            self.assertEqual(applied_result, 0)
+            self.assertIn("status: reef", written[0].read_text(encoding="utf-8"))
+
+    def test_apply_agent_proposals_missing_traversal_and_invalid_status_warn(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            outside = Path(tmp) / "outside.md"
+            outside.write_text("outside", encoding="utf-8")
+            written = write_bookmarks_to_vault([Bookmark("Bad", "https://bad.example")], vault_path)
+            before = outside.read_text(encoding="utf-8")
+            proposals_path = Path(tmp) / "agent-proposals.json"
+            payload = {
+                "version": 1,
+                "proposals": [
+                    {"path": "MemoReef/Drops/missing.md", "proposed_status": "reef", "proposed_pearl": False, "requires_user_review": False},
+                    {"path": "../outside.md", "proposed_status": "reef", "proposed_pearl": False, "requires_user_review": False},
+                    {"path": str(written[0].resolve().relative_to(vault_path.resolve())), "proposed_status": "bogus", "proposed_pearl": False, "requires_user_review": False},
+                ],
+            }
+            proposals_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                result = main(["apply-agent-proposals", "--vault", str(vault_path), "--proposals", str(proposals_path)])
+
+            self.assertEqual(result, 0)
+            self.assertEqual(outside.read_text(encoding="utf-8"), before)
+            output = stdout.getvalue()
+            self.assertIn("- skipped: 3", output)
+            self.assertIn("file not found", output)
+            self.assertIn("outside the vault", output)
+            self.assertIn("unsupported proposed_status", output)
+
 
 if __name__ == "__main__":
     unittest.main()
