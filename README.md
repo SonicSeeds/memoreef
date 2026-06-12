@@ -149,6 +149,17 @@ python3 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault --stat
 
 Filtered review sessions are local-only and do not modify files. Different filter groups combine together, while repeated values inside one group broaden that group.
 
+Search your local library:
+
+```bash
+python3 -m memoreef.cli search-library --vault /tmp/memoreef-vault --query "agent workflow"
+python3 -m memoreef.cli search-library --vault /tmp/memoreef-vault --query "workflow" --project "AI Agents"
+python3 -m memoreef.cli search-library --vault /tmp/memoreef-vault --query "research" --pearl-only
+python3 -m memoreef.cli search-library --vault /tmp/memoreef-vault --query "automation" --status drift --exclude-status discarded
+```
+
+Library search is local-only and read-only. It searches Markdown Drops and writes JSON results under `MemoReef/search` unless `--output` is provided.
+
 Review Mode can export `memoreef-review-decisions.json` from the browser. The CLI can apply those decisions back to Markdown frontmatter.
 
 Apply exported Review Mode decisions back to Markdown Drop frontmatter:

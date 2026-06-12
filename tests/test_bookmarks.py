@@ -511,6 +511,140 @@ class BookmarkImportTests(unittest.TestCase):
         self.assertIn("Task 19", tasks)
         self.assertIn("Filtered review sessions", tasks)
 
+    def search_library_data(self, vault_path: Path, *args: str):
+        stdout = io.StringIO()
+        output_path = vault_path.parent / "search-results.json"
+        with redirect_stdout(stdout):
+            result = main(["search-library", "--vault", str(vault_path), "--query", "agent workflow", "--output", str(output_path), *args])
+        return result, stdout.getvalue(), json.loads(output_path.read_text(encoding="utf-8"))
+
+    def append_drop_body(self, path: Path, text: str) -> None:
+        path.write_text(path.read_text(encoding="utf-8") + "\n" + text + "\n", encoding="utf-8")
+
+    def test_search_library_basic_title_and_ranking(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("Agent Workflow Guide", "https://title.example"),
+                Bookmark("Body Only", "https://body.example"),
+            ], vault_path, allow_duplicates=True)
+            self.append_drop_body(written[1], "agent workflow appears in the body")
+
+            result, output, data = self.search_library_data(vault_path)
+
+            self.assertEqual(result, 0)
+            self.assertEqual(data["query"], "agent workflow")
+            self.assertEqual(data["summary"]["matches"], 2)
+            self.assertEqual(data["items"][0]["title"], "Agent Workflow Guide")
+            self.assertIn("title", data["items"][0]["matched_fields"])
+            self.assertTrue(data["items"][0]["score"] > data["items"][1]["score"])
+            self.assertIn("Search library:", output)
+            self.assertIn("- filters: none", output)
+
+    def test_search_library_matches_body_summary_and_labels(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("Plain Body", "https://body.example"),
+                Bookmark("Label Source", "https://labels.example", projects=["AI Agents"], shoals=["Automation"], folders=["Inbox"], tags=["workflow"]),
+            ], vault_path, allow_duplicates=True)
+            self.append_drop_body(written[0], "A body-only agent workflow note.")
+
+            result, _output, data = self.search_library_data(vault_path)
+            fields = {item["title"]: set(item["matched_fields"]) for item in data["items"]}
+
+            self.assertEqual(result, 0)
+            self.assertIn("body", fields["Plain Body"])
+            self.assertTrue({"projects", "shoals", "tags"} & fields["Label Source"])
+
+    def test_search_library_matches_hostname_and_url(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("Host Match", "https://example.com/agent-workflow"),
+                Bookmark("Metadata Host", "https://wrong.example/elsewhere"),
+            ], vault_path, allow_duplicates=True)
+            self.update_drop_frontmatter(written[1], {"hostname": "agent-workflow.example"})
+
+            result, _output, data = self.search_library_data(vault_path)
+            titles = [item["title"] for item in data["items"]]
+
+            self.assertEqual(result, 0)
+            self.assertIn("Host Match", titles)
+            self.assertIn("Metadata Host", titles)
+
+    def test_search_library_filters_limit_pearl_and_exclude_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([
+                Bookmark("Agent Workflow Pearl", "https://one.example", projects=["AI Agents"], status="drift", pearl=True),
+                Bookmark("Agent Workflow Discarded", "https://two.example", projects=["AI Agents"], status="discarded", pearl=True),
+                Bookmark("Agent Workflow Other", "https://three.example", projects=["Other"], status="drift", pearl=True),
+            ], vault_path, allow_duplicates=True)
+
+            result, _output, data = self.search_library_data(
+                vault_path,
+                "--project",
+                "AI Agents",
+                "--pearl-only",
+                "--exclude-status",
+                "discarded",
+                "--limit",
+                "1",
+            )
+
+            self.assertEqual(result, 0)
+            self.assertEqual(len(data["items"]), 1)
+            self.assertEqual(data["items"][0]["title"], "Agent Workflow Pearl")
+            self.assertEqual(data["filters"]["project"], ["AI Agents"])
+            self.assertTrue(data["filters"]["pearl_only"])
+            self.assertEqual(data["filters"]["exclude_status"], ["discarded"])
+            self.assertEqual(data["filters"]["limit"], 1)
+
+    def test_search_library_default_output_under_search_and_explicit_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            explicit = Path(tmp) / "explicit-search.json"
+            write_bookmarks_to_vault([Bookmark("Agent Workflow", "https://example.com")], vault_path)
+
+            with redirect_stdout(io.StringIO()):
+                default_result = main(["search-library", "--vault", str(vault_path), "--query", "agent"])
+            with redirect_stdout(io.StringIO()):
+                explicit_result = main(["search-library", "--vault", str(vault_path), "--query", "agent", "--output", str(explicit)])
+
+            outputs = list((vault_path / "MemoReef" / "search").glob("*-search-results.json"))
+            self.assertEqual(default_result, 0)
+            self.assertEqual(explicit_result, 0)
+            self.assertEqual(len(outputs), 1)
+            self.assertTrue(explicit.exists())
+
+    def test_app_writes_library_page_and_dashboard_mentions_library_search(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([Bookmark("Agent Workflow", "https://example.com")], vault_path)
+            with redirect_stdout(io.StringIO()):
+                main(["search-library", "--vault", str(vault_path), "--query", "agent"])
+
+            with redirect_stdout(io.StringIO()):
+                result = main(["app", "--vault", str(vault_path)])
+
+            app_dir = vault_path / "MemoReef" / "app"
+            index = (app_dir / "index.html").read_text(encoding="utf-8")
+            library = (app_dir / "library.html").read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("Library/Search", index)
+            self.assertIn("library.html", index)
+            self.assertIn("search-library", library)
+            self.assertIn("Agent Workflow", library)
+
+    def test_readme_and_tasks_mention_search_library(self):
+        readme = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
+        tasks = (Path(__file__).parent.parent / "docs" / "CODEX_TASKS.md").read_text(encoding="utf-8")
+
+        self.assertIn("search-library", readme)
+        self.assertIn("Task 20", tasks)
+        self.assertIn("Library search", tasks)
+
     def write_decisions(self, path: Path, drop_path: Path, vault_path: Path, decision: str, reviewed_at: str = "2026-06-12T12:45:00Z"):
         relative = drop_path.resolve().relative_to(vault_path.resolve()).as_posix()
         payload = {

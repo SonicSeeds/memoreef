@@ -166,6 +166,13 @@ def review_hostname(drop: dict[str, object]) -> str:
     return (urlsplit(str(drop.get("url") or "")).hostname or "").lower()
 
 
+def review_filter_active(filters: dict[str, object]) -> bool:
+    return any(
+        bool(filters.get(key))
+        for key in ("project", "shoal", "status", "tag", "folder", "hostname", "pearl_only", "exclude_status", "limit")
+    )
+
+
 def review_filter_summary(filters: dict[str, object]) -> str:
     parts: list[str] = []
     labels = [
@@ -192,6 +199,17 @@ def review_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if str(item).strip() and str(item).strip() != "[]"]
+
+
+def search_filter_summary(filters: dict[str, object]) -> str:
+    summary_filters = dict(filters)
+    if summary_filters.get("limit") == 20:
+        summary_filters["limit"] = None
+    return review_filter_summary(summary_filters)
+
+
+def search_text_tokens(value: str) -> list[str]:
+    return [token for token in re.findall(r"[a-z0-9]+", value.casefold()) if token]
 
 
 def markdown_drop_to_filtered_review_item(path: Path, vault: Path) -> dict[str, object]:
@@ -234,6 +252,161 @@ def review_item_matches_filters(drop: dict[str, object], filters: dict[str, obje
     if exclude_statuses and normalized_match(drop.get("status", ""), exclude_statuses):
         return False
     return True
+
+
+def search_field_score(text: str, query_terms: list[str], weight: int) -> tuple[int, bool]:
+    normalized = text.casefold()
+    matched = sum(1 for term in query_terms if term in normalized)
+    phrase_bonus = 1 if " ".join(query_terms) in normalized and len(query_terms) > 1 else 0
+    return (matched + phrase_bonus) * weight, matched > 0 or phrase_bonus > 0
+
+
+def compact_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def search_snippet(texts: list[str], query_terms: list[str]) -> str:
+    haystack = compact_text(" ".join(text for text in texts if text))
+    if not haystack:
+        return ""
+    lower = haystack.casefold()
+    indexes = [lower.find(term) for term in query_terms if lower.find(term) >= 0]
+    if not indexes:
+        return haystack[:180]
+    start = max(0, min(indexes) - 60)
+    end = min(len(haystack), start + 180)
+    prefix = "..." if start > 0 else ""
+    suffix = "..." if end < len(haystack) else ""
+    return f"{prefix}{haystack[start:end]}{suffix}"
+
+
+def search_drop_item(path: Path, vault: Path) -> dict[str, object]:
+    item = markdown_drop_to_filtered_review_item(path, vault)
+    frontmatter, body = parse_markdown_frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+    item["page_description"] = str(frontmatter.get("page_description") or "")
+    item["body"] = body
+    return item
+
+
+def score_search_item(drop: dict[str, object], query_terms: list[str]) -> dict[str, object] | None:
+    matched_fields: list[str] = []
+    score = 0
+
+    title_score, matched = search_field_score(str(drop.get("title") or ""), query_terms, 8)
+    if matched:
+        matched_fields.append("title")
+    score += title_score
+
+    for field in ("projects", "shoals", "tags", "folders"):
+        values = drop.get(field, [])
+        text = " ".join(str(value) for value in values) if isinstance(values, list) else ""
+        field_score, matched = search_field_score(text, query_terms, 5)
+        if matched:
+            matched_fields.append(field)
+        score += field_score
+
+    hostname_url = f"{drop.get('hostname') or ''} {drop.get('url') or ''}"
+    host_score, matched = search_field_score(hostname_url, query_terms, 3)
+    if matched:
+        matched_fields.extend(["hostname", "url"])
+    score += host_score
+
+    summary_text = f"{drop.get('summary') or ''} {drop.get('page_description') or ''}"
+    summary_score, matched = search_field_score(summary_text, query_terms, 2)
+    if matched:
+        matched_fields.append("summary")
+    score += summary_score
+
+    body_score, matched = search_field_score(str(drop.get("body") or ""), query_terms, 1)
+    if matched:
+        matched_fields.append("body")
+    score += body_score
+
+    if score <= 0:
+        return None
+
+    return {
+        "id": drop.get("id", ""),
+        "path": drop.get("path", ""),
+        "title": drop.get("title", ""),
+        "url": drop.get("url", ""),
+        "hostname": drop.get("hostname", ""),
+        "status": drop.get("status", "drift"),
+        "pearl": bool(drop.get("pearl", False)),
+        "projects": drop.get("projects", []),
+        "shoals": drop.get("shoals", []),
+        "folders": drop.get("folders", []),
+        "tags": drop.get("tags", []),
+        "score": score,
+        "matched_fields": sorted(set(matched_fields)),
+        "snippet": search_snippet(
+            [
+                str(drop.get("title") or ""),
+                str(drop.get("summary") or ""),
+                str(drop.get("page_description") or ""),
+                str(drop.get("body") or ""),
+            ],
+            query_terms,
+        ),
+    }
+
+
+def search_library(
+    vault: Path,
+    query: str,
+    root: str = "MemoReef",
+    output: Path | None = None,
+    filters: dict[str, object] | None = None,
+) -> tuple[Path, dict[str, object]]:
+    vault_path = vault.expanduser().resolve()
+    filters = filters or default_review_filters(limit=20)
+    limit = filters.get("limit")
+    if not isinstance(limit, int) or limit < 0:
+        limit = 20
+        filters["limit"] = limit
+    query_terms = search_text_tokens(query)
+    drops_dir = vault_path / root / "Drops"
+    results: list[dict[str, object]] = []
+
+    if query_terms and drops_dir.exists():
+        for path in sorted(drops_dir.rglob("*.md")):
+            drop = search_drop_item(path, vault_path)
+            if not review_item_matches_filters(drop, filters):
+                continue
+            result = score_search_item(drop, query_terms)
+            if result is not None:
+                results.append(result)
+
+    results.sort(
+        key=lambda item: (
+            -int(item.get("score", 0)),
+            not bool(item.get("pearl", False)),
+            str(item.get("status") or "") != "drift",
+            str(item.get("path") or ""),
+        )
+    )
+    results = results[:limit]
+
+    if output is None:
+        output = vault_path / root / "search" / f"{timestamp_for_filename()}-search-results.json"
+    output = output.expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        "version": 1,
+        "created_at": utc_now_iso(),
+        "vault": str(vault_path),
+        "source": f"{root}/Drops",
+        "query": query,
+        "filters": filters,
+        "summary": {
+            "matches": len(results),
+            "limit": limit,
+        },
+        "items": results,
+    }
+    output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return output, payload
 
 
 def export_review_session(
@@ -1553,6 +1726,8 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
     latest_duplicate_report = latest_matching_file(root_path / "reports", ["*-duplicate-report.json"])
     latest_link_check_report = latest_matching_file(root_path / "reports", ["*-link-check-report.json"])
     latest_garden_suggestions = latest_matching_file(root_path / "reports", ["*-garden-suggestions.json"])
+
+    latest_search_results = latest_matching_file(root_path / "search", ["*-search-results.json"])
     has_metadata = vault_has_metadata(vault_path, root)
 
     return {
@@ -1572,6 +1747,8 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
         "latest_duplicate_report": latest_duplicate_report,
         "latest_link_check_report": latest_link_check_report,
         "latest_garden_suggestions": latest_garden_suggestions,
+
+        "latest_search_results": latest_search_results,
         "next_action": recommended_next_action(
             total,
             drift,
@@ -1638,6 +1815,8 @@ def render_app_dashboard(state: dict[str, object]) -> str:
     latest_duplicate_report = relative_or_none(state.get("latest_duplicate_report"), vault)
     latest_link_check_report = relative_or_none(state.get("latest_link_check_report"), vault)
     latest_garden_suggestions = relative_or_none(state.get("latest_garden_suggestions"), vault)
+
+    latest_search_results = relative_or_none(state.get("latest_search_results"), vault)
     next_action = html_escape(str(state.get("next_action", "Continue.")))
     vault_text = html_escape(str(vault))
 
@@ -1708,6 +1887,8 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <dt>Duplicate report</dt><dd>{html_escape(latest_duplicate_report)}</dd>
           <dt>Link check report</dt><dd>{html_escape(latest_link_check_report)}</dd>
           <dt>Garden suggestions</dt><dd>{html_escape(latest_garden_suggestions)}</dd>
+
+          <dt>Library search</dt><dd>{html_escape(latest_search_results)}</dd>
         </dl>
       </div>
       <div class=\"card workflow\">
@@ -1719,12 +1900,18 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <li>Run <code>refresh-metadata</code> to fetch titles, descriptions, canonical URLs, and hostnames.</li>
           <li>Run <code>suggest-gardens</code> to propose existing projects and shoals for unsorted Drops.</li>
           <li>Review the suggestions JSON, then run <code>apply-garden-suggestions --dry-run</code> before applying accepted labels.</li>
+
+          <li>Run <code>search-library</code> to search the local Library, then open <code>library.html</code>.</li>
           <li>Run <code>export-review-session</code> with optional filtered review queues like <code>--project</code>, <code>--shoal</code>, or <code>--pearl-only</code>, then open <code>site/swipe.html</code> for Review Mode.</li>
           <li>Export decisions from Review Mode, then run <code>apply-review-decisions</code>.</li>
           <li>Create an agent finish plan with <code>plan-agent-finish</code>.</li>
           <li>Draft Agent proposals with <code>draft-agent-proposals</code>.</li>
           <li>Dry run accepted Agent proposal updates with <code>apply-agent-proposals --dry-run</code>, then apply deliberately.</li>
         </ol>
+      </div>
+      <div class=\"card\">
+        <h2>Library/Search</h2>
+        <p>Open <a href=\"library.html\">library.html</a> for local search guidance and the latest saved search results.</p>
       </div>
       <div class=\"card\">
         <h2>Review Mode</h2>
@@ -1739,12 +1926,96 @@ def render_app_dashboard(state: dict[str, object]) -> str:
 """
 
 
+def latest_search_payload(vault: Path, root: str = "MemoReef") -> dict[str, object] | None:
+    path = latest_matching_file(vault / root / "search", ["*-search-results.json"])
+    if path is None:
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def render_library_page(vault: Path, root: str = "MemoReef") -> str:
+    payload = latest_search_payload(vault, root)
+    query = ""
+    matches = 0
+    items: list[object] = []
+    if payload is not None:
+        query = str(payload.get("query") or "")
+        summary = payload.get("summary", {})
+        if isinstance(summary, dict):
+            matches = int(summary.get("matches", 0))
+        raw_items = payload.get("items", [])
+        if isinstance(raw_items, list):
+            items = raw_items[:10]
+
+    result_cards = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        projects = ", ".join(str(value) for value in item.get("projects", [])) if isinstance(item.get("projects"), list) else ""
+        shoals = ", ".join(str(value) for value in item.get("shoals", [])) if isinstance(item.get("shoals"), list) else ""
+        pearl = "Pearl" if item.get("pearl") else "Drop"
+        result_cards.append(
+            f"""
+      <article class=\"result\">
+        <h2>{html_escape(str(item.get('title') or 'Untitled'))}</h2>
+        <p class=\"meta\">{html_escape(str(item.get('hostname') or ''))} · {html_escape(str(item.get('status') or 'drift'))} · {pearl}</p>
+        <p>{html_escape(str(item.get('snippet') or ''))}</p>
+        <p class=\"meta\">Projects: {html_escape(projects or 'none')} · Shoals: {html_escape(shoals or 'none')}</p>
+      </article>"""
+        )
+    results_html = "\n".join(result_cards) if result_cards else "<p>No saved search results yet.</p>"
+
+    return f"""<!doctype html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <title>MemoReef Library Search</title>
+  <style>
+    :root {{ color-scheme: dark; --bg:#06141c; --panel:#0d2330; --line:rgba(255,255,255,.14); --text:#eaf8fb; --muted:#9fb8c2; --pearl:#f6edd7; --green:#67f5d3; }}
+    * {{ box-sizing:border-box; }}
+    body {{ margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }}
+    main {{ width:min(920px, calc(100% - 32px)); margin:0 auto; padding:42px 0 56px; }}
+    a {{ color:var(--green); }}
+    h1 {{ font-size:clamp(36px, 7vw, 68px); margin:.2em 0; letter-spacing:-.06em; }}
+    p {{ color:var(--muted); line-height:1.55; }}
+    code {{ color:var(--pearl); }}
+    .panel, .result {{ border:1px solid var(--line); border-radius:20px; background:rgba(13,35,48,.78); padding:20px; margin:16px 0; }}
+    .result h2 {{ margin:0 0 6px; }}
+    .meta {{ color:var(--muted); font-size:14px; }}
+  </style>
+</head>
+<body>
+  <main>
+    <p><a href=\"index.html\">Back to dashboard</a></p>
+    <h1>Library/Search</h1>
+    <section class=\"panel\">
+      <p>Search your local Markdown Drops without a backend:</p>
+      <p><code>python3 -m memoreef.cli search-library --vault {html_escape(str(vault))} --query "agent workflow"</code></p>
+      <p>Use filters such as <code>--project</code>, <code>--shoal</code>, <code>--tag</code>, <code>--hostname</code>, <code>--pearl-only</code>, and <code>--exclude-status</code> to focus the Library.</p>
+    </section>
+    <section class=\"panel\">
+      <h2>Latest search</h2>
+      <p>Query: <code>{html_escape(query or 'none')}</code> · Matches: <strong>{matches}</strong></p>
+    </section>
+    {results_html}
+  </main>
+</body>
+</html>
+"""
+
+
 def generate_app_dashboard(vault: Path, root: str = "MemoReef") -> Path:
     vault_path = vault.expanduser().resolve()
     app_dir = vault_path / root / "app"
     app_dir.mkdir(parents=True, exist_ok=True)
     path = app_dir / "index.html"
     path.write_text(render_app_dashboard(dashboard_state(vault_path, root)), encoding="utf-8")
+    (app_dir / "library.html").write_text(render_library_page(vault_path, root), encoding="utf-8")
     return path
 
 
@@ -1784,7 +2055,23 @@ def build_parser() -> argparse.ArgumentParser:
     review_cmd.add_argument("--hostname", action="append", default=[], help="Include Drops with a matching hostname. Repeatable.")
     review_cmd.add_argument("--pearl-only", action="store_true", help="Include only Pearl Drops.")
     review_cmd.add_argument("--exclude-status", action="append", default=[], help="Exclude Drops with a matching status. Repeatable.")
+
     review_cmd.add_argument("--limit", type=int, default=None, help="Cap exported Drops after sorting and filtering.")
+
+    search_cmd = sub.add_parser("search-library", help="Search local Markdown Drops and write JSON results.")
+    search_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    search_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    search_cmd.add_argument("--query", required=True, help="Search query text.")
+    search_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults inside the vault.")
+    search_cmd.add_argument("--limit", type=int, default=20, help="Maximum number of matches. Default: 20")
+    search_cmd.add_argument("--project", action="append", default=[], help="Search Drops with a matching project. Repeatable.")
+    search_cmd.add_argument("--shoal", action="append", default=[], help="Search Drops with a matching shoal. Repeatable.")
+    search_cmd.add_argument("--status", action="append", default=[], help="Search Drops with a matching status. Repeatable.")
+    search_cmd.add_argument("--tag", action="append", default=[], help="Search Drops with a matching tag. Repeatable.")
+    search_cmd.add_argument("--folder", action="append", default=[], help="Search Drops with a matching folder. Repeatable.")
+    search_cmd.add_argument("--hostname", action="append", default=[], help="Search Drops with a matching hostname. Repeatable.")
+    search_cmd.add_argument("--pearl-only", action="store_true", help="Search only Pearl Drops.")
+    search_cmd.add_argument("--exclude-status", action="append", default=[], help="Exclude Drops with a matching status. Repeatable.")
 
     apply_cmd = sub.add_parser("apply-review-decisions", help="Apply Review Mode decision JSON to Markdown Drops.")
     apply_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -1898,12 +2185,35 @@ def main(argv: list[str] | None = None) -> int:
             limit=args.limit,
         )
         output, payload = export_review_session(args.vault, args.root, args.output, filters)
+
         stats = payload.get("stats", {})
         drops_count = stats.get("total", 0) if isinstance(stats, dict) else 0
         print("Exported review session:")
         print(f"- drops: {drops_count}")
         print(f"- output: {output}")
         print(f"- filters: {review_filter_summary(filters)}")
+        return 0
+
+    if args.command == "search-library":
+        filters = default_review_filters(
+            project=args.project,
+            shoal=args.shoal,
+            status=args.status,
+            tag=args.tag,
+            folder=args.folder,
+            hostname=args.hostname,
+            pearl_only=args.pearl_only,
+            exclude_status=args.exclude_status,
+            limit=args.limit,
+        )
+        output, payload = search_library(args.vault, args.query, args.root, args.output, filters)
+        summary = payload.get("summary", {})
+        matches = summary.get("matches", 0) if isinstance(summary, dict) else 0
+        print("Search library:")
+        print(f"- query: {args.query}")
+        print(f"- matches: {matches}")
+        print(f"- output: {output}")
+        print(f"- filters: {search_filter_summary(filters)}")
         return 0
 
     if args.command == "apply-review-decisions":

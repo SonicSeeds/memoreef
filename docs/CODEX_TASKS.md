@@ -508,6 +508,7 @@ Create focused review queues by filtering Drops during review session export.
 - AND different filter groups together and OR repeated values inside one group.
 - Apply exclusions after inclusions and limit after filtering/sorting.
 - Record filters in the review session JSON.
+- Keep the command local-only and read-only.
 - Mention filtered review export in the dashboard workflow.
 
 ### Acceptance criteria
@@ -516,3 +517,27 @@ Create focused review queues by filtering Drops during review session export.
 - Project, shoal, status, tag, folder, hostname, pearl, exclusion, and limit filters work.
 - CLI output includes a filter summary.
 - README and task docs explain filtered review sessions.
+
+## Task 20 — Library search
+
+### Goal
+Add a local Library/Search layer for finding useful Drops after import and review.
+
+### Requirements
+
+- Add `python3 -m memoreef.cli search-library --vault <vault> --query <text>`.
+- Search local Markdown Drops only.
+- Support the same main filters as filtered review sessions.
+- Rank matches deterministically by title, labels, host/url, and body/summary matches.
+- Write JSON search results under `MemoReef/search` by default.
+- Keep the command read-only and local-only.
+- Generate a static `MemoReef/app/library.html` page from `app`.
+- Link or mention Library/Search from the app dashboard.
+
+### Acceptance criteria
+
+- Search results include query, filters, summary, ranked items, matched fields, scores, and snippets.
+- Search can match title, body/summary, labels, hostname, and URL.
+- Filters combine with search.
+- `app` writes `library.html`.
+- README and docs mention `search-library`.
