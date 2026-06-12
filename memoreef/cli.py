@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+from html import escape as html_escape
 import json
 from pathlib import Path
 import re
@@ -476,6 +477,206 @@ def draft_agent_proposals(plan: Path, output: Path | None = None) -> tuple[Path,
     return output, proposal_payload, warnings
 
 
+def latest_file(paths: list[Path]) -> Path | None:
+    existing = [path for path in paths if path.exists()]
+    if not existing:
+        return None
+    return max(existing, key=lambda path: path.stat().st_mtime)
+
+
+def latest_matching_file(base: Path, patterns: list[str]) -> Path | None:
+    matches: list[Path] = []
+    if base.exists():
+        for pattern in patterns:
+            matches.extend(path for path in base.rglob(pattern) if path.is_file())
+    return latest_file(matches)
+
+
+def relative_or_none(path: object, base: Path) -> str:
+    if not isinstance(path, Path):
+        return "Not found yet"
+    try:
+        return path.resolve().relative_to(base.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
+    vault_path = vault.expanduser().resolve()
+    root_path = vault_path / root
+    drops = load_drop_items(vault_path, root)
+    total = len(drops)
+    drift = sum(1 for drop in drops if drop.get("status") == "drift")
+    reef = sum(1 for drop in drops if drop.get("status") == "reef")
+    discarded = sum(1 for drop in drops if drop.get("status") == "discarded")
+    pearls = sum(1 for drop in drops if bool(drop.get("pearl", False)))
+
+    latest_review_session = latest_matching_file(root_path / "review-sessions", ["*-review-session.json"])
+    latest_review_decisions = latest_matching_file(vault_path, ["*review-decisions*.json"])
+    latest_agent_plan = latest_matching_file(root_path / "agent-plans", ["*-agent-finish-plan.json"])
+    latest_agent_proposals = latest_matching_file(root_path / "agent-plans", ["*-agent-proposals.json"])
+
+    return {
+        "vault": vault_path,
+        "root": root,
+        "counts": {
+            "total": total,
+            "drift": drift,
+            "reef": reef,
+            "pearls": pearls,
+            "discarded": discarded,
+        },
+        "latest_review_session": latest_review_session,
+        "latest_review_decisions": latest_review_decisions,
+        "latest_agent_plan": latest_agent_plan,
+        "latest_agent_proposals": latest_agent_proposals,
+        "next_action": recommended_next_action(
+            total,
+            drift,
+            latest_review_session,
+            latest_review_decisions,
+            latest_agent_plan,
+            latest_agent_proposals,
+        ),
+    }
+
+
+def recommended_next_action(
+    total: int,
+    drift: int,
+    latest_review_session: Path | None,
+    latest_review_decisions: Path | None,
+    latest_agent_plan: Path | None,
+    latest_agent_proposals: Path | None,
+) -> str:
+    if total == 0:
+        return "Import bookmarks, a URL list, or a CSV file to create your first Drops."
+    if drift > 0 and latest_review_session is None:
+        return "Export a review session JSON, then open Review Mode."
+    if drift > 0 and latest_review_decisions is None:
+        return "Open Review Mode, review a sample, and export review decisions JSON."
+    if latest_review_decisions is not None and latest_agent_plan is None:
+        return "Apply review decisions, then create an agent finish plan."
+    if latest_agent_plan is not None and latest_agent_proposals is None:
+        return "Draft agent proposals from the latest agent finish plan."
+    if latest_agent_proposals is not None:
+        return "Review the latest Agent proposals. Applying proposals is a future task."
+    return "Continue reviewing Drift Drops in Review Mode."
+
+
+def render_app_dashboard(state: dict[str, object]) -> str:
+    vault = state["vault"]
+    if not isinstance(vault, Path):
+        vault = Path(str(vault))
+    root = str(state["root"])
+    counts = state.get("counts", {})
+    if not isinstance(counts, dict):
+        counts = {}
+
+    latest_review_session = relative_or_none(state.get("latest_review_session"), vault)
+    latest_review_decisions = relative_or_none(state.get("latest_review_decisions"), vault)
+    latest_agent_plan = relative_or_none(state.get("latest_agent_plan"), vault)
+    latest_agent_proposals = relative_or_none(state.get("latest_agent_proposals"), vault)
+    next_action = html_escape(str(state.get("next_action", "Continue.")))
+    vault_text = html_escape(str(vault))
+
+    def count(name: str) -> str:
+        return html_escape(str(counts.get(name, 0)))
+
+    return f"""<!doctype html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <title>MemoReef local app</title>
+  <style>
+    :root {{ color-scheme: dark; --bg:#06141c; --panel:#0d2330; --line:rgba(255,255,255,.14); --text:#eaf8fb; --muted:#9fb8c2; --pearl:#f6edd7; --green:#67f5d3; }}
+    * {{ box-sizing: border-box; }}
+    body {{ margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: radial-gradient(circle at top left, rgba(103,245,211,.16), transparent 26rem), var(--bg); color:var(--text); }}
+    main {{ width:min(1080px, calc(100% - 32px)); margin:0 auto; padding:42px 0 56px; }}
+    header {{ margin-bottom:24px; }}
+    .eyebrow {{ color:var(--green); text-transform:uppercase; letter-spacing:.16em; font-size:12px; font-weight:800; }}
+    h1 {{ margin:.25em 0 .1em; font-size:clamp(38px, 8vw, 78px); line-height:.9; letter-spacing:-.07em; }}
+    p {{ color:var(--muted); line-height:1.55; }}
+    code {{ color:var(--pearl); }}
+    .grid {{ display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:12px; margin:24px 0; }}
+    .stat, .card {{ border:1px solid var(--line); border-radius:24px; background:rgba(13,35,48,.78); box-shadow:0 18px 60px rgba(0,0,0,.24); }}
+    .stat {{ padding:18px; }}
+    .stat strong {{ display:block; font-size:34px; letter-spacing:-.05em; }}
+    .stat span {{ color:var(--muted); font-size:13px; }}
+    .sections {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }}
+    .card {{ padding:22px; }}
+    .card h2 {{ margin:0 0 10px; font-size:22px; letter-spacing:-.04em; }}
+    .next {{ border-color:rgba(103,245,211,.35); }}
+    dl {{ margin:0; display:grid; gap:10px; }}
+    dt {{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.12em; }}
+    dd {{ margin:0 0 8px; overflow-wrap:anywhere; }}
+    .workflow ol {{ margin:0; padding-left:20px; color:var(--muted); }}
+    .workflow li {{ margin:8px 0; }}
+    @media (max-width:760px) {{ .grid, .sections {{ grid-template-columns:1fr; }} }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class=\"eyebrow\">MemoReef local app</div>
+      <h1>Your source reef, locally visible.</h1>
+      <p>Vault: <code>{vault_text}</code> · Root: <code>{html_escape(root)}</code></p>
+    </header>
+
+    <section class=\"grid\" aria-label=\"MemoReef counts\">
+      <div class=\"stat\"><strong>{count('total')}</strong><span>Total Drops</span></div>
+      <div class=\"stat\"><strong>{count('drift')}</strong><span>Drift</span></div>
+      <div class=\"stat\"><strong>{count('reef')}</strong><span>Reef</span></div>
+      <div class=\"stat\"><strong>{count('pearls')}</strong><span>Pearls</span></div>
+      <div class=\"stat\"><strong>{count('discarded')}</strong><span>Discarded</span></div>
+    </section>
+
+    <section class=\"sections\">
+      <div class=\"card next\">
+        <h2>Next recommended action</h2>
+        <p>{next_action}</p>
+      </div>
+      <div class=\"card\">
+        <h2>Latest local artifacts</h2>
+        <dl>
+          <dt>Review session JSON</dt><dd>{html_escape(latest_review_session)}</dd>
+          <dt>Review decisions JSON</dt><dd>{html_escape(latest_review_decisions)}</dd>
+          <dt>Agent finish plan</dt><dd>{html_escape(latest_agent_plan)}</dd>
+          <dt>Agent proposals</dt><dd>{html_escape(latest_agent_proposals)}</dd>
+        </dl>
+      </div>
+      <div class=\"card workflow\">
+        <h2>Workflow</h2>
+        <ol>
+          <li>Import links into Markdown Drops.</li>
+          <li>Run <code>export-review-session</code> and open <code>site/swipe.html</code> for Review Mode.</li>
+          <li>Export decisions from Review Mode, then run <code>apply-review-decisions</code>.</li>
+          <li>Create an agent finish plan with <code>plan-agent-finish</code>.</li>
+          <li>Draft Agent proposals with <code>draft-agent-proposals</code>.</li>
+        </ol>
+      </div>
+      <div class=\"card\">
+        <h2>Review Mode</h2>
+        <p>Open <code>site/swipe.html</code>, load the latest review session JSON, review a taste sample, then export <code>memoreef-review-decisions.json</code>.</p>
+        <p>This dashboard is static HTML. No backend, no network, no subscription eel.</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
+def generate_app_dashboard(vault: Path, root: str = "MemoReef") -> Path:
+    vault_path = vault.expanduser().resolve()
+    app_dir = vault_path / root / "app"
+    app_dir.mkdir(parents=True, exist_ok=True)
+    path = app_dir / "index.html"
+    path.write_text(render_app_dashboard(dashboard_state(vault_path, root)), encoding="utf-8")
+    return path
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="memoreef",
@@ -520,6 +721,10 @@ def build_parser() -> argparse.ArgumentParser:
     proposals_cmd = sub.add_parser("draft-agent-proposals", help="Draft proposals from an agent finish plan.")
     proposals_cmd.add_argument("--plan", type=Path, required=True, help="Agent finish plan JSON.")
     proposals_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults next to the plan.")
+
+    app_cmd = sub.add_parser("app", help="Generate a static MemoReef local app dashboard.")
+    app_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    app_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
 
     return parser
 
@@ -604,6 +809,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- output: {output}")
         for warning in warnings:
             print(f"  - {warning}")
+        return 0
+
+    if args.command == "app":
+        output = generate_app_dashboard(args.vault, args.root)
+        print(f"Generated MemoReef app dashboard: {output}")
         return 0
 
     parser.error("unknown command")

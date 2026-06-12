@@ -699,6 +699,65 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertEqual(written[0].read_text(encoding="utf-8"), before)
 
+    def test_app_command_creates_dashboard_with_counts(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([
+                Bookmark("Drift Source", "https://drift.example"),
+                Bookmark("Pearl Source", "https://pearl.example", status="reef", pearl=True),
+                Bookmark("Discarded Source", "https://discarded.example", status="discarded"),
+            ], vault_path)
+
+            with redirect_stdout(stdout):
+                result = main(["app", "--vault", str(vault_path)])
+
+            dashboard = vault_path / "MemoReef" / "app" / "index.html"
+            html = dashboard.read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertTrue(dashboard.exists())
+            self.assertIn("MemoReef local app", html)
+            self.assertIn("Total Drops", html)
+            self.assertIn("Drift", html)
+            self.assertIn("Review Mode", html)
+            self.assertIn("Agent proposals", html)
+            self.assertIn("Generated MemoReef app dashboard", stdout.getvalue())
+
+    def test_app_command_handles_empty_vault(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "empty-vault"
+
+            with redirect_stdout(stdout):
+                result = main(["app", "--vault", str(vault_path)])
+
+            dashboard = vault_path / "MemoReef" / "app" / "index.html"
+            html = dashboard.read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("Import bookmarks", html)
+            self.assertIn("Total Drops", html)
+
+    def test_app_command_detects_existing_review_and_proposal_files(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            (vault_path / "MemoReef" / "review-sessions").mkdir(parents=True)
+            (vault_path / "MemoReef" / "agent-plans").mkdir(parents=True)
+            (vault_path / "MemoReef" / "review-sessions" / "2026-06-12-120000-review-session.json").write_text("{}", encoding="utf-8")
+            (vault_path / "memoreef-review-decisions.json").write_text("{}", encoding="utf-8")
+            (vault_path / "MemoReef" / "agent-plans" / "2026-06-12-121000-agent-finish-plan.json").write_text("{}", encoding="utf-8")
+            (vault_path / "MemoReef" / "agent-plans" / "2026-06-12-122000-agent-proposals.json").write_text("{}", encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                result = main(["app", "--vault", str(vault_path)])
+
+            html = (vault_path / "MemoReef" / "app" / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("MemoReef/review-sessions/2026-06-12-120000-review-session.json", html)
+            self.assertIn("memoreef-review-decisions.json", html)
+            self.assertIn("2026-06-12-121000-agent-finish-plan.json", html)
+            self.assertIn("2026-06-12-122000-agent-proposals.json", html)
+
 
 if __name__ == "__main__":
     unittest.main()

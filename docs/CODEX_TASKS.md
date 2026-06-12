@@ -328,3 +328,25 @@ Draft reviewable agent proposals for remaining Drops from an agent finish plan.
 - Pearl-like remaining Drops can be proposed as pearls.
 - Sink-like remaining Drops can be proposed as discarded.
 - Markdown Drop files are not modified.
+
+## Task 12 — MemoReef v0.1 local app shell
+
+### Goal
+Make MemoReef feel like a usable local app by generating a static dashboard for the current vault.
+
+### Requirements
+
+- Add `python3 -m memoreef.cli app --vault <vault>`.
+- Generate `<vault>/MemoReef/app/index.html`.
+- Summarize total Drops, Drift, Reef, Pearls, and Discarded counts.
+- Show the latest review session, review decisions, agent finish plan, and agent proposals when present.
+- Show a clear next recommended action.
+- Include local workflow instructions for Review Mode, applying decisions, creating a finish plan, and drafting proposals.
+- Keep it static HTML with no backend, external dependencies, build tooling, or network calls.
+
+### Acceptance criteria
+
+- `python3 -m memoreef.cli app --vault <vault>` creates the dashboard.
+- The dashboard handles empty vaults.
+- The dashboard detects existing local review and proposal files.
+- The dashboard contains Review Mode and Agent proposals guidance.

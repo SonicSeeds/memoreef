@@ -164,6 +164,15 @@ python3 -m memoreef.cli draft-agent-proposals --plan /tmp/agent-finish-plan.json
 
 The agent proposals JSON suggests status, Pearl state, confidence, priority, note location, and rationale for each remaining Drop using deterministic local heuristics. It does not modify Markdown; applying proposals is a future task.
 
+Generate the static local app dashboard:
+
+```bash
+python3 -m memoreef.cli app --vault /tmp/memoreef-vault
+open /tmp/memoreef-vault/MemoReef/app/index.html
+```
+
+The dashboard summarizes Drop counts, shows the latest local review/agent artifacts, and points to the next recommended workflow step. It is static HTML and does not start a backend.
+
 These are browser-only prototypes with inline sample data. They are not connected to real vault files yet.
 
 ## Near-term roadmap
