@@ -189,6 +189,15 @@ python3 -m memoreef.cli check-links --vault /tmp/memoreef-vault --limit 100 --ti
 
 The link check report classifies saved URLs as ok, broken, suspicious, or unknown using direct HTTP HEAD/GET requests to the saved URLs only. It does not use third-party APIs and does not modify, move, or delete files.
 
+Refresh basic page metadata:
+
+```bash
+python3 -m memoreef.cli refresh-metadata --vault /tmp/memoreef-vault --dry-run
+python3 -m memoreef.cli refresh-metadata --vault /tmp/memoreef-vault --limit 50 --timeout 5
+```
+
+Metadata refresh fetches saved URLs directly, extracts page title, description, canonical URL, and hostname, then updates only the related frontmatter fields. It does not use third-party APIs and does not move, delete, or rewrite notes beyond those metadata fields.
+
 Generate the static local app dashboard:
 
 ```bash

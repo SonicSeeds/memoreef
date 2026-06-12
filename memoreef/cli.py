@@ -3,12 +3,13 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 from html import escape as html_escape
+from html.parser import HTMLParser
 import json
 from pathlib import Path
 import re
 import urllib.error
 import urllib.request
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from . import __version__
 from .bookmarks import (
@@ -856,6 +857,170 @@ def create_link_check_report(
     return output, report
 
 
+class PageMetadataParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.in_title = False
+        self.title_parts: list[str] = []
+        self.description: str | None = None
+        self.og_title: str | None = None
+        self.og_description: str | None = None
+        self.canonical_url: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
+        attrs_dict = {key.lower(): value for key, value in attrs if value is not None}
+        if tag == "title":
+            self.in_title = True
+            return
+        if tag == "meta":
+            name = attrs_dict.get("name", "").lower()
+            property_name = attrs_dict.get("property", "").lower()
+            content = clean_metadata_text(attrs_dict.get("content", ""))
+            if not content:
+                return
+            if name == "description" and self.description is None:
+                self.description = content
+            elif property_name == "og:title" and self.og_title is None:
+                self.og_title = content
+            elif property_name == "og:description" and self.og_description is None:
+                self.og_description = content
+            return
+        if tag == "link":
+            rel_values = {value.lower() for value in attrs_dict.get("rel", "").split()}
+            href = attrs_dict.get("href", "").strip()
+            if "canonical" in rel_values and href and self.canonical_url is None:
+                self.canonical_url = href
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "title":
+            self.in_title = False
+
+    def handle_data(self, data: str) -> None:
+        if self.in_title:
+            self.title_parts.append(data)
+
+    def metadata(self) -> dict[str, str]:
+        return {
+            "title": clean_metadata_text("".join(self.title_parts)),
+            "description": self.description or "",
+            "og_title": self.og_title or "",
+            "og_description": self.og_description or "",
+            "canonical_url": self.canonical_url or "",
+        }
+
+
+def clean_metadata_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def response_charset(response: object) -> str | None:
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    get_content_charset = getattr(headers, "get_content_charset", None)
+    if callable(get_content_charset):
+        return get_content_charset()
+    return None
+
+
+def fetch_page_metadata(url: str, timeout: float) -> dict[str, object]:
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"}:
+        return {"status": "unknown", "error": "unsupported URL scheme"}
+    if not parsed.netloc:
+        return {"status": "unknown", "error": "malformed URL"}
+
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={"User-Agent": "MemoReef/0.1 local metadata refresh"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            data = response.read(256 * 1024)
+            final_url = response.geturl() or url
+            charset = response_charset(response) or "utf-8"
+            html = data.decode(charset, errors="replace")
+    except urllib.error.HTTPError as error:
+        return {"status": "unknown", "error": f"HTTP {error.code}"}
+    except Exception as error:
+        return {"status": "unknown", "error": str(error)}
+
+    parser = PageMetadataParser()
+    try:
+        parser.feed(html)
+    except Exception as error:
+        return {"status": "unknown", "error": f"metadata parse failed: {error}"}
+
+    metadata = parser.metadata()
+    canonical_url = ""
+    if metadata["canonical_url"]:
+        canonical_url = canonicalize_url(urljoin(final_url, metadata["canonical_url"]))
+
+    hostname = urlsplit(final_url or url).hostname or urlsplit(url).hostname or ""
+    return {
+        "status": "ok",
+        "error": "",
+        "page_title": metadata["og_title"] or metadata["title"],
+        "page_description": metadata["og_description"] or metadata["description"],
+        "canonical_url": canonical_url,
+        "hostname": hostname.lower(),
+    }
+
+
+def refresh_metadata(
+    vault: Path,
+    root: str = "MemoReef",
+    dry_run: bool = False,
+    limit: int | None = None,
+    timeout: float = 5,
+) -> tuple[int, int, list[str], list[str]]:
+    vault_path = vault.expanduser().resolve()
+    drops_dir = vault_path / root / "Drops"
+    drop_paths = sorted(drops_dir.rglob("*.md")) if drops_dir.exists() else []
+    if limit is not None:
+        drop_paths = drop_paths[: max(0, limit)]
+
+    updated = 0
+    skipped = 0
+    warnings: list[str] = []
+    planned: list[str] = []
+
+    for path in drop_paths:
+        drop = markdown_drop_to_review_item(path, vault_path)
+        raw_url = drop.get("url")
+        relative_path = str(drop.get("path", path.name))
+        if not isinstance(raw_url, str) or not raw_url.strip():
+            skipped += 1
+            warnings.append(f"{relative_path}: missing URL")
+            continue
+
+        refreshed_at = utc_now_iso()
+        metadata = fetch_page_metadata(raw_url.strip(), timeout)
+        status = str(metadata.get("status") or "unknown")
+        error = str(metadata.get("error") or "")
+        if status != "ok" and error:
+            warnings.append(f"{relative_path}: {error}")
+
+        updates = {
+            "page_title": str(metadata.get("page_title") or ""),
+            "page_description": str(metadata.get("page_description") or ""),
+            "canonical_url": str(metadata.get("canonical_url") or ""),
+            "hostname": str(metadata.get("hostname") or ""),
+            "metadata_refreshed_at": refreshed_at,
+            "metadata_status": status,
+            "metadata_error": error,
+        }
+        planned.append(relative_path)
+        if not dry_run:
+            content = path.read_text(encoding="utf-8", errors="replace")
+            path.write_text(update_markdown_frontmatter(content, updates), encoding="utf-8")
+        updated += 1
+
+    return updated, skipped, warnings, planned
+
+
 def latest_file(paths: list[Path]) -> Path | None:
     existing = [path for path in paths if path.exists()]
     if not existing:
@@ -942,6 +1107,8 @@ def recommended_next_action(
         return "Create a duplicate report, then continue reviewing Drift Drops."
     if total > 0 and latest_link_check_report is None:
         return "Check saved links so broken URLs do not waste review time."
+    if total > 0 and latest_link_check_report is not None and latest_review_session is None:
+        return "Refresh metadata, then export a review session JSON."
     if drift > 0 and latest_review_session is None:
         return "Export a review session JSON, then open Review Mode."
     if drift > 0 and latest_review_decisions is None:
@@ -1047,6 +1214,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <li>Import links into Markdown Drops.</li>
           <li>Run <code>duplicate-report</code> to spot exact URL, same-domain, and similar-title clutter.</li>
           <li>Run <code>check-links</code> to find broken, suspicious, or unreachable saved URLs.</li>
+          <li>Run <code>refresh-metadata</code> to fetch titles, descriptions, canonical URLs, and hostnames.</li>
           <li>Run <code>export-review-session</code> and open <code>site/swipe.html</code> for Review Mode.</li>
           <li>Export decisions from Review Mode, then run <code>apply-review-decisions</code>.</li>
           <li>Create an agent finish plan with <code>plan-agent-finish</code>.</li>
@@ -1140,6 +1308,13 @@ def build_parser() -> argparse.ArgumentParser:
     check_links_cmd.add_argument("--timeout", type=float, default=5, help="HTTP timeout in seconds. Default: 5")
     check_links_cmd.add_argument("--limit", type=int, default=None, help="Check only the first N Drops.")
     check_links_cmd.add_argument("--method", choices=["head", "get", "auto"], default="auto", help="HTTP method strategy. Default: auto")
+
+    refresh_cmd = sub.add_parser("refresh-metadata", help="Fetch saved URLs directly and refresh Drop metadata fields.")
+    refresh_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    refresh_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    refresh_cmd.add_argument("--dry-run", action="store_true", help="Preview metadata updates without modifying Markdown files.")
+    refresh_cmd.add_argument("--limit", type=int, default=None, help="Refresh only the first N Drops.")
+    refresh_cmd.add_argument("--timeout", type=float, default=5, help="HTTP timeout in seconds. Default: 5")
 
     app_cmd = sub.add_parser("app", help="Generate a static MemoReef local app dashboard.")
     app_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -1293,6 +1468,30 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- skipped: {summary['skipped']}")
         print(f"- warnings: {len(warnings)}")
         print(f"- output: {output}")
+        for warning in warnings:
+            print(f"  - {warning}")
+        return 0
+
+    if args.command == "refresh-metadata":
+        updated, skipped, warnings, planned = refresh_metadata(
+            args.vault,
+            args.root,
+            args.dry_run,
+            args.limit,
+            args.timeout,
+        )
+        if args.dry_run:
+            print("Dry run metadata refresh:")
+            print(f"- would update: {updated}")
+        else:
+            print("Refreshed metadata:")
+            print(f"- updated: {updated}")
+        print(f"- skipped: {skipped}")
+        print(f"- warnings: {len(warnings)}")
+        if args.dry_run and planned:
+            print("- would update files:")
+            for item in planned:
+                print(f"  - {item}")
         for warning in warnings:
             print(f"  - {warning}")
         return 0

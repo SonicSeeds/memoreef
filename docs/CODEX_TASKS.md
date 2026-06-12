@@ -420,3 +420,26 @@ Create a local report that helps users find broken or suspicious saved URLs befo
 - HTTP 200-range URLs are ok, 404/410 URLs are broken, and 401/403/429/500-range URLs are suspicious.
 - Timeouts, connection errors, unsupported schemes, and malformed URLs do not crash.
 - Dashboard includes latest link check report information.
+
+## Task 16 — Metadata refresh
+
+### Goal
+Refresh basic page metadata from saved URLs before any AI enrichment.
+
+### Requirements
+
+- Add `python3 -m memoreef.cli refresh-metadata --vault <vault>`.
+- Support `--dry-run`, `--limit`, and `--timeout`.
+- Fetch saved URLs directly with HTTP GET only.
+- Extract page title, description, canonical URL, and hostname.
+- Update only metadata frontmatter fields.
+- Do not move or delete files.
+- Do not call third-party APIs or enrichment services.
+- Preserve existing frontmatter fields and Markdown body.
+
+### Acceptance criteria
+
+- Metadata refresh writes `page_title`, `page_description`, `canonical_url`, `hostname`, `metadata_refreshed_at`, `metadata_status`, and `metadata_error`.
+- Dry run reports planned updates without modifying Markdown files.
+- Unsupported URLs and network errors warn without crashing.
+- Dashboard includes `refresh-metadata` in the workflow.

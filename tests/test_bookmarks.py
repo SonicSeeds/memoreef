@@ -12,10 +12,20 @@ from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url,
 from memoreef.cli import main
 
 
+class FakeHTTPHeaders:
+    def __init__(self, charset=None):
+        self.charset = charset
+
+    def get_content_charset(self):
+        return self.charset
+
+
 class FakeHTTPResponse:
-    def __init__(self, status: int, url: str = "https://example.com"):
+    def __init__(self, status: int, url: str = "https://example.com", body: bytes = b"ok", charset=None):
         self.status = status
         self.url = url
+        self.body = body
+        self.headers = FakeHTTPHeaders(charset)
 
     def __enter__(self):
         return self
@@ -30,7 +40,9 @@ class FakeHTTPResponse:
         return self.url
 
     def read(self, size=-1):
-        return b"ok"
+        if size is None or size < 0:
+            return self.body
+        return self.body[:size]
 
 
 class BookmarkImportTests(unittest.TestCase):
@@ -1159,6 +1171,159 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertIn("Link check report", html)
             self.assertIn("link-check-report", html)
+
+    def test_refresh_metadata_updates_frontmatter(self):
+        html = b"""<!doctype html>
+<html><head>
+<title>Fallback Title</title>
+<meta name="description" content="Fallback description">
+<meta property="og:title" content="OG Title">
+<meta property="og:description" content="OG description">
+<link rel="canonical" href="/canonical?utm_source=test">
+</head><body>hello</body></html>"""
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Old", "https://example.com/page")], vault_path)
+
+            with patch("memoreef.cli.urllib.request.urlopen", return_value=FakeHTTPResponse(200, "https://example.com/final", html, "utf-8")) as mocked:
+                with redirect_stdout(stdout):
+                    result = main(["refresh-metadata", "--vault", str(vault_path)])
+
+            text = written[0].read_text(encoding="utf-8")
+            request = mocked.call_args.args[0]
+            self.assertEqual(result, 0)
+            self.assertEqual(request.get_method(), "GET")
+            self.assertEqual(request.headers["User-agent"], "MemoReef/0.1 local metadata refresh")
+            self.assertIn('page_title: "OG Title"', text)
+            self.assertIn('page_description: "OG description"', text)
+            self.assertIn('canonical_url: "https://example.com/canonical"', text)
+            self.assertIn('hostname: "example.com"', text)
+            self.assertIn("metadata_refreshed_at:", text)
+            self.assertIn('metadata_status: "ok"', text)
+            self.assertIn('metadata_error: ""', text)
+            self.assertIn("# Old", text)
+            self.assertIn("Refreshed metadata:", stdout.getvalue())
+            self.assertIn("- updated: 1", stdout.getvalue())
+            self.assertIn("- skipped: 0", stdout.getvalue())
+            self.assertIn("- warnings: 0", stdout.getvalue())
+
+    def test_refresh_metadata_extracts_title_and_meta_description(self):
+        html = b"""<!doctype html>
+<html><head>
+<title>Plain Title</title>
+<meta name="description" content="Plain description.">
+</head><body>hello</body></html>"""
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Old", "https://example.com/plain")], vault_path)
+
+            with patch("memoreef.cli.urllib.request.urlopen", return_value=FakeHTTPResponse(200, "https://example.com/plain", html, "utf-8")):
+                with redirect_stdout(io.StringIO()):
+                    result = main(["refresh-metadata", "--vault", str(vault_path)])
+
+            text = written[0].read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn('page_title: "Plain Title"', text)
+            self.assertIn('page_description: "Plain description."', text)
+
+    def test_refresh_metadata_dry_run_does_not_modify_markdown(self):
+        html = b"<html><head><title>New Title</title></head></html>"
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Old", "https://example.com")], vault_path)
+            before = written[0].read_text(encoding="utf-8")
+
+            with patch("memoreef.cli.urllib.request.urlopen", return_value=FakeHTTPResponse(200, "https://example.com", html)):
+                with redirect_stdout(stdout):
+                    result = main(["refresh-metadata", "--vault", str(vault_path), "--dry-run"])
+
+            self.assertEqual(result, 0)
+            self.assertEqual(written[0].read_text(encoding="utf-8"), before)
+            self.assertIn("Dry run metadata refresh:", stdout.getvalue())
+            self.assertIn("- would update: 1", stdout.getvalue())
+            self.assertIn("- skipped: 0", stdout.getvalue())
+            self.assertIn("- warnings: 0", stdout.getvalue())
+            self.assertIn("- would update files:", stdout.getvalue())
+
+    def test_refresh_metadata_limit_only_fetches_first_n_drops(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([
+                Bookmark("One", "https://one.example"),
+                Bookmark("Two", "https://two.example"),
+                Bookmark("Three", "https://three.example"),
+            ], vault_path, allow_duplicates=True)
+
+            with patch("memoreef.cli.urllib.request.urlopen", return_value=FakeHTTPResponse(200, "https://example.com", b"<title>x</title>")) as mocked:
+                with redirect_stdout(io.StringIO()):
+                    result = main(["refresh-metadata", "--vault", str(vault_path), "--limit", "2"])
+
+            self.assertEqual(result, 0)
+            self.assertEqual(mocked.call_count, 2)
+
+    def test_refresh_metadata_unknown_url_and_network_error(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("FTP", "ftp://example.com/file"),
+                Bookmark("Timeout", "https://timeout.example"),
+            ], vault_path, allow_duplicates=True)
+
+            with patch("memoreef.cli.urllib.request.urlopen", side_effect=TimeoutError("timed out")) as mocked:
+                with redirect_stdout(stdout):
+                    result = main(["refresh-metadata", "--vault", str(vault_path)])
+
+            texts = "\n".join(path.read_text(encoding="utf-8") for path in written)
+            self.assertEqual(result, 0)
+            self.assertEqual(mocked.call_count, 1)
+            self.assertIn('metadata_status: "unknown"', texts)
+            self.assertIn('metadata_error: "unsupported URL scheme"', texts)
+            self.assertIn('metadata_error: "timed out"', texts)
+            self.assertIn("- warnings: 2", stdout.getvalue())
+
+    def test_refresh_metadata_preserves_existing_fields_and_body(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark(
+                    "Keep Me",
+                    "https://example.com",
+                    folders=["Research"],
+                    tags=["original"],
+                    projects=["Project A"],
+                    shoals=["Shoal A"],
+                )
+            ], vault_path)
+            before_body_marker = "## Notes"
+
+            with patch("memoreef.cli.urllib.request.urlopen", return_value=FakeHTTPResponse(200, "https://example.com", b"<title>Page</title>")):
+                with redirect_stdout(io.StringIO()):
+                    result = main(["refresh-metadata", "--vault", str(vault_path)])
+
+            text = written[0].read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn('title: "Keep Me"', text)
+            self.assertIn('url: "https://example.com"', text)
+            self.assertIn('  - "Research"', text)
+            self.assertIn('  - "original"', text)
+            self.assertIn('  - "Project A"', text)
+            self.assertIn('  - "Shoal A"', text)
+            self.assertIn(before_body_marker, text)
+
+    def test_app_workflow_mentions_refresh_metadata(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+
+            with redirect_stdout(stdout):
+                result = main(["app", "--vault", str(vault_path)])
+
+            html = (vault_path / "MemoReef" / "app" / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("refresh-metadata", html)
 
 
 if __name__ == "__main__":
