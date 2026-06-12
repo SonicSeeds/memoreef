@@ -1247,6 +1247,138 @@ def create_garden_suggestions_report(
     return output, report
 
 
+def suggestion_label_names(item: object) -> list[str]:
+    if not isinstance(item, list):
+        return []
+    names: list[str] = []
+    for suggestion in item:
+        if not isinstance(suggestion, dict):
+            continue
+        name = suggestion.get("name")
+        if isinstance(name, str) and name.strip():
+            names.append(name)
+    return names
+
+
+def existing_frontmatter_labels(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip() and str(item).strip() != "[]"]
+
+
+def append_unique_labels(existing: list[str], accepted: list[str]) -> tuple[list[str], int]:
+    updated = list(existing)
+    added = 0
+    for label in accepted:
+        if label not in updated:
+            updated.append(label)
+            added += 1
+    return updated, added
+
+
+def apply_garden_suggestions(
+    vault: Path,
+    suggestions: Path,
+    root: str = "MemoReef",
+    accept_all: bool = False,
+    accept_projects: list[str] | None = None,
+    accept_shoals: list[str] | None = None,
+    dry_run: bool = False,
+) -> tuple[int, int, int, int, list[str]]:
+    vault_path = vault.expanduser().resolve()
+    payload = json.loads(suggestions.expanduser().read_text(encoding="utf-8"))
+    suggestion_items = payload.get("suggestions")
+    accepted_projects = accept_projects or []
+    accepted_shoals = accept_shoals or []
+
+    warnings: list[str] = []
+    files_considered = 0
+    files_updated = 0
+    projects_added = 0
+    shoals_added = 0
+
+    if not isinstance(suggestion_items, list):
+        return 0, 0, 0, 0, ["suggestions must be a list"]
+
+    report_projects = {
+        name
+        for item in suggestion_items
+        if isinstance(item, dict)
+        for name in suggestion_label_names(item.get("suggested_projects"))
+    }
+    report_shoals = {
+        name
+        for item in suggestion_items
+        if isinstance(item, dict)
+        for name in suggestion_label_names(item.get("suggested_shoals"))
+    }
+    if not accept_all:
+        for name in accepted_projects:
+            if name not in report_projects:
+                warnings.append(f'project "{name}" not present in suggestions report')
+        for name in accepted_shoals:
+            if name not in report_shoals:
+                warnings.append(f'shoal "{name}" not present in suggestions report')
+
+    for index, item in enumerate(suggestion_items, start=1):
+        files_considered += 1
+        if not isinstance(item, dict):
+            warnings.append(f"suggestion {index}: malformed suggestion")
+            continue
+
+        raw_path = item.get("path")
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            warnings.append(f"suggestion {index}: missing path")
+            continue
+
+        relative_path = Path(raw_path)
+        if relative_path.is_absolute():
+            warnings.append(f"{raw_path}: path must be relative to the vault")
+            continue
+
+        target = (vault_path / relative_path).resolve()
+        try:
+            target.relative_to(vault_path)
+        except ValueError:
+            warnings.append(f"{raw_path}: path is outside the vault")
+            continue
+
+        if target.suffix != ".md":
+            warnings.append(f"{raw_path}: not a Markdown Drop")
+            continue
+        if not target.exists():
+            warnings.append(f"{raw_path}: file not found")
+            continue
+
+        project_names = suggestion_label_names(item.get("suggested_projects"))
+        shoal_names = suggestion_label_names(item.get("suggested_shoals"))
+        project_accepts = project_names if accept_all else [name for name in project_names if name in accepted_projects]
+        shoal_accepts = shoal_names if accept_all else [name for name in shoal_names if name in accepted_shoals]
+
+        content = target.read_text(encoding="utf-8", errors="replace")
+        frontmatter, _body = parse_markdown_frontmatter(content)
+        existing_projects = existing_frontmatter_labels(frontmatter.get("projects"))
+        existing_shoals = existing_frontmatter_labels(frontmatter.get("shoals"))
+        updated_projects, project_count = append_unique_labels(existing_projects, project_accepts)
+        updated_shoals, shoal_count = append_unique_labels(existing_shoals, shoal_accepts)
+
+        if project_count == 0 and shoal_count == 0:
+            continue
+
+        updates: dict[str, object] = {}
+        if project_count:
+            updates["projects"] = updated_projects
+        if shoal_count:
+            updates["shoals"] = updated_shoals
+        if not dry_run:
+            target.write_text(update_markdown_frontmatter(content, updates), encoding="utf-8")
+        files_updated += 1
+        projects_added += project_count
+        shoals_added += shoal_count
+
+    return files_considered, files_updated, projects_added, shoals_added, warnings
+
+
 def vault_has_metadata(vault: Path, root: str = "MemoReef") -> bool:
     return any(str(drop.get("metadata_refreshed_at") or drop.get("page_title") or "") for drop in load_garden_drop_items(vault, root))
 
@@ -1457,6 +1589,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <li>Run <code>check-links</code> to find broken, suspicious, or unreachable saved URLs.</li>
           <li>Run <code>refresh-metadata</code> to fetch titles, descriptions, canonical URLs, and hostnames.</li>
           <li>Run <code>suggest-gardens</code> to propose existing projects and shoals for unsorted Drops.</li>
+          <li>Review the suggestions JSON, then run <code>apply-garden-suggestions --dry-run</code> before applying accepted labels.</li>
           <li>Run <code>export-review-session</code> and open <code>site/swipe.html</code> for Review Mode.</li>
           <li>Export decisions from Review Mode, then run <code>apply-review-decisions</code>.</li>
           <li>Create an agent finish plan with <code>plan-agent-finish</code>.</li>
@@ -1562,6 +1695,15 @@ def build_parser() -> argparse.ArgumentParser:
     gardens_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     gardens_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
     gardens_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults inside the vault.")
+
+    apply_gardens_cmd = sub.add_parser("apply-garden-suggestions", help="Apply accepted garden suggestions to Drop frontmatter.")
+    apply_gardens_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    apply_gardens_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    apply_gardens_cmd.add_argument("--suggestions", type=Path, required=True, help="Garden suggestions JSON from suggest-gardens.")
+    apply_gardens_cmd.add_argument("--accept-all", action="store_true", help="Apply all suggested project and shoal labels.")
+    apply_gardens_cmd.add_argument("--accept-project", action="append", default=[], help="Apply a matching suggested project label. Repeatable.")
+    apply_gardens_cmd.add_argument("--accept-shoal", action="append", default=[], help="Apply a matching suggested shoal label. Repeatable.")
+    apply_gardens_cmd.add_argument("--dry-run", action="store_true", help="Preview accepted labels without modifying Markdown files.")
 
     app_cmd = sub.add_parser("app", help="Generate a static MemoReef local app dashboard.")
     app_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -1757,6 +1899,36 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- suggestions: {summary['suggestions']}")
         print(f"- warnings: {len(warnings)}")
         print(f"- output: {output}")
+        for warning in warnings:
+            print(f"  - {warning}")
+        return 0
+
+    if args.command == "apply-garden-suggestions":
+        if not args.accept_all and not args.accept_project and not args.accept_shoal:
+            print("No garden suggestion accept option provided. Use --accept-all, --accept-project, or --accept-shoal.")
+            return 1
+        files_considered, files_updated, projects_added, shoals_added, warnings = apply_garden_suggestions(
+            args.vault,
+            args.suggestions,
+            args.root,
+            args.accept_all,
+            args.accept_project,
+            args.accept_shoal,
+            args.dry_run,
+        )
+        if args.dry_run:
+            print("Dry run garden suggestions:")
+            print(f"- files considered: {files_considered}")
+            print(f"- files that would update: {files_updated}")
+            print(f"- projects that would be added: {projects_added}")
+            print(f"- shoals that would be added: {shoals_added}")
+        else:
+            print("Applied garden suggestions:")
+            print(f"- files considered: {files_considered}")
+            print(f"- files updated: {files_updated}")
+            print(f"- projects added: {projects_added}")
+            print(f"- shoals added: {shoals_added}")
+        print(f"- warnings: {len(warnings)}")
         for warning in warnings:
             print(f"  - {warning}")
         return 0

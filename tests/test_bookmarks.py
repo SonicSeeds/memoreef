@@ -1461,6 +1461,213 @@ class BookmarkImportTests(unittest.TestCase):
         self.assertIn("Task 17", tasks)
         self.assertIn("suggest-gardens", tasks)
 
+    def write_garden_suggestions(self, path: Path, vault_path: Path, items):
+        suggestions = []
+        for drop_path, projects, shoals in items:
+            relative = drop_path.resolve().relative_to(vault_path.resolve()).as_posix()
+            suggestions.append(
+                {
+                    "id": relative,
+                    "path": relative,
+                    "title": drop_path.stem,
+                    "url": "https://example.com",
+                    "suggested_projects": [{"name": name, "score": 4, "evidence_tokens": ["agent"], "source_examples": []} for name in projects],
+                    "suggested_shoals": [{"name": name, "score": 4, "evidence_tokens": ["agent"], "source_examples": []} for name in shoals],
+                }
+            )
+        path.write_text(json.dumps({"version": 1, "suggestions": suggestions}), encoding="utf-8")
+
+    def test_apply_garden_suggestions_accept_all_applies_projects_and_shoals(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Candidate", "https://example.com")], vault_path)
+            suggestions_path = Path(tmp) / "garden-suggestions.json"
+            self.write_garden_suggestions(suggestions_path, vault_path, [(written[0], ["AI Agents"], ["Automation"])])
+
+            with redirect_stdout(stdout):
+                result = main(["apply-garden-suggestions", "--vault", str(vault_path), "--suggestions", str(suggestions_path), "--accept-all"])
+
+            text = written[0].read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn('  - "AI Agents"', text)
+            self.assertIn('  - "Automation"', text)
+            self.assertIn("Applied garden suggestions:", stdout.getvalue())
+            self.assertIn("- files updated: 1", stdout.getvalue())
+            self.assertIn("- projects added: 1", stdout.getvalue())
+            self.assertIn("- shoals added: 1", stdout.getvalue())
+
+    def test_apply_garden_suggestions_dry_run_does_not_modify_markdown(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Candidate", "https://example.com")], vault_path)
+            before = written[0].read_text(encoding="utf-8")
+            suggestions_path = Path(tmp) / "garden-suggestions.json"
+            self.write_garden_suggestions(suggestions_path, vault_path, [(written[0], ["AI Agents"], ["Automation"])])
+
+            with redirect_stdout(stdout):
+                result = main(["apply-garden-suggestions", "--vault", str(vault_path), "--suggestions", str(suggestions_path), "--dry-run", "--accept-all"])
+
+            self.assertEqual(result, 0)
+            self.assertEqual(written[0].read_text(encoding="utf-8"), before)
+            self.assertIn("Dry run garden suggestions:", stdout.getvalue())
+            self.assertIn("- files that would update: 1", stdout.getvalue())
+            self.assertIn("- projects that would be added: 1", stdout.getvalue())
+            self.assertIn("- shoals that would be added: 1", stdout.getvalue())
+
+    def test_apply_garden_suggestions_selective_project_and_shoal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("Project Candidate", "https://project.example"),
+                Bookmark("Shoal Candidate", "https://shoal.example"),
+            ], vault_path, allow_duplicates=True)
+            project_suggestions = Path(tmp) / "project-suggestions.json"
+            shoal_suggestions = Path(tmp) / "shoal-suggestions.json"
+            self.write_garden_suggestions(project_suggestions, vault_path, [(written[0], ["AI Agents", "Design"], ["Automation"])])
+            self.write_garden_suggestions(shoal_suggestions, vault_path, [(written[1], ["AI Agents"], ["Automation", "Research"])])
+
+            with redirect_stdout(io.StringIO()):
+                project_result = main([
+                    "apply-garden-suggestions",
+                    "--vault",
+                    str(vault_path),
+                    "--suggestions",
+                    str(project_suggestions),
+                    "--accept-project",
+                    "AI Agents",
+                ])
+            with redirect_stdout(io.StringIO()):
+                shoal_result = main([
+                    "apply-garden-suggestions",
+                    "--vault",
+                    str(vault_path),
+                    "--suggestions",
+                    str(shoal_suggestions),
+                    "--accept-shoal",
+                    "Automation",
+                ])
+
+            project_text = written[0].read_text(encoding="utf-8")
+            shoal_text = written[1].read_text(encoding="utf-8")
+            self.assertEqual(project_result, 0)
+            self.assertEqual(shoal_result, 0)
+            self.assertIn('  - "AI Agents"', project_text)
+            self.assertNotIn('  - "Design"', project_text)
+            self.assertNotIn('  - "Automation"', project_text)
+            self.assertIn('  - "Automation"', shoal_text)
+            self.assertNotIn('  - "Research"', shoal_text)
+            self.assertNotIn('  - "AI Agents"', shoal_text)
+
+    def test_apply_garden_suggestions_does_not_duplicate_existing_labels(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Candidate", "https://example.com", projects=["AI Agents"], shoals=["Automation"])], vault_path)
+            suggestions_path = Path(tmp) / "garden-suggestions.json"
+            self.write_garden_suggestions(suggestions_path, vault_path, [(written[0], ["AI Agents"], ["Automation"])])
+
+            with redirect_stdout(stdout):
+                result = main(["apply-garden-suggestions", "--vault", str(vault_path), "--suggestions", str(suggestions_path), "--accept-all"])
+
+            text = written[0].read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertEqual(text.count('  - "AI Agents"'), 1)
+            self.assertEqual(text.count('  - "Automation"'), 1)
+            self.assertIn("- files updated: 0", stdout.getvalue())
+
+    def test_apply_garden_suggestions_preserves_frontmatter_and_body(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("Candidate", "https://example.com", folders=["Research"], tags=["original"], status="reef", pearl=True)
+            ], vault_path)
+            suggestions_path = Path(tmp) / "garden-suggestions.json"
+            self.write_garden_suggestions(suggestions_path, vault_path, [(written[0], ["AI Agents"], ["Automation"])])
+
+            with redirect_stdout(io.StringIO()):
+                result = main(["apply-garden-suggestions", "--vault", str(vault_path), "--suggestions", str(suggestions_path), "--accept-all"])
+
+            text = written[0].read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn('title: "Candidate"', text)
+            self.assertIn('url: "https://example.com"', text)
+            self.assertIn("status: reef", text)
+            self.assertIn("pearl: true", text)
+            self.assertIn('  - "Research"', text)
+            self.assertIn('  - "original"', text)
+            self.assertIn("## Notes", text)
+
+    def test_apply_garden_suggestions_missing_path_and_unmatched_label_warn(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            suggestions_path = Path(tmp) / "garden-suggestions.json"
+            payload = {
+                "version": 1,
+                "suggestions": [
+                    {
+                        "path": "MemoReef/Drops/missing.md",
+                        "suggested_projects": [{"name": "AI Agents"}],
+                        "suggested_shoals": [{"name": "Automation"}],
+                    }
+                ],
+            }
+            suggestions_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                result = main([
+                    "apply-garden-suggestions",
+                    "--vault",
+                    str(vault_path),
+                    "--suggestions",
+                    str(suggestions_path),
+                    "--accept-project",
+                    "Nope",
+                ])
+
+            self.assertEqual(result, 0)
+            output = stdout.getvalue()
+            self.assertIn("- warnings: 2", output)
+            self.assertIn('project "Nope" not present', output)
+            self.assertIn("file not found", output)
+
+    def test_apply_garden_suggestions_requires_accept_option(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Candidate", "https://example.com")], vault_path)
+            before = written[0].read_text(encoding="utf-8")
+            suggestions_path = Path(tmp) / "garden-suggestions.json"
+            self.write_garden_suggestions(suggestions_path, vault_path, [(written[0], ["AI Agents"], ["Automation"])])
+
+            with redirect_stdout(stdout):
+                result = main(["apply-garden-suggestions", "--vault", str(vault_path), "--suggestions", str(suggestions_path)])
+
+            self.assertEqual(result, 1)
+            self.assertEqual(written[0].read_text(encoding="utf-8"), before)
+            self.assertIn("No garden suggestion accept option provided", stdout.getvalue())
+
+    def test_app_workflow_mentions_apply_garden_suggestions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+
+            with redirect_stdout(io.StringIO()):
+                result = main(["app", "--vault", str(vault_path)])
+
+            html = (vault_path / "MemoReef" / "app" / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("apply-garden-suggestions", html)
+
+    def test_readme_and_tasks_mention_apply_garden_suggestions(self):
+        readme = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
+        tasks = (Path(__file__).parent.parent / "docs" / "CODEX_TASKS.md").read_text(encoding="utf-8")
+
+        self.assertIn("apply-garden-suggestions", readme)
+        self.assertIn("Task 18", tasks)
+        self.assertIn("apply-garden-suggestions", tasks)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -467,3 +467,29 @@ Create a local report that suggests existing project and shoal labels for unsort
 - Drops with existing shoals do not receive shoal suggestions.
 - If no examples exist, the report is valid and includes a warning.
 - Dashboard includes latest garden suggestions information.
+
+## Task 18 — Apply garden suggestions
+
+### Goal
+Apply accepted project and shoal suggestions from a garden suggestion report back to Markdown Drop frontmatter.
+
+### Requirements
+
+- Add `python3 -m memoreef.cli apply-garden-suggestions --vault <vault> --suggestions <garden-suggestions.json>`.
+- Support `--accept-all`, repeatable `--accept-project`, repeatable `--accept-shoal`, and `--dry-run`.
+- Return non-zero and do not modify files if no accept option is provided.
+- Modify only `projects` and `shoals` frontmatter fields.
+- Preserve Markdown body and all other frontmatter fields.
+- Preserve existing labels and do not duplicate labels.
+- Warn and continue for missing Drop paths or requested labels absent from the report.
+- Do not move or delete files.
+- Do not call network APIs.
+- Include `apply-garden-suggestions` in the dashboard workflow.
+
+### Acceptance criteria
+
+- Accept-all applies suggested project and shoal labels.
+- Selective accept applies only exact matching labels.
+- Dry run reports planned updates without modifying Markdown.
+- Missing files and unmatched requested labels produce warnings.
+- Existing frontmatter fields and Markdown body are preserved.
