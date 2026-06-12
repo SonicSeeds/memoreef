@@ -267,35 +267,72 @@
 
     .octopus-stage {
       position: relative;
-      min-height: 118vh;
+      min-height: 126vh;
       display: grid;
       align-items: end;
       overflow: hidden;
       margin-top: -10vh;
-      padding-bottom: 14vh;
+      padding-bottom: 18vh;
+      isolation: isolate;
     }
-    .tentacle-field {
+    .octopus-stage::before,
+    .octopus-stage::after {
+      content: "";
       position: absolute;
-      inset: 0 0 16%;
-      opacity: calc(.16 + var(--depth, 0) * .32);
-      transform: translateY(calc(138px - var(--depth, 0) * 165px));
       pointer-events: none;
+      z-index: 1;
     }
-    .octopus {
-      position: relative;
+    .octopus-stage::before {
+      inset: 0;
+      background:
+        radial-gradient(circle at 72% 86%, rgba(255, 129, 92, calc(.08 + var(--depth, 0) * .1)), transparent 24rem),
+        radial-gradient(circle at 82% 74%, rgba(121, 242, 220, calc(.09 + var(--depth, 0) * .16)), transparent 22rem),
+        linear-gradient(90deg, rgba(1,4,8,.72) 0%, rgba(1,4,8,.38) 42%, rgba(1,4,8,.05) 100%),
+        linear-gradient(180deg, rgba(1,4,8,0) 0%, rgba(1,4,8,.72) 100%);
+    }
+    .octopus-stage::after {
+      inset: 12vh 0 0;
+      background-image:
+        radial-gradient(circle, rgba(208,255,249,.18) 0 1px, transparent 1.6px),
+        radial-gradient(circle, rgba(255,181,147,.13) 0 1px, transparent 1.8px);
+      background-size: 130px 150px, 210px 240px;
+      background-position: 15% 12%, 76% 28%;
+      opacity: calc(.18 + var(--depth, 0) * .22);
+      transform: translateY(calc(var(--depth, 0) * -44px));
+      mask-image: linear-gradient(to bottom, transparent, #000 24%, #000 82%, transparent);
+    }
+    .octopus-photo {
+      position: absolute;
+      right: max(-11vw, -150px);
+      bottom: max(-5vh, -48px);
       z-index: 0;
-      width: min(980px, 118vw);
-      margin: 0 auto;
-      display: block;
-      filter: blur(.2px) drop-shadow(0 0 52px rgba(121,242,220,.2)) drop-shadow(0 60px 120px rgba(0,0,0,.72));
-      opacity: calc(.07 + var(--depth, 0) * .34);
-      transform: translateY(calc(180px - var(--depth, 0) * 150px)) scale(calc(1.06 + var(--depth, 0) * .08));
-      mix-blend-mode: screen;
+      width: min(1120px, 108vw);
+      max-width: none;
+      opacity: calc(.62 + var(--depth, 0) * .34);
+      transform: translate3d(0, calc(72px - var(--depth, 0) * 118px), 0) scale(calc(.98 + var(--depth, 0) * .05));
+      filter: saturate(1.16) contrast(1.12) brightness(1.05) drop-shadow(0 0 86px rgba(121,242,220,.16));
+      mask-image:
+        linear-gradient(to left, #000 0 72%, transparent 100%),
+        linear-gradient(to top, #000 0 78%, transparent 100%);
+      mask-composite: intersect;
     }
-    .octo-skin { fill: url(#octoGradient); stroke: rgba(211,255,248,.18); stroke-width: .9; }
-    .octo-glow { fill: none; stroke: rgba(121,242,220,.38); stroke-width: 1.4; stroke-linecap: round; stroke-dasharray: 1 22; animation: shimmer 6s linear infinite; }
-    .octo-eye { display: none; }
-    @keyframes shimmer { to { stroke-dashoffset: -90; } }
+    .tentacle-trace {
+      position: absolute;
+      inset: 5vh 0 auto auto;
+      width: min(920px, 80vw);
+      height: 72vh;
+      z-index: 2;
+      opacity: calc(.12 + var(--depth, 0) * .26);
+      pointer-events: none;
+      transform: translateY(calc(80px - var(--depth, 0) * 120px));
+    }
+    .tentacle-trace path {
+      fill: none;
+      stroke-linecap: round;
+      stroke-dasharray: 1 24;
+      animation: shimmer 7s linear infinite;
+    }
+    @keyframes shimmer { to { stroke-dashoffset: -96; } }
 
     .final-cta {
       position: relative;
@@ -343,6 +380,8 @@
       .archive-window { min-height: 520px; }
       .cards { grid-template-columns: 1fr; }
       section.depth { padding: 76px 0; }
+      .octopus-photo { right: -56vw; width: 170vw; opacity: .66; }
+      .tentacle-trace { width: 120vw; opacity: .18; }
     }
   </style>
 </head>
@@ -433,34 +472,11 @@
     </section>
 
     <section class="octopus-stage" aria-label="Deep sea octopus archive">
-      <svg class="tentacle-field" viewBox="0 0 1200 900" aria-hidden="true">
-        <path d="M130 880 C250 690 180 490 390 370 C560 270 450 120 620 52" fill="none" stroke="rgba(121,242,220,.2)" stroke-width="28" stroke-linecap="round" />
-        <path d="M1060 880 C930 700 1030 520 795 390 C640 304 742 122 590 58" fill="none" stroke="rgba(180,156,255,.18)" stroke-width="24" stroke-linecap="round" />
-        <path d="M390 910 C470 710 405 548 560 430 C690 330 660 180 624 60" fill="none" stroke="rgba(255,141,122,.14)" stroke-width="20" stroke-linecap="round" />
-      </svg>
-      <svg class="octopus" viewBox="0 0 920 760" role="img" aria-label="Elegant bioluminescent octopus guarding a deep sea archive">
-        <defs>
-          <radialGradient id="octoGradient" cx="50%" cy="28%" r="72%">
-            <stop offset="0%" stop-color="#d7fff6" stop-opacity=".92" />
-            <stop offset="34%" stop-color="#48cab8" stop-opacity=".78" />
-            <stop offset="68%" stop-color="#1c6274" stop-opacity=".82" />
-            <stop offset="100%" stop-color="#061a24" stop-opacity=".94" />
-          </radialGradient>
-        </defs>
-        <path class="octo-skin" d="M462 38 C340 38 258 132 276 258 C289 349 354 410 460 410 C570 410 637 351 648 258 C663 130 586 38 462 38 Z" />
-        <path class="octo-skin" d="M320 358 C202 438 182 540 80 642 C45 677 52 718 102 716 C192 710 255 565 356 465" />
-        <path class="octo-skin" d="M382 395 C296 503 330 610 260 718 C236 754 288 775 334 728 C407 653 405 520 444 414" />
-        <path class="octo-skin" d="M462 414 C428 538 472 632 444 724 C432 762 487 771 514 724 C558 646 527 531 520 414" />
-        <path class="octo-skin" d="M540 398 C634 507 596 614 682 720 C711 756 760 731 732 690 C660 587 707 479 600 362" />
-        <path class="octo-skin" d="M604 354 C728 424 742 548 838 646 C874 683 856 724 806 713 C704 690 663 554 564 462" />
-        <path class="octo-glow" d="M330 160 C400 128 520 126 592 162" />
-        <path class="octo-glow" d="M304 262 C386 310 548 310 620 260" />
-        <path class="octo-glow" d="M128 662 C210 604 252 500 356 465" />
-        <path class="octo-glow" d="M286 728 C366 648 390 542 444 414" />
-        <path class="octo-glow" d="M488 724 C530 622 512 518 520 414" />
-        <path class="octo-glow" d="M710 704 C650 620 694 494 600 362" />
-        <circle cx="404" cy="230" r="3" fill="rgba(214,255,246,.18)" />
-        <circle cx="520" cy="230" r="2.5" fill="rgba(214,255,246,.14)" />
+      <img class="octopus-photo" src="assets/memoreef-octopus-abyss.jpg" alt="Hyperrealistic red, gold, and teal octopus resting on the deep sea floor with tentacles reaching upward" />
+      <svg class="tentacle-trace" viewBox="0 0 920 760" aria-hidden="true">
+        <path d="M880 716 C716 548 702 404 570 292 C456 196 320 168 172 52" stroke="rgba(121,242,220,.42)" stroke-width="2" />
+        <path d="M820 734 C666 626 642 482 528 398 C430 326 294 316 92 248" stroke="rgba(255,181,147,.34)" stroke-width="1.6" />
+        <path d="M756 746 C612 668 560 540 478 462 C396 384 274 400 132 372" stroke="rgba(241,232,207,.25)" stroke-width="1.2" />
       </svg>
     </section>
 

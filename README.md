@@ -143,7 +143,7 @@ python3 -m memoreef.cli pilot --csv /path/to/links.csv --vault /tmp/memoreef-pil
 
 The pilot command imports your export, creates a review session, creates a duplicate report, generates static app pages, and writes `MemoReef/PILOT_README.md`. It is offline-only: no network calls, no AI calls, no backend, and no server.
 
-The generated pilot app pages are self-contained HTML with inline CSS. They are designed as a calm local workspace, while `site/index.html` carries the more cinematic public landing vision.
+The generated pilot app pages are self-contained HTML with inline CSS. They are designed as a calm local workspace, while `site/index.html` carries the more cinematic public landing vision with a local deep-sea octopus image asset in `site/assets/`.
 
 Review a few items:
 

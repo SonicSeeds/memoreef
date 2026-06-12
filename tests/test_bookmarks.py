@@ -1364,14 +1364,17 @@ class BookmarkImportTests(unittest.TestCase):
                     self.assertNotIn("http://", html)
 
     def test_landing_page_has_deep_sea_octopus_and_no_external_assets(self):
-        html = (Path(__file__).parent.parent / "site" / "index.html").read_text(encoding="utf-8")
+        repo_root = Path(__file__).parent.parent
+        html = (repo_root / "site" / "index.html").read_text(encoding="utf-8")
         lowered = html.lower()
 
         self.assertIn("octopus", lowered)
         self.assertIn("oxygen", lowered)
         self.assertIn("pilot", lowered)
         self.assertIn("deep sea", lowered)
+        self.assertIn("memoreef-octopus-abyss.jpg", lowered)
         self.assertIn("<svg", lowered)
+        self.assertTrue((repo_root / "site" / "assets" / "memoreef-octopus-abyss.jpg").exists())
         self.assertNotIn("<script src=", lowered)
         self.assertNotIn("<link", lowered)
         self.assertNotIn("https://", lowered)

@@ -652,7 +652,7 @@ Create a premium visual baseline for MemoReef before pilot testing without chang
 ### Requirements
 
 - Redesign `site/index.html` as a self-contained cinematic landing page about descending from ocean surface clutter to a deep-sea source reef.
-- Include an elegant octopus/deep-sea visual implemented with local HTML/CSS/SVG/vanilla JS only.
+- Include an elegant octopus/deep-sea visual implemented with a local image asset plus HTML/CSS/SVG/vanilla JS only.
 - Add scroll-reactive depth changes and pointer oxygen bubbles as progressive enhancement while keeping the page attractive without JS.
 - Keep the landing page free of external assets, fonts, scripts, CDNs, network calls, and build tooling.
 - Refine generated static app pages so dashboard, pilot, tour, library, review, reports, briefs, and Drop detail pages feel calmer and more premium.
