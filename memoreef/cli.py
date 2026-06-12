@@ -16,6 +16,7 @@ from .bookmarks import (
     Bookmark,
     canonicalize_url,
     markdown_drop_to_review_item,
+    parse_markdown_frontmatter,
     parse_bookmarks_html,
     parse_links_csv,
     parse_links_text,
@@ -1021,6 +1022,235 @@ def refresh_metadata(
     return updated, skipped, warnings, planned
 
 
+GARDEN_STOPWORDS = {
+    "the", "and", "for", "with", "from", "into", "your", "you", "are", "was", "were",
+    "this", "that", "not", "but", "can", "how", "why", "what", "when", "where",
+    "about", "guide", "article", "page", "local",
+}
+
+
+def garden_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip() and str(item).strip() != "[]"]
+
+
+def garden_drop_item(path: Path, vault: Path) -> dict[str, object]:
+    relative_path = path.resolve().relative_to(vault.resolve()).as_posix()
+    frontmatter, _body = parse_markdown_frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+    url = str(frontmatter.get("url") or "")
+    canonical = str(frontmatter.get("canonical_url") or "")
+    hostname = str(frontmatter.get("hostname") or "")
+    if not hostname:
+        hostname = urlsplit(canonical or url).hostname or ""
+
+    return {
+        "id": relative_path,
+        "path": relative_path,
+        "title": str(frontmatter.get("title") or path.stem),
+        "url": url,
+        "folders": garden_list(frontmatter.get("folders")),
+        "tags": garden_list(frontmatter.get("tags")),
+        "projects": garden_list(frontmatter.get("projects")),
+        "shoals": garden_list(frontmatter.get("shoals")),
+        "status": str(frontmatter.get("status") or "drift"),
+        "pearl": bool(frontmatter.get("pearl", False)),
+        "page_title": str(frontmatter.get("page_title") or ""),
+        "page_description": str(frontmatter.get("page_description") or ""),
+        "hostname": hostname.lower(),
+        "canonical_url": canonical,
+        "metadata_refreshed_at": str(frontmatter.get("metadata_refreshed_at") or ""),
+    }
+
+
+def load_garden_drop_items(vault: Path, root: str = "MemoReef") -> list[dict[str, object]]:
+    vault_path = vault.expanduser().resolve()
+    drops_dir = vault_path / root / "Drops"
+    if not drops_dir.exists():
+        return []
+    return [garden_drop_item(path, vault_path) for path in sorted(drops_dir.rglob("*.md"))]
+
+
+def singularize_token(token: str) -> str:
+    if len(token) > 4 and token.endswith("s"):
+        return token[:-1]
+    return token
+
+
+def garden_tokens(drop: dict[str, object]) -> set[str]:
+    values = [
+        str(drop.get("title") or ""),
+        str(drop.get("page_title") or ""),
+        str(drop.get("page_description") or ""),
+        str(drop.get("hostname") or ""),
+        str(urlsplit(str(drop.get("url") or "")).hostname or ""),
+    ]
+    for key in ("folders", "tags"):
+        items = drop.get(key, [])
+        if isinstance(items, list):
+            values.extend(str(item) for item in items)
+
+    tokens: set[str] = set()
+    for token in re.findall(r"[a-z0-9]+", " ".join(values).lower()):
+        token = singularize_token(token)
+        if len(token) >= 3 and token not in GARDEN_STOPWORDS:
+            tokens.add(token)
+    return tokens
+
+
+def garden_example_score(candidate: dict[str, object], example: dict[str, object]) -> tuple[int, list[str]]:
+    candidate_tokens = garden_tokens(candidate)
+    example_tokens = garden_tokens(example)
+    overlap = sorted(candidate_tokens & example_tokens)
+    score = len(overlap)
+
+    candidate_hostname = str(candidate.get("hostname") or "")
+    example_hostname = str(example.get("hostname") or "")
+    if candidate_hostname and candidate_hostname == example_hostname:
+        score += 3
+
+    candidate_folders = set(garden_list(candidate.get("folders")))
+    example_folders = set(garden_list(example.get("folders")))
+    score += 2 * len(candidate_folders & example_folders)
+
+    candidate_tags = set(garden_list(candidate.get("tags")))
+    example_tags = set(garden_list(example.get("tags")))
+    score += 2 * len(candidate_tags & example_tags)
+
+    if bool(example.get("pearl", False)):
+        score += 1
+    if str(example.get("status") or "") == "reef":
+        score += 1
+    return score, overlap
+
+
+def garden_source_example(example: dict[str, object], score: int) -> dict[str, object]:
+    return {
+        "id": example.get("id", ""),
+        "path": example.get("path", ""),
+        "title": example.get("title", ""),
+        "score": score,
+    }
+
+
+def garden_label_suggestions(
+    candidate: dict[str, object],
+    examples: list[dict[str, object]],
+    label_key: str,
+) -> list[dict[str, object]]:
+    grouped: dict[str, dict[str, object]] = {}
+    for example in examples:
+        labels = garden_list(example.get(label_key))
+        if not labels:
+            continue
+        score, overlap = garden_example_score(candidate, example)
+        if score <= 0:
+            continue
+        for label in labels:
+            bucket = grouped.setdefault(label, {"score": 0, "evidence_tokens": set(), "source_examples": []})
+            bucket["score"] = int(bucket["score"]) + score
+            evidence = bucket["evidence_tokens"]
+            if isinstance(evidence, set):
+                evidence.update(overlap)
+            source_examples = bucket["source_examples"]
+            if isinstance(source_examples, list):
+                source_examples.append(garden_source_example(example, score))
+
+    suggestions = []
+    for name, data in grouped.items():
+        score = int(data["score"])
+        if score < 2:
+            continue
+        source_examples = data["source_examples"]
+        if not isinstance(source_examples, list):
+            source_examples = []
+        source_examples = sorted(
+            source_examples,
+            key=lambda item: (-int(item.get("score", 0)), str(item.get("title", "")), str(item.get("path", ""))),
+        )[:3]
+        evidence_tokens = data["evidence_tokens"]
+        if not isinstance(evidence_tokens, set):
+            evidence_tokens = set()
+        suggestions.append(
+            {
+                "name": name,
+                "score": score,
+                "evidence_tokens": sorted(evidence_tokens),
+                "source_examples": source_examples,
+            }
+        )
+    return sorted(suggestions, key=lambda item: (-int(item["score"]), str(item["name"])))[:3]
+
+
+def create_garden_suggestions_report(
+    vault: Path,
+    root: str = "MemoReef",
+    output: Path | None = None,
+) -> tuple[Path, dict[str, object]]:
+    vault_path = vault.expanduser().resolve()
+    drops = load_garden_drop_items(vault_path, root)
+    examples = [drop for drop in drops if garden_list(drop.get("projects")) or garden_list(drop.get("shoals"))]
+    candidates = [
+        drop
+        for drop in drops
+        if not garden_list(drop.get("projects")) or not garden_list(drop.get("shoals"))
+    ]
+    warnings: list[str] = []
+    suggestions: list[dict[str, object]] = []
+
+    if not examples:
+        warnings.append("No Drops with projects or shoals found; add examples first.")
+    else:
+        for candidate in candidates:
+            has_projects = bool(garden_list(candidate.get("projects")))
+            has_shoals = bool(garden_list(candidate.get("shoals")))
+            if has_projects and has_shoals:
+                continue
+            suggested_projects = [] if has_projects else garden_label_suggestions(candidate, examples, "projects")
+            suggested_shoals = [] if has_shoals else garden_label_suggestions(candidate, examples, "shoals")
+            if not suggested_projects and not suggested_shoals:
+                continue
+            suggestions.append(
+                {
+                    "id": candidate.get("id", ""),
+                    "path": candidate.get("path", ""),
+                    "title": candidate.get("title", ""),
+                    "url": candidate.get("url", ""),
+                    "suggested_projects": suggested_projects,
+                    "suggested_shoals": suggested_shoals,
+                }
+            )
+
+    suggestions.sort(key=lambda item: str(item.get("path", "")))
+
+    if output is None:
+        output = vault_path / root / "reports" / f"{timestamp_for_filename()}-garden-suggestions.json"
+    output = output.expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    report = {
+        "version": 1,
+        "created_at": utc_now_iso(),
+        "vault": str(vault_path),
+        "source": f"{root}/Drops",
+        "summary": {
+            "total_drops": len(drops),
+            "example_drops": len(examples),
+            "candidate_drops": len(candidates),
+            "suggestions": len(suggestions),
+            "warnings": len(warnings),
+        },
+        "suggestions": suggestions,
+        "warnings": warnings,
+    }
+    output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    return output, report
+
+
+def vault_has_metadata(vault: Path, root: str = "MemoReef") -> bool:
+    return any(str(drop.get("metadata_refreshed_at") or drop.get("page_title") or "") for drop in load_garden_drop_items(vault, root))
+
+
 def latest_file(paths: list[Path]) -> Path | None:
     existing = [path for path in paths if path.exists()]
     if not existing:
@@ -1061,6 +1291,8 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
     latest_agent_proposals = latest_matching_file(root_path / "agent-plans", ["*-agent-proposals.json"])
     latest_duplicate_report = latest_matching_file(root_path / "reports", ["*-duplicate-report.json"])
     latest_link_check_report = latest_matching_file(root_path / "reports", ["*-link-check-report.json"])
+    latest_garden_suggestions = latest_matching_file(root_path / "reports", ["*-garden-suggestions.json"])
+    has_metadata = vault_has_metadata(vault_path, root)
 
     return {
         "vault": vault_path,
@@ -1078,6 +1310,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
         "latest_agent_proposals": latest_agent_proposals,
         "latest_duplicate_report": latest_duplicate_report,
         "latest_link_check_report": latest_link_check_report,
+        "latest_garden_suggestions": latest_garden_suggestions,
         "next_action": recommended_next_action(
             total,
             drift,
@@ -1087,6 +1320,8 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
             latest_agent_proposals,
             latest_duplicate_report,
             latest_link_check_report,
+            latest_garden_suggestions,
+            has_metadata,
         ),
     }
 
@@ -1100,6 +1335,8 @@ def recommended_next_action(
     latest_agent_proposals: Path | None,
     latest_duplicate_report: Path | None,
     latest_link_check_report: Path | None,
+    latest_garden_suggestions: Path | None,
+    has_metadata: bool,
 ) -> str:
     if total == 0:
         return "Import bookmarks, a URL list, or a CSV file to create your first Drops."
@@ -1107,8 +1344,10 @@ def recommended_next_action(
         return "Create a duplicate report, then continue reviewing Drift Drops."
     if total > 0 and latest_link_check_report is None:
         return "Check saved links so broken URLs do not waste review time."
-    if total > 0 and latest_link_check_report is not None and latest_review_session is None:
+    if total > 0 and latest_link_check_report is not None and not has_metadata:
         return "Refresh metadata, then export a review session JSON."
+    if total > 0 and has_metadata and latest_garden_suggestions is None:
+        return "Create garden suggestions from curated project and shoal examples."
     if drift > 0 and latest_review_session is None:
         return "Export a review session JSON, then open Review Mode."
     if drift > 0 and latest_review_decisions is None:
@@ -1137,6 +1376,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
     latest_agent_proposals = relative_or_none(state.get("latest_agent_proposals"), vault)
     latest_duplicate_report = relative_or_none(state.get("latest_duplicate_report"), vault)
     latest_link_check_report = relative_or_none(state.get("latest_link_check_report"), vault)
+    latest_garden_suggestions = relative_or_none(state.get("latest_garden_suggestions"), vault)
     next_action = html_escape(str(state.get("next_action", "Continue.")))
     vault_text = html_escape(str(vault))
 
@@ -1206,6 +1446,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <dt>Agent proposals</dt><dd>{html_escape(latest_agent_proposals)}</dd>
           <dt>Duplicate report</dt><dd>{html_escape(latest_duplicate_report)}</dd>
           <dt>Link check report</dt><dd>{html_escape(latest_link_check_report)}</dd>
+          <dt>Garden suggestions</dt><dd>{html_escape(latest_garden_suggestions)}</dd>
         </dl>
       </div>
       <div class=\"card workflow\">
@@ -1215,6 +1456,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <li>Run <code>duplicate-report</code> to spot exact URL, same-domain, and similar-title clutter.</li>
           <li>Run <code>check-links</code> to find broken, suspicious, or unreachable saved URLs.</li>
           <li>Run <code>refresh-metadata</code> to fetch titles, descriptions, canonical URLs, and hostnames.</li>
+          <li>Run <code>suggest-gardens</code> to propose existing projects and shoals for unsorted Drops.</li>
           <li>Run <code>export-review-session</code> and open <code>site/swipe.html</code> for Review Mode.</li>
           <li>Export decisions from Review Mode, then run <code>apply-review-decisions</code>.</li>
           <li>Create an agent finish plan with <code>plan-agent-finish</code>.</li>
@@ -1225,7 +1467,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
       <div class=\"card\">
         <h2>Review Mode</h2>
         <p>Open <code>site/swipe.html</code>, load the latest review session JSON, review a taste sample, then export <code>memoreef-review-decisions.json</code>.</p>
-        <p>Reports are written locally under <code>{html_escape(root)}/reports/*-duplicate-report.json</code> and <code>{html_escape(root)}/reports/*-link-check-report.json</code>.</p>
+        <p>Reports are written locally under <code>{html_escape(root)}/reports/*-duplicate-report.json</code>, <code>{html_escape(root)}/reports/*-link-check-report.json</code>, and <code>{html_escape(root)}/reports/*-garden-suggestions.json</code>.</p>
         <p>This dashboard is static HTML. No backend, no network, no subscription.</p>
       </div>
     </section>
@@ -1315,6 +1557,11 @@ def build_parser() -> argparse.ArgumentParser:
     refresh_cmd.add_argument("--dry-run", action="store_true", help="Preview metadata updates without modifying Markdown files.")
     refresh_cmd.add_argument("--limit", type=int, default=None, help="Refresh only the first N Drops.")
     refresh_cmd.add_argument("--timeout", type=float, default=5, help="HTTP timeout in seconds. Default: 5")
+
+    gardens_cmd = sub.add_parser("suggest-gardens", help="Create local project and shoal suggestion report.")
+    gardens_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    gardens_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    gardens_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults inside the vault.")
 
     app_cmd = sub.add_parser("app", help="Generate a static MemoReef local app dashboard.")
     app_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -1492,6 +1739,24 @@ def main(argv: list[str] | None = None) -> int:
             print("- would update files:")
             for item in planned:
                 print(f"  - {item}")
+        for warning in warnings:
+            print(f"  - {warning}")
+        return 0
+
+    if args.command == "suggest-gardens":
+        output, report = create_garden_suggestions_report(args.vault, args.root, args.output)
+        summary = report["summary"]
+        assert isinstance(summary, dict)
+        warnings = report.get("warnings", [])
+        if not isinstance(warnings, list):
+            warnings = []
+        print("Created garden suggestions:")
+        print(f"- total drops: {summary['total_drops']}")
+        print(f"- example drops: {summary['example_drops']}")
+        print(f"- candidate drops: {summary['candidate_drops']}")
+        print(f"- suggestions: {summary['suggestions']}")
+        print(f"- warnings: {len(warnings)}")
+        print(f"- output: {output}")
         for warning in warnings:
             print(f"  - {warning}")
         return 0

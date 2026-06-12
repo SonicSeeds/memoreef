@@ -1325,6 +1325,142 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertIn("refresh-metadata", html)
 
+    def test_suggest_gardens_explicit_output_suggests_project_and_shoal(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "garden-suggestions.json"
+            write_bookmarks_to_vault([
+                Bookmark(
+                    "Agent automation patterns",
+                    "https://example.com/agent-automation",
+                    folders=["AI"],
+                    tags=["agents"],
+                    projects=["AI Agents"],
+                    shoals=["Automation"],
+                    status="reef",
+                    pearl=True,
+                ),
+                Bookmark("Agent automation workflows", "https://example.com/agent-workflows", folders=["AI"], tags=["agents"]),
+            ], vault_path, allow_duplicates=True)
+
+            with redirect_stdout(stdout):
+                result = main(["suggest-gardens", "--vault", str(vault_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            suggestion = data["suggestions"][0]
+            self.assertEqual(result, 0)
+            self.assertEqual(data["version"], 1)
+            self.assertEqual(data["summary"]["example_drops"], 1)
+            self.assertEqual(data["summary"]["candidate_drops"], 1)
+            self.assertEqual(suggestion["suggested_projects"][0]["name"], "AI Agents")
+            self.assertEqual(suggestion["suggested_shoals"][0]["name"], "Automation")
+            self.assertTrue(suggestion["suggested_projects"][0]["evidence_tokens"])
+            self.assertTrue(suggestion["suggested_projects"][0]["source_examples"])
+            self.assertIn("Created garden suggestions:", stdout.getvalue())
+
+    def test_suggest_gardens_default_output_under_reports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([
+                Bookmark("Design systems", "https://design.example/system", projects=["Design"]),
+                Bookmark("Design system checklist", "https://design.example/checklist"),
+            ], vault_path, allow_duplicates=True)
+
+            with redirect_stdout(io.StringIO()):
+                result = main(["suggest-gardens", "--vault", str(vault_path)])
+
+            reports = list((vault_path / "MemoReef" / "reports").glob("*-garden-suggestions.json"))
+            self.assertEqual(result, 0)
+            self.assertEqual(len(reports), 1)
+
+    def test_suggest_gardens_no_examples_warns(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "garden-suggestions.json"
+            write_bookmarks_to_vault([Bookmark("Loose", "https://loose.example")], vault_path)
+
+            with redirect_stdout(stdout):
+                result = main(["suggest-gardens", "--vault", str(vault_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(data["suggestions"], [])
+            self.assertEqual(data["summary"]["warnings"], 1)
+            self.assertIn("No Drops with projects or shoals found", data["warnings"][0])
+            self.assertIn("- warnings: 1", stdout.getvalue())
+
+    def test_suggest_gardens_respects_existing_project_or_shoal_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "garden-suggestions.json"
+            write_bookmarks_to_vault([
+                Bookmark("Agent automation source", "https://example.com/source", tags=["agents"], projects=["AI Agents"], shoals=["Automation"]),
+                Bookmark("Agent automation has project", "https://example.com/project", tags=["agents"], projects=["Manual Project"]),
+                Bookmark("Agent automation has shoal", "https://example.com/shoal", tags=["agents"], shoals=["Manual Shoal"]),
+            ], vault_path, allow_duplicates=True)
+
+            with redirect_stdout(io.StringIO()):
+                result = main(["suggest-gardens", "--vault", str(vault_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            by_title = {item["title"]: item for item in data["suggestions"]}
+            self.assertEqual(result, 0)
+            self.assertEqual(by_title["Agent automation has project"]["suggested_projects"], [])
+            self.assertTrue(by_title["Agent automation has project"]["suggested_shoals"])
+            self.assertTrue(by_title["Agent automation has shoal"]["suggested_projects"])
+            self.assertEqual(by_title["Agent automation has shoal"]["suggested_shoals"], [])
+
+    def test_suggest_gardens_deterministic_sort_order_for_equal_scores(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "garden-suggestions.json"
+            write_bookmarks_to_vault([
+                Bookmark("Shared research topic", "https://alpha.example/source", tags=["shared"], projects=["Alpha"]),
+                Bookmark("Shared research topic", "https://beta.example/source", tags=["shared"], projects=["Beta"]),
+                Bookmark("Shared research topic", "https://candidate.example/item", tags=["shared"]),
+            ], vault_path, allow_duplicates=True)
+
+            with redirect_stdout(io.StringIO()):
+                result = main(["suggest-gardens", "--vault", str(vault_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            names = [item["name"] for item in data["suggestions"][0]["suggested_projects"]]
+            self.assertEqual(result, 0)
+            self.assertEqual(names[:2], ["Alpha", "Beta"])
+
+    def test_suggest_gardens_does_not_modify_markdown_and_dashboard_detects_report(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("Agent automation source", "https://example.com/source", projects=["AI Agents"]),
+                Bookmark("Agent automation candidate", "https://example.com/candidate"),
+            ], vault_path, allow_duplicates=True)
+            before = {path: path.read_text(encoding="utf-8") for path in written}
+
+            with redirect_stdout(stdout):
+                result = main(["suggest-gardens", "--vault", str(vault_path)])
+            with redirect_stdout(io.StringIO()):
+                app_result = main(["app", "--vault", str(vault_path)])
+
+            html = (vault_path / "MemoReef" / "app" / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertEqual(app_result, 0)
+            self.assertEqual({path: path.read_text(encoding="utf-8") for path in written}, before)
+            self.assertIn("Garden suggestions", html)
+            self.assertIn("garden-suggestions", html)
+            self.assertIn("suggest-gardens", html)
+
+    def test_readme_and_tasks_mention_suggest_gardens(self):
+        readme = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
+        tasks = (Path(__file__).parent.parent / "docs" / "CODEX_TASKS.md").read_text(encoding="utf-8")
+
+        self.assertIn("suggest-gardens", readme)
+        self.assertIn("Task 17", tasks)
+        self.assertIn("suggest-gardens", tasks)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -198,6 +198,14 @@ python3 -m memoreef.cli refresh-metadata --vault /tmp/memoreef-vault --limit 50 
 
 Metadata refresh fetches saved URLs directly, extracts page title, description, canonical URL, and hostname, then updates only the related frontmatter fields. It does not use third-party APIs and does not move, delete, or rewrite notes beyond those metadata fields.
 
+Suggest projects and shoals from existing curated Drops:
+
+```bash
+python3 -m memoreef.cli suggest-gardens --vault /tmp/memoreef-vault
+```
+
+Garden suggestions are local-only heuristic reports. They compare unsorted Drops to Drops that already have projects or shoals, suggest only labels you already use, and do not modify, move, or delete files.
+
 Generate the static local app dashboard:
 
 ```bash

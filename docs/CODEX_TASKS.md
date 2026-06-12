@@ -443,3 +443,27 @@ Refresh basic page metadata from saved URLs before any AI enrichment.
 - Dry run reports planned updates without modifying Markdown files.
 - Unsupported URLs and network errors warn without crashing.
 - Dashboard includes `refresh-metadata` in the workflow.
+
+## Task 17 — Project and shoal suggestions
+
+### Goal
+Create a local report that suggests existing project and shoal labels for unsorted Drops.
+
+### Requirements
+
+- Add `python3 -m memoreef.cli suggest-gardens --vault <vault>`.
+- Support `--output`; default to `<vault>/MemoReef/reports/YYYY-MM-DD-HHMMSS-garden-suggestions.json`.
+- Use Drops with existing `projects` or `shoals` as curated examples.
+- Suggest only project and shoal labels already present in examples.
+- Use deterministic local token-overlap heuristics.
+- Do not modify, move, or delete Markdown files.
+- Do not call network APIs.
+- Update the local app dashboard to detect latest garden suggestions.
+
+### Acceptance criteria
+
+- Garden suggestion report JSON includes summary, suggestions, evidence tokens, and source examples.
+- Drops with existing projects do not receive project suggestions.
+- Drops with existing shoals do not receive shoal suggestions.
+- If no examples exist, the report is valid and includes a warning.
+- Dashboard includes latest garden suggestions information.
