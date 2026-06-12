@@ -203,3 +203,37 @@ Prepare project material that makes the Codex-assisted development story explici
 - Clear 1-page grant brief.
 - No exaggerated claims.
 - Reflects actual current repo state.
+
+## Task 7B — Mobile Review Mode prototype
+
+### Goal
+Create a mobile-first, browser-only static prototype for MemoReef Review Mode.
+
+### Path
+
+```text
+site/swipe.html
+```
+
+### Requirements
+
+- Show an import/session summary.
+- Present one Drop card at a time.
+- Support primary decisions:
+  - Sink
+  - Keep
+  - Pearl
+- Support escape actions:
+  - Let agents finish
+  - Continue later
+- Encode the product principle: user taste where it matters, agent sorting everywhere else.
+- Agents later assign category, tags, priority, note location, duplicate handling, and dead-link handling.
+- Do not include a manual category picker.
+- Keep it browser-only with no backend, external libraries, build tooling, or filesystem access.
+
+### Acceptance criteria
+
+- Opens directly with `open site/swipe.html`.
+- Counters update when Sink, Keep, or Pearl is selected.
+- Let agents finish and Continue later show clear static prototype states.
+- Swipe gestures and visible buttons work for the main actions.

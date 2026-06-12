@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>MemoReef Review Mode Prototype</title>
+  <meta name="description" content="Mobile-first MemoReef Review Mode prototype with swipe triage, Pearl marking, agent finish, and continue-later flows." />
+  <style>
+    :root {
+      color-scheme: dark;
+      --abyss: #02080d;
+      --deep: #061722;
+      --water: #0b3446;
+      --reef: #67f5d3;
+      --reef-soft: rgba(103, 245, 211, .16);
+      --pearl: #f6edd7;
+      --pearl-glow: rgba(246, 237, 215, .42);
+      --coral: #ff776b;
+      --coral-soft: rgba(255, 119, 107, .18);
+      --kelp: #9ad66b;
+      --amber: #ffd166;
+      --violet: #a99cff;
+      --ink: #effcff;
+      --muted: #a8c4cc;
+      --dim: #6d8b95;
+      --line: rgba(185, 243, 255, .17);
+      --panel: rgba(5, 26, 36, .78);
+      --panel-strong: rgba(8, 36, 49, .92);
+      --shadow: 0 30px 90px rgba(0, 0, 0, .48);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body { min-height: 100%; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 50% -10%, rgba(103, 245, 211, .18), transparent 18rem),
+        radial-gradient(circle at 90% 20%, rgba(169, 156, 255, .16), transparent 16rem),
+        radial-gradient(circle at 12% 64%, rgba(255, 119, 107, .12), transparent 15rem),
+        linear-gradient(180deg, #0a2b3b 0%, var(--deep) 38%, var(--abyss) 100%);
+      overflow-x: hidden;
+      touch-action: manipulation;
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    body::before {
+      background-image:
+        linear-gradient(rgba(255,255,255,.034) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.026) 1px, transparent 1px);
+      background-size: 64px 64px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,.85), transparent 86%);
+      opacity: .58;
+    }
+
+    body::after {
+      background:
+        radial-gradient(ellipse at 50% 100%, rgba(103,245,211,.16), transparent 46%),
+        repeating-radial-gradient(ellipse at 50% 105%, rgba(103,245,211,.08) 0 2px, transparent 2px 24px);
+      opacity: .54;
+    }
+
+    button,
+    a { -webkit-tap-highlight-color: transparent; }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      width: min(430px, 100%);
+      min-height: 100dvh;
+      margin: 0 auto;
+      padding: max(18px, env(safe-area-inset-top)) 16px max(18px, env(safe-area-inset-bottom));
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 14px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 14px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(255,255,255,.16);
+      background:
+        radial-gradient(circle at 68% 34%, var(--pearl) 0 8%, transparent 9%),
+        radial-gradient(circle at 36% 66%, rgba(103,245,211,.92) 0 10%, transparent 11%),
+        conic-gradient(from 215deg, #12394a, #0c7380, #67f5d3, #ff776b, #12394a);
+      box-shadow: 0 0 30px rgba(103,245,211,.22), inset 0 0 20px rgba(0,0,0,.36);
+    }
+
+    .brand-copy { min-width: 0; }
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.05;
+      letter-spacing: -.035em;
+    }
+    .tagline {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mode-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(1, 10, 16, .48);
+      color: #d8fff6;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .mode-pill::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--reef);
+      box-shadow: 0 0 18px var(--reef);
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 11px 10px;
+      background: rgba(4, 20, 29, .58);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .stat strong {
+      display: block;
+      font-size: 20px;
+      line-height: 1;
+      letter-spacing: -.04em;
+    }
+    .stat span {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .stage {
+      position: relative;
+      display: grid;
+      align-items: center;
+      min-height: 448px;
+    }
+
+    .card-wrap {
+      position: relative;
+      height: min(62dvh, 510px);
+      min-height: 410px;
+      perspective: 1200px;
+    }
+
+    .back-card {
+      position: absolute;
+      inset: 14px 8px 0;
+      border-radius: 32px;
+      border: 1px solid rgba(255,255,255,.09);
+      background: rgba(7, 28, 39, .44);
+      transform: scale(.94) translateY(18px);
+      filter: blur(.2px);
+    }
+
+    .drop-card {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      border: 1px solid rgba(210, 253, 255, .2);
+      border-radius: 34px;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(13, 50, 66, .94), rgba(4, 20, 29, .98)),
+        radial-gradient(circle at 20% 12%, rgba(103,245,211,.18), transparent 18rem);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.08);
+      user-select: none;
+      cursor: grab;
+      transform-origin: 50% 80%;
+      transition: transform .22s ease, opacity .22s ease, border-color .22s ease;
+      will-change: transform;
+    }
+    .drop-card.dragging {
+      cursor: grabbing;
+      transition: none;
+    }
+    .drop-card.sink-hint { border-color: rgba(255,119,107,.62); }
+    .drop-card.keep-hint { border-color: rgba(103,245,211,.68); }
+    .drop-card.pearl-hint { border-color: rgba(246,237,215,.78); }
+
+    .card-reef {
+      position: absolute;
+      inset: auto -30px -22px -30px;
+      height: 150px;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 20% 70%, rgba(255,119,107,.2) 0 4%, transparent 5%),
+        radial-gradient(circle at 74% 62%, rgba(103,245,211,.2) 0 5%, transparent 6%),
+        repeating-linear-gradient(135deg, rgba(103,245,211,.13) 0 8px, transparent 8px 23px);
+      mask-image: linear-gradient(to top, black, transparent 85%);
+      opacity: .8;
+    }
+
+    .decision-badge {
+      position: absolute;
+      top: 26px;
+      z-index: 3;
+      padding: 9px 12px;
+      border: 2px solid currentColor;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      opacity: 0;
+      transform: rotate(-10deg) scale(.92);
+      transition: opacity .12s ease;
+      backdrop-filter: blur(12px);
+    }
+    .decision-badge.sink { left: 22px; color: var(--coral); }
+    .decision-badge.keep { right: 22px; color: var(--reef); transform: rotate(10deg) scale(.92); }
+    .decision-badge.pearl { left: 50%; translate: -50% 0; color: var(--pearl); transform: rotate(0deg) scale(.92); }
+    .drop-card.show-sink .decision-badge.sink,
+    .drop-card.show-keep .decision-badge.keep,
+    .drop-card.show-pearl .decision-badge.pearl { opacity: 1; }
+
+    .card-top {
+      padding: 22px 22px 0;
+      position: relative;
+      z-index: 2;
+    }
+
+    .source-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .source-chip,
+    .agent-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      padding: 7px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.13);
+      background: rgba(255,255,255,.055);
+      white-space: nowrap;
+    }
+    .source-chip span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .agent-chip { color: #d8fff6; }
+    .agent-chip::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--reef);
+      box-shadow: 0 0 14px var(--reef);
+    }
+
+    .card-body {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      align-content: center;
+      gap: 16px;
+      padding: 10px 22px 0;
+    }
+    .card-body h2 {
+      margin: 0;
+      font-size: clamp(28px, 9vw, 42px);
+      line-height: .97;
+      letter-spacing: -.06em;
+      text-wrap: balance;
+    }
+    .summary-copy {
+      margin: 0;
+      color: #c2d7df;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+    .meta-row span {
+      padding: 7px 9px;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 999px;
+      color: #d9eef3;
+      background: rgba(255,255,255,.055);
+      font-size: 12px;
+    }
+
+    .agent-note {
+      border: 1px solid rgba(103,245,211,.22);
+      border-radius: 18px;
+      padding: 12px;
+      background: rgba(103,245,211,.08);
+      color: #d9fff6;
+      font-size: 13px;
+      line-height: 1.38;
+    }
+    .agent-note b { color: var(--pearl); }
+
+    .card-bottom {
+      position: relative;
+      z-index: 2;
+      padding: 0 22px 22px;
+    }
+    .url {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--dim);
+      font-size: 12px;
+      text-decoration: none;
+    }
+
+    .actions {
+      display: grid;
+      gap: 10px;
+    }
+
+    .primary-actions {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .action-btn,
+    .escape-btn,
+    .sheet-btn {
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 999px;
+      color: var(--ink);
+      background: rgba(7, 28, 39, .72);
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .action-btn {
+      min-height: 54px;
+      padding: 10px 12px;
+    }
+    .action-btn small {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .sink-btn { border-color: rgba(255,119,107,.32); color: #ffd4cf; }
+    .keep-btn { border-color: rgba(103,245,211,.35); color: #d8fff6; }
+    .pearl-btn {
+      min-height: 64px;
+      color: #1b1710;
+      border-color: rgba(246,237,215,.8);
+      background: linear-gradient(135deg, #fff8e7, #e6d2a4);
+      box-shadow: 0 12px 36px rgba(246,237,215,.18), inset 0 1px 0 rgba(255,255,255,.75);
+    }
+    .pearl-btn small { color: rgba(27,23,16,.64); }
+
+    .escape-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .escape-btn {
+      min-height: 46px;
+      padding: 10px;
+      color: #d9eef3;
+      font-size: 13px;
+    }
+    .escape-btn.agent {
+      border-color: rgba(103,245,211,.28);
+      background: rgba(103,245,211,.1);
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(108px + env(safe-area-inset-bottom));
+      width: min(370px, calc(100% - 40px));
+      translate: -50% 24px;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 20;
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(2, 12, 18, .92);
+      box-shadow: 0 18px 54px rgba(0,0,0,.42);
+      color: #e9fbff;
+      font-size: 13px;
+      line-height: 1.35;
+      transition: opacity .2s ease, translate .2s ease;
+      backdrop-filter: blur(16px);
+    }
+    .toast.show { opacity: 1; translate: -50% 0; }
+
+    .sheet-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: none;
+      align-items: end;
+      background: rgba(0, 0, 0, .45);
+      backdrop-filter: blur(4px);
+    }
+    .sheet-backdrop.show { display: flex; }
+
+    .sheet {
+      width: min(430px, 100%);
+      margin: 0 auto;
+      padding: 18px 16px max(18px, env(safe-area-inset-bottom));
+      border: 1px solid var(--line);
+      border-bottom: 0;
+      border-radius: 30px 30px 0 0;
+      background:
+        radial-gradient(circle at 72% 0%, rgba(103,245,211,.14), transparent 15rem),
+        rgba(4, 18, 25, .96);
+      box-shadow: 0 -28px 80px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.07);
+    }
+    .sheet h3 {
+      margin: 0 0 7px;
+      font-size: 22px;
+      letter-spacing: -.04em;
+    }
+    .sheet p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 14px;
+    }
+    .sheet-grid {
+      display: grid;
+      gap: 10px;
+    }
+    .sheet-btn {
+      min-height: 50px;
+      padding: 12px 14px;
+      text-align: left;
+      border-radius: 18px;
+      font-weight: 760;
+    }
+    .sheet-btn.primary {
+      color: #0b201d;
+      border-color: rgba(103,245,211,.72);
+      background: linear-gradient(135deg, #75f6d4, #aceb7c);
+    }
+    .sheet-btn.neutral { color: #e9fbff; }
+
+    .done-state {
+      display: none;
+      text-align: center;
+      align-self: center;
+      padding: 32px 18px;
+      border: 1px solid var(--line);
+      border-radius: 32px;
+      background: var(--panel);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .done-state.show { display: block; }
+    .done-state h2 {
+      margin: 0 0 10px;
+      font-size: 34px;
+      line-height: .95;
+      letter-spacing: -.06em;
+    }
+    .done-state p {
+      margin: 0 auto 18px;
+      max-width: 290px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .history {
+      max-height: 92px;
+      overflow: auto;
+      padding: 8px 2px 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      scrollbar-width: none;
+    }
+    .history::-webkit-scrollbar { display: none; }
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 7px 0;
+      border-top: 1px solid rgba(255,255,255,.07);
+    }
+    .history-item b { color: var(--ink); font-weight: 750; }
+
+    @media (min-width: 720px) {
+      .app {
+        width: min(960px, calc(100% - 36px));
+        grid-template-columns: 430px minmax(260px, 1fr);
+        grid-template-rows: auto auto 1fr;
+        column-gap: 24px;
+        align-items: start;
+      }
+      header,
+      .summary { grid-column: 1 / -1; }
+      .actions { align-self: end; }
+      .history {
+        max-height: 220px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: rgba(4,20,29,.5);
+      }
+      .stage { min-height: 560px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="MemoReef Review Mode prototype">
+    <header>
+      <div class="brand" aria-label="MemoReef">
+        <div class="mark" aria-hidden="true"></div>
+        <div class="brand-copy">
+          <h1>MemoReef</h1>
+          <p class="tagline">Review a few. Let agents sort the reef.</p>
+        </div>
+      </div>
+      <div class="mode-pill">Review Mode</div>
+    </header>
+
+    <section class="summary" aria-label="Review progress">
+      <div class="stat"><strong id="reviewedCount">37</strong><span>reviewed</span></div>
+      <div class="stat"><strong id="remainingCount">863</strong><span>remaining</span></div>
+      <div class="stat"><strong id="pearlCount">12</strong><span>pearls</span></div>
+    </section>
+    <p class="agent-note" hidden>Session summary: 37 reviewed · 863 remaining · 12 pearls found.</p>
+
+    <section class="stage" aria-live="polite">
+      <div class="card-wrap" id="cardWrap">
+        <div class="back-card" aria-hidden="true"></div>
+        <article class="drop-card" id="dropCard" tabindex="0" aria-label="Current Drop. Swipe left to sink, right to keep, up to pearl.">
+          <div class="decision-badge sink">Sink</div>
+          <div class="decision-badge keep">Keep</div>
+          <div class="decision-badge pearl">Pearl</div>
+          <div class="card-reef" aria-hidden="true"></div>
+
+          <div class="card-top">
+            <div class="source-row">
+              <div class="source-chip">↻ <span id="sourceLabel">Imported bookmark</span></div>
+              <div class="agent-chip" id="confidenceLabel">82% signal</div>
+            </div>
+          </div>
+
+          <div class="card-body">
+            <div>
+              <h2 id="cardTitle">Local AI Agents for Small Teams</h2>
+              <p class="summary-copy" id="cardSummary">A practical guide to running autonomous coding and research agents without turning a small team into a dashboard museum.</p>
+            </div>
+            <div class="meta-row" id="metaRow" aria-label="Agent-assigned metadata preview"></div>
+            <div class="agent-note" id="agentNote"><b>Agent guess:</b> strong keep. Likely useful for SonicSeeds fleet architecture and local-first product work.</div>
+          </div>
+
+          <div class="card-bottom">
+            <a class="url" id="cardUrl" href="https://example.com/local-agents">example.com/local-agents</a>
+          </div>
+        </article>
+      </div>
+      <section class="done-state" id="doneState" aria-live="polite">
+        <h2 id="doneTitle">Reef complete</h2>
+        <p id="doneCopy">All visible cards are reviewed. Agents can now write clean Markdown notes and sort the library quietly.</p>
+        <button class="sheet-btn primary" id="restartBtn" type="button">Restart prototype</button>
+      </section>
+    </section>
+
+    <section class="actions" aria-label="Review actions">
+      <div class="primary-actions">
+        <button class="action-btn sink-btn" id="sinkBtn" type="button">Sink<small>swipe left</small></button>
+        <button class="action-btn pearl-btn" id="pearlBtn" type="button">Pearl<small>high value</small></button>
+        <button class="action-btn keep-btn" id="keepBtn" type="button">Keep<small>swipe right</small></button>
+      </div>
+      <div class="escape-actions">
+        <button class="escape-btn agent" id="agentFinishBtn" type="button">Let agents finish</button>
+        <button class="escape-btn" id="laterBtn" type="button">Continue later</button>
+      </div>
+      <div class="history" id="history" aria-label="Review history"></div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <div class="sheet-backdrop" id="sheetBackdrop" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <section class="sheet">
+      <h3 id="sheetTitle">Let agents finish?</h3>
+      <p id="sheetCopy">Agents will process the remaining items using your review choices as taste signal.</p>
+      <div class="sheet-grid" id="sheetActions"></div>
+    </section>
+  </div>
+
+  <script>
+    const initialStats = { reviewed: 37, remaining: 863, pearls: 12 };
+
+    const drops = [
+      {
+        title: 'Local AI Agents for Small Teams',
+        summary: 'A practical guide to running autonomous coding and research agents without turning a small team into a dashboard museum.',
+        url: 'https://example.com/local-agents',
+        source: 'Imported bookmark',
+        confidence: '82% signal',
+        tags: ['ai-agents', 'local-first', 'workflow'],
+        note: '<b>Agent guess:</b> strong keep. Likely useful for SonicSeeds fleet architecture and local-first product work.'
+      },
+      {
+        title: 'RSS Is Not Dead, It Is Just Underwater',
+        summary: 'A long essay on feed readers, private information diets, and why curated sources beat algorithmic noise.',
+        url: 'https://example.com/rss-underwater',
+        source: 'Reading list',
+        confidence: '74% signal',
+        tags: ['feeds', 'curation', 'reading'],
+        note: '<b>Agent guess:</b> possible Pearl. Strong fit for MemoReef positioning and Ask My Signals.'
+      },
+      {
+        title: 'Launch Checklist for SaaS Landing Pages',
+        summary: 'A generic checklist with common sections, SEO reminders, pricing-table advice, and conversion copy patterns.',
+        url: 'https://example.com/saas-checklist',
+        source: 'CSV import',
+        confidence: '41% signal',
+        tags: ['marketing', 'checklist', 'generic'],
+        note: '<b>Agent guess:</b> likely sink or archive. Useful only if the current launch checklist is empty. It is not.'
+      },
+      {
+        title: 'Obsidian Frontmatter Patterns for Research Vaults',
+        summary: 'Examples for YAML schemas, Dataview fields, source provenance, reading status, and agent-readable notes.',
+        url: 'https://example.com/obsidian-frontmatter',
+        source: 'Bookmarks / Tools',
+        confidence: '91% signal',
+        tags: ['obsidian', 'markdown', 'schema'],
+        note: '<b>Agent guess:</b> Pearl candidate. Directly maps to MemoReef export quality.'
+      },
+      {
+        title: 'Top 200 AI Tools You Need This Week',
+        summary: 'A noisy ranked list of sponsored AI tools, repeated categories, and several dead-looking product links.',
+        url: 'https://example.com/top-ai-tools',
+        source: 'Old bookmark',
+        confidence: '18% signal',
+        tags: ['ai-tools', 'listicle', 'noise'],
+        note: '<b>Agent guess:</b> sink. This is mostly sediment. Every reef has some. Ideally less.'
+      }
+    ];
+
+    const state = {
+      index: 0,
+      reviewed: initialStats.reviewed,
+      remaining: initialStats.remaining,
+      pearls: initialStats.pearls,
+      history: []
+    };
+
+    const els = {
+      reviewed: document.getElementById('reviewedCount'),
+      remaining: document.getElementById('remainingCount'),
+      pearls: document.getElementById('pearlCount'),
+      cardWrap: document.getElementById('cardWrap'),
+      card: document.getElementById('dropCard'),
+      title: document.getElementById('cardTitle'),
+      summary: document.getElementById('cardSummary'),
+      url: document.getElementById('cardUrl'),
+      source: document.getElementById('sourceLabel'),
+      confidence: document.getElementById('confidenceLabel'),
+      meta: document.getElementById('metaRow'),
+      note: document.getElementById('agentNote'),
+      history: document.getElementById('history'),
+      toast: document.getElementById('toast'),
+      done: document.getElementById('doneState'),
+      doneTitle: document.getElementById('doneTitle'),
+      doneCopy: document.getElementById('doneCopy'),
+      sheet: document.getElementById('sheetBackdrop'),
+      sheetTitle: document.getElementById('sheetTitle'),
+      sheetCopy: document.getElementById('sheetCopy'),
+      sheetActions: document.getElementById('sheetActions')
+    };
+
+    function renderStats() {
+      els.reviewed.textContent = state.reviewed;
+      els.remaining.textContent = state.remaining;
+      els.pearls.textContent = state.pearls;
+    }
+
+    function renderCard() {
+      const drop = drops[state.index];
+      renderStats();
+      clearHints();
+      els.card.style.transform = '';
+      els.card.style.opacity = '1';
+
+      if (!drop) {
+        els.cardWrap.style.display = 'none';
+        els.done.classList.add('show');
+        return;
+      }
+
+      els.cardWrap.style.display = '';
+      els.done.classList.remove('show');
+      els.title.textContent = drop.title;
+      els.summary.textContent = drop.summary;
+      els.url.href = drop.url;
+      els.url.textContent = drop.url.replace(/^https?:\/\//, '');
+      els.source.textContent = drop.source;
+      els.confidence.textContent = drop.confidence;
+      els.meta.innerHTML = drop.tags.map(tag => `<span>${tag}</span>`).join('');
+      els.note.innerHTML = drop.note;
+    }
+
+    function clearHints() {
+      els.card.classList.remove('dragging', 'sink-hint', 'keep-hint', 'pearl-hint', 'show-sink', 'show-keep', 'show-pearl');
+    }
+
+    function showToast(message) {
+      els.toast.textContent = message;
+      els.toast.classList.add('show');
+      window.clearTimeout(showToast.timer);
+      showToast.timer = window.setTimeout(() => els.toast.classList.remove('show'), 2600);
+    }
+
+    function addHistory(action, drop) {
+      state.history.unshift({ action, title: drop.title });
+      state.history = state.history.slice(0, 6);
+      els.history.innerHTML = state.history.map(item => `
+        <div class="history-item"><b>${item.action}</b><span>${item.title}</span></div>
+      `).join('');
+    }
+
+    function decide(action) {
+      const drop = drops[state.index];
+      if (!drop) return;
+
+      const direction = action === 'Sink' ? -1 : action === 'Keep' ? 1 : 0;
+      const y = action === 'Pearl' ? -150 : 18;
+      const rotation = action === 'Sink' ? -18 : action === 'Keep' ? 18 : 0;
+      const className = action === 'Sink' ? 'show-sink' : action === 'Keep' ? 'show-keep' : 'show-pearl';
+
+      clearHints();
+      els.card.classList.add(className);
+      els.card.style.transform = `translate(${direction * 460}px, ${y}px) rotate(${rotation}deg)`;
+      els.card.style.opacity = '0';
+
+      window.setTimeout(() => {
+        state.index += 1;
+        state.reviewed += 1;
+        state.remaining = Math.max(0, state.remaining - 1);
+        if (action === 'Pearl') state.pearls += 1;
+        addHistory(action, drop);
+        renderCard();
+        showToast(`${action}: ${drop.title}`);
+      }, 230);
+    }
+
+    function openSheet(kind) {
+      els.sheetActions.innerHTML = '';
+
+      if (kind === 'agents') {
+        els.sheetTitle.textContent = 'Let agents finish?';
+        els.sheetCopy.textContent = `You reviewed ${state.reviewed} items. Agents will process the remaining ${state.remaining} using your choices as taste signal.`;
+        addSheetButton('Let agents finish', 'primary', () => finishWithAgents());
+        addSheetButton('Keep reviewing', 'neutral', closeSheet);
+      } else {
+        els.sheetTitle.textContent = 'Continue sorting later';
+        els.sheetCopy.textContent = `Progress saved: ${state.reviewed} reviewed, ${state.remaining} still waiting in Review Mode. No forced decisions. Civilized.`;
+        addSheetButton('Save and leave review', 'primary', () => continueLater());
+        addSheetButton('Let agents finish instead', 'neutral', () => openSheet('agents'));
+        addSheetButton('Keep reviewing', 'neutral', closeSheet);
+      }
+
+      els.sheet.classList.add('show');
+    }
+
+    function addSheetButton(label, variant, handler) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `sheet-btn ${variant}`;
+      btn.textContent = label;
+      btn.addEventListener('click', handler);
+      els.sheetActions.appendChild(btn);
+    }
+
+    function closeSheet() {
+      els.sheet.classList.remove('show');
+    }
+
+    function finishWithAgents() {
+      closeSheet();
+      els.cardWrap.style.display = 'none';
+      els.done.classList.add('show');
+      els.doneTitle.textContent = 'Agents are finishing the reef';
+      els.doneCopy.textContent = `They will classify, tag, dedupe, and write notes for the remaining ${state.remaining} items using your review taste.`;
+      showToast('Agents finishing the remaining reef. The tiny librarians have been released.');
+    }
+
+    function continueLater() {
+      closeSheet();
+      els.cardWrap.style.display = 'none';
+      els.done.classList.add('show');
+      els.doneTitle.textContent = 'Progress saved';
+      els.doneCopy.textContent = 'Progress saved. Resume Review Mode anytime.';
+      showToast('Review paused. The reef waits. It has excellent patience.');
+    }
+
+    function restart() {
+      state.index = 0;
+      state.reviewed = initialStats.reviewed;
+      state.remaining = initialStats.remaining;
+      state.pearls = initialStats.pearls;
+      state.history = [];
+      els.history.innerHTML = '';
+      els.done.classList.remove('show');
+      renderCard();
+      showToast('Prototype restarted. Same ocean, fewer consequences.');
+    }
+
+    let drag = null;
+
+    function pointerDown(event) {
+      if (!drops[state.index]) return;
+      drag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        x: 0,
+        y: 0
+      };
+      els.card.setPointerCapture(event.pointerId);
+      els.card.classList.add('dragging');
+    }
+
+    function pointerMove(event) {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      drag.x = event.clientX - drag.startX;
+      drag.y = event.clientY - drag.startY;
+      const rotate = drag.x / 18;
+      els.card.style.transform = `translate(${drag.x}px, ${drag.y}px) rotate(${rotate}deg)`;
+      clearHints();
+      els.card.classList.add('dragging');
+      if (drag.x < -86) els.card.classList.add('sink-hint', 'show-sink');
+      if (drag.x > 86) els.card.classList.add('keep-hint', 'show-keep');
+      if (drag.y < -96 && Math.abs(drag.x) < 120) els.card.classList.add('pearl-hint', 'show-pearl');
+    }
+
+    function pointerUp(event) {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const { x, y } = drag;
+      drag = null;
+      try { els.card.releasePointerCapture(event.pointerId); } catch (_) {}
+      clearHints();
+      if (x < -110) return decide('Sink');
+      if (x > 110) return decide('Keep');
+      if (y < -125 && Math.abs(x) < 140) return decide('Pearl');
+      els.card.style.transform = '';
+    }
+
+    document.getElementById('sinkBtn').addEventListener('click', () => decide('Sink'));
+    document.getElementById('keepBtn').addEventListener('click', () => decide('Keep'));
+    document.getElementById('pearlBtn').addEventListener('click', () => decide('Pearl'));
+    document.getElementById('agentFinishBtn').addEventListener('click', () => openSheet('agents'));
+    document.getElementById('laterBtn').addEventListener('click', () => openSheet('later'));
+    document.getElementById('restartBtn').addEventListener('click', restart);
+    els.sheet.addEventListener('click', event => { if (event.target === els.sheet) closeSheet(); });
+
+    els.card.addEventListener('pointerdown', pointerDown);
+    els.card.addEventListener('pointermove', pointerMove);
+    els.card.addEventListener('pointerup', pointerUp);
+    els.card.addEventListener('pointercancel', pointerUp);
+    els.card.addEventListener('keydown', event => {
+      if (event.key === 'ArrowLeft') decide('Sink');
+      if (event.key === 'ArrowRight') decide('Keep');
+      if (event.key === 'ArrowUp' || event.key.toLowerCase() === 'p') decide('Pearl');
+    });
+
+    renderCard();
+  </script>
+</body>
+</html>

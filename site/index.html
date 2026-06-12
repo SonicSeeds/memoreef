@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MemoReef — Save sources. Let ideas surface.</title>
-  <meta name="description" content="MemoReef saves bookmarks into your Obsidian vault and turns them into an agent-readable source library." />
+  <title>MemoReef — Turn bookmark chaos into reusable source memory.</title>
+  <meta name="description" content="MemoReef imports messy browser bookmarks into a private Markdown source library, helps you review what matters, and lets agents answer from saved sources later." />
   <style>
     :root {
       color-scheme: dark;
@@ -176,6 +176,39 @@
       line-height: 1.45;
       text-wrap: pretty;
     }
+    .pain-strip {
+      display: grid;
+      gap: 10px;
+      margin: 24px 0 0;
+      max-width: 650px;
+    }
+    .pain-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px;
+      align-items: start;
+      color: #d7f3ef;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+    .pain-item::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      margin-top: 7px;
+      border-radius: 50%;
+      background: var(--coral);
+      box-shadow: 0 0 16px rgba(255,127,110,.46);
+    }
+    .pain-item strong { color: #fffaf3; }
+    .buyer-line {
+      margin: 18px 0 0;
+      max-width: 650px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .buyer-line strong { color: var(--ink); }
     .actions {
       display: flex;
       flex-wrap: wrap;
@@ -342,10 +375,17 @@
     <section class="hero" aria-labelledby="hero-title">
       <div>
         <div class="eyebrow"><span class="dot"></span> Local-first · Markdown-native · Agent-readable</div>
-        <h1 id="hero-title"><span class="gradient-text">Save sources.</span><br>Let ideas surface.</h1>
-        <p class="lead">MemoReef imports browser bookmarks into your Obsidian vault and turns them into a living source library your agents can search, triage, and build from later.</p>
+        <h1 id="hero-title"><span class="gradient-text">Your saved web.</span><br>Actually useful again.</h1>
+        <p class="lead">MemoReef is for people with hundreds of saved links, scattered notes, and “I know I bookmarked that somewhere” energy. It turns browser exports into a private source library your agents can review, search, cite, and build from.</p>
+        <div class="pain-strip" aria-label="MemoReef buyer problems">
+          <div class="pain-item"><div><strong>Stop losing research twice.</strong> <span>Import old bookmarks once, then triage them into keep, pearl, or sink instead of pretending folders are a system.</span></div></div>
+          <div class="pain-item"><div><strong>Make AI answer from your sources.</strong> <span>Keep source URLs, folder context, tags, and Markdown notes together so local agents can cite the material you already collected.</span></div></div>
+          <div class="pain-item"><div><strong>Own the archive.</strong> <span>No new SaaS silo, no monthly hostage situation. Your reef lives as files in your vault.</span></div></div>
+        </div>
+        <p class="buyer-line"><strong>Buyer:</strong> researchers, builders, writers, consultants, and agent operators drowning in saved links but not ready to hand their source memory to another black box.</p>
         <div class="actions">
           <a class="button primary" href="#cli">Try the local CLI</a>
+          <a class="button" href="swipe.html">Open Review Mode</a>
           <a class="button" href="#how">See the flow</a>
         </div>
         <pre id="cli" class="command">python3 -m memoreef.cli import bookmarks.html --vault ~/Obsidian/Main</pre>
@@ -373,16 +413,16 @@
 
     <section id="how" class="sections" aria-label="How MemoReef works">
       <article class="feature">
-        <h2>Import the Drift</h2>
-        <p>Start with a bulk browser bookmark export. MemoReef writes each link as a clean Markdown Drop inside your Obsidian vault.</p>
+        <h2>Import the mess</h2>
+        <p>Start with the ugly reality: a bulk browser bookmark export from Chrome, Brave, Arc, Firefox, or Safari. MemoReef writes each link as a clean Markdown Drop instead of asking you to rebuild your library by hand.</p>
       </article>
       <article class="feature">
-        <h2>Grow the Reef</h2>
-        <p>Folder paths, tags, source URLs, and agent-ready frontmatter give your saved web a structure that survives outside any SaaS.</p>
+        <h2>Review fast</h2>
+        <p>Swipe through old saves in short sessions. Sink dead weight, keep useful material, and mark Pearls worth citing or turning into project fuel.</p>
       </article>
       <article class="feature">
-        <h2>Let agents dive</h2>
-        <p>Your own agents can later search, cluster, summarize, and turn saved sources into project-ready briefings.</p>
+        <h2>Ask your sources</h2>
+        <p>Agents can search your private reef later, synthesize answers from saved material, and point back to the original links. That is the product. The ocean metaphor is just less depressing than a folder called “misc”.</p>
       </article>
     </section>
   </main>

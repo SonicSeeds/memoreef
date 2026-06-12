@@ -52,10 +52,16 @@ Not implemented yet:
 - Article fetching/extraction.
 - Automatic summaries and generated tags.
 - Dead-link checking.
-- Swipe triage UI.
+- Connected swipe Review Mode UI.
 - Obsidian plugin.
 - Browser extension.
 - Agent search/index.
+
+## Built with Codex-assisted development
+
+MemoReef is being built with focused Codex tasks that keep changes small, reviewable, and test-backed. Codex contributes implementation work such as importers, tests, UI prototypes, refactors, and documentation, while Tao/Hermes handles product direction, architecture, taste, verification, and repo orchestration.
+
+See [docs/GRANT_BRIEF.md](docs/GRANT_BRIEF.md) for the grant-oriented project narrative.
 
 ## Example output
 
@@ -118,14 +124,20 @@ Open the static Drift triage prototype:
 open site/triage.html
 ```
 
-This is a browser-only prototype with inline sample data. It is not connected to real vault files yet.
+Open the mobile-first Review Mode prototype:
+
+```bash
+open site/swipe.html
+```
+
+These are browser-only prototypes with inline sample data. They are not connected to real vault files yet.
 
 ## Near-term roadmap
 
 1. Robust browser bookmark import across Chrome/Brave/Arc/Firefox/Safari exports.
 2. Broader dedupe controls and duplicate reporting across importer types.
 3. `enrich` command for title refresh, metadata, summary placeholder, and dead-link checks.
-4. `triage` data model: keep/archive/deep/project/pearl/discard.
+4. Review Mode data model: sink/keep/pearl, let agents finish remaining, and continue sorting later.
 5. Obsidian folder conventions and Dataview-friendly frontmatter.
 6. Agent handoff format: project briefings generated from selected Drops/Shoals.
 7. Optional UI: local web app or Tauri app for Drift triage.
