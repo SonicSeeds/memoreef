@@ -5,9 +5,32 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import urllib.error
+from unittest.mock import patch
 
 from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, write_bookmarks_to_vault
 from memoreef.cli import main
+
+
+class FakeHTTPResponse:
+    def __init__(self, status: int, url: str = "https://example.com"):
+        self.status = status
+        self.url = url
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def getcode(self):
+        return self.status
+
+    def geturl(self):
+        return self.url
+
+    def read(self, size=-1):
+        return b"ok"
 
 
 class BookmarkImportTests(unittest.TestCase):
@@ -934,6 +957,208 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertEqual(written[0].read_text(encoding="utf-8"), before)
             self.assertIn("Duplicate report", html)
             self.assertIn("duplicate-report", html)
+
+    def test_check_links_explicit_output_writes_report(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "link-check-report.json"
+            write_bookmarks_to_vault([Bookmark("Example", "https://example.com")], vault_path)
+
+            with patch("memoreef.cli.urllib.request.urlopen", return_value=FakeHTTPResponse(200)):
+                with redirect_stdout(stdout):
+                    result = main(["check-links", "--vault", str(vault_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(data["version"], 1)
+            self.assertEqual(data["summary"]["checked"], 1)
+            self.assertEqual(data["results"][0]["status"], "ok")
+            self.assertIn("Created link check report", stdout.getvalue())
+
+    def test_check_links_default_output_under_reports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([Bookmark("Example", "https://example.com")], vault_path)
+
+            with patch("memoreef.cli.urllib.request.urlopen", return_value=FakeHTTPResponse(200)):
+                with redirect_stdout(io.StringIO()):
+                    result = main(["check-links", "--vault", str(vault_path)])
+
+            reports = list((vault_path / "MemoReef" / "reports").glob("*-link-check-report.json"))
+            self.assertEqual(result, 0)
+            self.assertEqual(len(reports), 1)
+
+    def test_check_links_classifies_http_statuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "link-check-report.json"
+            write_bookmarks_to_vault([
+                Bookmark("OK", "https://ok.example"),
+                Bookmark("Missing", "https://missing.example"),
+                Bookmark("Forbidden", "https://forbidden.example"),
+            ], vault_path, allow_duplicates=True)
+
+            def fake_urlopen(request, timeout=5):
+                url = request.full_url
+                if "missing" in url:
+                    raise urllib.error.HTTPError(url, 404, "missing", {}, io.BytesIO())
+                if "forbidden" in url:
+                    raise urllib.error.HTTPError(url, 403, "forbidden", {}, io.BytesIO())
+                return FakeHTTPResponse(200, url)
+
+            with patch("memoreef.cli.urllib.request.urlopen", side_effect=fake_urlopen):
+                with redirect_stdout(io.StringIO()):
+                    result = main([
+                        "check-links",
+                        "--vault",
+                        str(vault_path),
+                        "--output",
+                        str(output_path),
+                        "--method",
+                        "head",
+                    ])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            statuses = {item["title"]: item["status"] for item in data["results"]}
+            self.assertEqual(result, 0)
+            self.assertEqual(statuses["OK"], "ok")
+            self.assertEqual(statuses["Missing"], "broken")
+            self.assertEqual(statuses["Forbidden"], "suspicious")
+
+    def test_check_links_timeout_and_unsupported_url_are_unknown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "link-check-report.json"
+            write_bookmarks_to_vault([
+                Bookmark("Timeout", "https://timeout.example"),
+                Bookmark("FTP", "ftp://example.com/file"),
+            ], vault_path, allow_duplicates=True)
+
+            with patch("memoreef.cli.urllib.request.urlopen", side_effect=TimeoutError("timed out")) as mocked:
+                with redirect_stdout(io.StringIO()):
+                    result = main(["check-links", "--vault", str(vault_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            statuses = {item["title"]: item["status"] for item in data["results"]}
+            self.assertEqual(result, 0)
+            self.assertEqual(statuses["Timeout"], "unknown")
+            self.assertEqual(statuses["FTP"], "unknown")
+            self.assertEqual(mocked.call_count, 2)
+
+    def test_check_links_limit_checks_only_first_n_drops(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "link-check-report.json"
+            write_bookmarks_to_vault([
+                Bookmark("One", "https://one.example"),
+                Bookmark("Two", "https://two.example"),
+                Bookmark("Three", "https://three.example"),
+            ], vault_path, allow_duplicates=True)
+
+            with patch("memoreef.cli.urllib.request.urlopen", return_value=FakeHTTPResponse(200)) as mocked:
+                with redirect_stdout(io.StringIO()):
+                    result = main([
+                        "check-links",
+                        "--vault",
+                        str(vault_path),
+                        "--output",
+                        str(output_path),
+                        "--limit",
+                        "2",
+                    ])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(data["summary"]["total_drops"], 2)
+            self.assertEqual(data["summary"]["checked"], 2)
+            self.assertEqual(mocked.call_count, 2)
+
+    def test_check_links_head_does_not_fallback_to_get(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "link-check-report.json"
+            write_bookmarks_to_vault([Bookmark("Method", "https://method.example")], vault_path)
+
+            def fake_urlopen(request, timeout=5):
+                self.assertEqual(request.get_method(), "HEAD")
+                raise urllib.error.HTTPError(request.full_url, 405, "no head", {}, io.BytesIO())
+
+            with patch("memoreef.cli.urllib.request.urlopen", side_effect=fake_urlopen) as mocked:
+                with redirect_stdout(io.StringIO()):
+                    result = main([
+                        "check-links",
+                        "--vault",
+                        str(vault_path),
+                        "--output",
+                        str(output_path),
+                        "--method",
+                        "head",
+                    ])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(mocked.call_count, 1)
+            self.assertEqual(data["results"][0]["method"], "HEAD")
+
+    def test_check_links_auto_falls_back_from_head_405_to_get(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "link-check-report.json"
+            write_bookmarks_to_vault([Bookmark("Fallback", "https://fallback.example")], vault_path)
+            methods = []
+
+            def fake_urlopen(request, timeout=5):
+                methods.append(request.get_method())
+                if request.get_method() == "HEAD":
+                    raise urllib.error.HTTPError(request.full_url, 405, "no head", {}, io.BytesIO())
+                return FakeHTTPResponse(200, request.full_url)
+
+            with patch("memoreef.cli.urllib.request.urlopen", side_effect=fake_urlopen):
+                with redirect_stdout(io.StringIO()):
+                    result = main(["check-links", "--vault", str(vault_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(methods, ["HEAD", "GET"])
+            self.assertEqual(data["results"][0]["status"], "ok")
+            self.assertEqual(data["results"][0]["method"], "GET")
+
+    def test_check_links_skips_empty_urls_and_does_not_modify_markdown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "link-check-report.json"
+            written = write_bookmarks_to_vault([
+                Bookmark("Empty", ""),
+                Bookmark("Good", "https://good.example"),
+            ], vault_path, allow_duplicates=True)
+            before = {path: path.read_text(encoding="utf-8") for path in written}
+
+            with patch("memoreef.cli.urllib.request.urlopen", return_value=FakeHTTPResponse(200)):
+                with redirect_stdout(io.StringIO()):
+                    result = main(["check-links", "--vault", str(vault_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(data["summary"]["checked"], 1)
+            self.assertEqual(data["summary"]["skipped"], 1)
+            self.assertTrue(data["warnings"])
+            self.assertEqual({path: path.read_text(encoding="utf-8") for path in written}, before)
+
+    def test_app_command_detects_existing_link_check_report(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            (vault_path / "MemoReef" / "reports").mkdir(parents=True)
+            (vault_path / "MemoReef" / "reports" / "2026-06-12-150000-link-check-report.json").write_text("{}", encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                result = main(["app", "--vault", str(vault_path)])
+
+            html = (vault_path / "MemoReef" / "app" / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("Link check report", html)
+            self.assertIn("link-check-report", html)
 
 
 if __name__ == "__main__":

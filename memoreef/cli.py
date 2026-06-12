@@ -6,6 +6,8 @@ from html import escape as html_escape
 import json
 from pathlib import Path
 import re
+import urllib.error
+import urllib.request
 from urllib.parse import urlsplit
 
 from . import __version__
@@ -703,6 +705,157 @@ def create_duplicate_report(vault: Path, root: str = "MemoReef", output: Path | 
     return output, report
 
 
+def classify_http_status(status: int | None) -> str:
+    if status is None:
+        return "unknown"
+    if 200 <= status <= 399:
+        return "ok"
+    if status in {404, 410}:
+        return "broken"
+    if status in {401, 403, 429} or 500 <= status <= 599:
+        return "suspicious"
+    return "unknown"
+
+
+def request_link(url: str, method: str, timeout: float) -> dict[str, object]:
+    request = urllib.request.Request(
+        url,
+        method=method.upper(),
+        headers={"User-Agent": "MemoReef/0.1 local link checker"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            if method.lower() == "get":
+                response.read(1024)
+            status = int(response.getcode())
+            return {
+                "status": classify_http_status(status),
+                "http_status": status,
+                "method": method.upper(),
+                "final_url": response.geturl(),
+                "error": None,
+            }
+    except urllib.error.HTTPError as error:
+        status = int(error.code)
+        return {
+            "status": classify_http_status(status),
+            "http_status": status,
+            "method": method.upper(),
+            "final_url": error.geturl(),
+            "error": None,
+        }
+    except (TimeoutError, urllib.error.URLError, OSError) as error:
+        return {
+            "status": "unknown",
+            "http_status": None,
+            "method": method.upper(),
+            "final_url": url,
+            "error": str(error),
+        }
+
+
+def should_fallback_to_get(result: dict[str, object]) -> bool:
+    return result.get("status") == "unknown" or result.get("http_status") in {403, 405}
+
+
+def check_link(url: str, timeout: float, method: str) -> dict[str, object]:
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"}:
+        return {
+            "status": "unknown",
+            "http_status": None,
+            "method": None,
+            "final_url": url,
+            "error": "unsupported URL scheme",
+        }
+    if not parsed.netloc:
+        return {
+            "status": "unknown",
+            "http_status": None,
+            "method": None,
+            "final_url": url,
+            "error": "malformed URL",
+        }
+
+    if method == "get":
+        return request_link(url, "GET", timeout)
+    if method == "head":
+        return request_link(url, "HEAD", timeout)
+
+    head_result = request_link(url, "HEAD", timeout)
+    if should_fallback_to_get(head_result):
+        return request_link(url, "GET", timeout)
+    return head_result
+
+
+def create_link_check_report(
+    vault: Path,
+    root: str = "MemoReef",
+    output: Path | None = None,
+    timeout: float = 5,
+    limit: int | None = None,
+    method: str = "auto",
+) -> tuple[Path, dict[str, object]]:
+    vault_path = vault.expanduser().resolve()
+    drops = load_drop_items(vault_path, root)
+    if limit is not None:
+        drops = drops[: max(0, limit)]
+
+    warnings: list[str] = []
+    results: list[dict[str, object]] = []
+    skipped = 0
+
+    for drop in drops:
+        raw_url = drop.get("url")
+        path = str(drop.get("path", "unknown"))
+        if not isinstance(raw_url, str) or not raw_url.strip():
+            skipped += 1
+            warnings.append(f"{path}: missing URL")
+            continue
+
+        result = check_link(raw_url.strip(), timeout, method)
+        results.append(
+            {
+                "id": drop.get("id", ""),
+                "path": path,
+                "title": drop.get("title", ""),
+                "url": raw_url.strip(),
+                "status": result["status"],
+                "http_status": result["http_status"],
+                "method": result["method"],
+                "final_url": result["final_url"],
+                "error": result["error"],
+            }
+        )
+
+    summary = {
+        "total_drops": len(drops),
+        "checked": len(results),
+        "ok": sum(1 for item in results if item["status"] == "ok"),
+        "broken": sum(1 for item in results if item["status"] == "broken"),
+        "suspicious": sum(1 for item in results if item["status"] == "suspicious"),
+        "unknown": sum(1 for item in results if item["status"] == "unknown"),
+        "skipped": skipped,
+    }
+
+    if output is None:
+        output = vault_path / root / "reports" / f"{timestamp_for_filename()}-link-check-report.json"
+    output = output.expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    report = {
+        "version": 1,
+        "created_at": utc_now_iso(),
+        "vault": str(vault_path),
+        "source": f"{root}/Drops",
+        "summary": summary,
+        "results": results,
+        "warnings": warnings,
+    }
+    output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    return output, report
+
+
 def latest_file(paths: list[Path]) -> Path | None:
     existing = [path for path in paths if path.exists()]
     if not existing:
@@ -742,6 +895,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
     latest_agent_plan = latest_matching_file(root_path / "agent-plans", ["*-agent-finish-plan.json"])
     latest_agent_proposals = latest_matching_file(root_path / "agent-plans", ["*-agent-proposals.json"])
     latest_duplicate_report = latest_matching_file(root_path / "reports", ["*-duplicate-report.json"])
+    latest_link_check_report = latest_matching_file(root_path / "reports", ["*-link-check-report.json"])
 
     return {
         "vault": vault_path,
@@ -758,6 +912,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
         "latest_agent_plan": latest_agent_plan,
         "latest_agent_proposals": latest_agent_proposals,
         "latest_duplicate_report": latest_duplicate_report,
+        "latest_link_check_report": latest_link_check_report,
         "next_action": recommended_next_action(
             total,
             drift,
@@ -766,6 +921,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
             latest_agent_plan,
             latest_agent_proposals,
             latest_duplicate_report,
+            latest_link_check_report,
         ),
     }
 
@@ -778,11 +934,14 @@ def recommended_next_action(
     latest_agent_plan: Path | None,
     latest_agent_proposals: Path | None,
     latest_duplicate_report: Path | None,
+    latest_link_check_report: Path | None,
 ) -> str:
     if total == 0:
         return "Import bookmarks, a URL list, or a CSV file to create your first Drops."
     if total > 0 and latest_duplicate_report is None:
         return "Create a duplicate report, then continue reviewing Drift Drops."
+    if total > 0 and latest_link_check_report is None:
+        return "Check saved links so broken URLs do not waste review time."
     if drift > 0 and latest_review_session is None:
         return "Export a review session JSON, then open Review Mode."
     if drift > 0 and latest_review_decisions is None:
@@ -810,6 +969,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
     latest_agent_plan = relative_or_none(state.get("latest_agent_plan"), vault)
     latest_agent_proposals = relative_or_none(state.get("latest_agent_proposals"), vault)
     latest_duplicate_report = relative_or_none(state.get("latest_duplicate_report"), vault)
+    latest_link_check_report = relative_or_none(state.get("latest_link_check_report"), vault)
     next_action = html_escape(str(state.get("next_action", "Continue.")))
     vault_text = html_escape(str(vault))
 
@@ -878,6 +1038,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <dt>Agent finish plan</dt><dd>{html_escape(latest_agent_plan)}</dd>
           <dt>Agent proposals</dt><dd>{html_escape(latest_agent_proposals)}</dd>
           <dt>Duplicate report</dt><dd>{html_escape(latest_duplicate_report)}</dd>
+          <dt>Link check report</dt><dd>{html_escape(latest_link_check_report)}</dd>
         </dl>
       </div>
       <div class=\"card workflow\">
@@ -885,6 +1046,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
         <ol>
           <li>Import links into Markdown Drops.</li>
           <li>Run <code>duplicate-report</code> to spot exact URL, same-domain, and similar-title clutter.</li>
+          <li>Run <code>check-links</code> to find broken, suspicious, or unreachable saved URLs.</li>
           <li>Run <code>export-review-session</code> and open <code>site/swipe.html</code> for Review Mode.</li>
           <li>Export decisions from Review Mode, then run <code>apply-review-decisions</code>.</li>
           <li>Create an agent finish plan with <code>plan-agent-finish</code>.</li>
@@ -895,7 +1057,8 @@ def render_app_dashboard(state: dict[str, object]) -> str:
       <div class=\"card\">
         <h2>Review Mode</h2>
         <p>Open <code>site/swipe.html</code>, load the latest review session JSON, review a taste sample, then export <code>memoreef-review-decisions.json</code>.</p>
-        <p>This dashboard is static HTML. No backend, no network, no subscription eel.</p>
+        <p>Reports are written locally under <code>{html_escape(root)}/reports/*-duplicate-report.json</code> and <code>{html_escape(root)}/reports/*-link-check-report.json</code>.</p>
+        <p>This dashboard is static HTML. No backend, no network, no subscription.</p>
       </div>
     </section>
   </main>
@@ -969,6 +1132,14 @@ def build_parser() -> argparse.ArgumentParser:
     duplicate_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     duplicate_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
     duplicate_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults inside the vault.")
+
+    check_links_cmd = sub.add_parser("check-links", help="Create a local link check report for Markdown Drops.")
+    check_links_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    check_links_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    check_links_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults inside the vault.")
+    check_links_cmd.add_argument("--timeout", type=float, default=5, help="HTTP timeout in seconds. Default: 5")
+    check_links_cmd.add_argument("--limit", type=int, default=None, help="Check only the first N Drops.")
+    check_links_cmd.add_argument("--method", choices=["head", "get", "auto"], default="auto", help="HTTP method strategy. Default: auto")
 
     app_cmd = sub.add_parser("app", help="Generate a static MemoReef local app dashboard.")
     app_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -1092,6 +1263,34 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- same domain groups: {summary['same_domain_groups']}")
         print(f"- similar title groups: {summary['similar_title_groups']}")
         print(f"- affected drops: {summary['affected_drops']}")
+        print(f"- warnings: {len(warnings)}")
+        print(f"- output: {output}")
+        for warning in warnings:
+            print(f"  - {warning}")
+        return 0
+
+    if args.command == "check-links":
+        output, report = create_link_check_report(
+            args.vault,
+            args.root,
+            args.output,
+            args.timeout,
+            args.limit,
+            args.method,
+        )
+        summary = report["summary"]
+        assert isinstance(summary, dict)
+        warnings = report.get("warnings", [])
+        if not isinstance(warnings, list):
+            warnings = []
+        print("Created link check report:")
+        print(f"- total drops: {summary['total_drops']}")
+        print(f"- checked: {summary['checked']}")
+        print(f"- ok: {summary['ok']}")
+        print(f"- broken: {summary['broken']}")
+        print(f"- suspicious: {summary['suspicious']}")
+        print(f"- unknown: {summary['unknown']}")
+        print(f"- skipped: {summary['skipped']}")
         print(f"- warnings: {len(warnings)}")
         print(f"- output: {output}")
         for warning in warnings:

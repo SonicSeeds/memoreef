@@ -397,3 +397,26 @@ Create a local report that surfaces bookmark clutter without modifying Markdown 
 - Singletons are excluded from duplicate groups.
 - Empty or missing URLs do not crash.
 - Dashboard includes latest duplicate report information.
+
+## Task 15 — Dead-link checker
+
+### Goal
+Create a local report that helps users find broken or suspicious saved URLs before deeper review.
+
+### Requirements
+
+- Add `python3 -m memoreef.cli check-links --vault <vault>`.
+- Support `--output`; default to `<vault>/MemoReef/reports/YYYY-MM-DD-HHMMSS-link-check-report.json`.
+- Support `--timeout`, `--limit`, and `--method head|get|auto`.
+- Use direct HTTP HEAD/GET requests against saved URLs only.
+- Classify results as ok, broken, suspicious, or unknown.
+- Do not modify, move, or delete Markdown files.
+- Do not use third-party APIs or enrichment services.
+- Update the local app dashboard to detect the latest link check report.
+
+### Acceptance criteria
+
+- Link check report JSON includes `summary`, `results`, and `warnings`.
+- HTTP 200-range URLs are ok, 404/410 URLs are broken, and 401/403/429/500-range URLs are suspicious.
+- Timeouts, connection errors, unsupported schemes, and malformed URLs do not crash.
+- Dashboard includes latest link check report information.

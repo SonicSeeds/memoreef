@@ -181,6 +181,14 @@ python3 -m memoreef.cli duplicate-report --vault /tmp/memoreef-vault
 
 The duplicate report groups exact canonical URLs, same-domain clusters, and conservative similar-title matches. It is local-only, does not call the network, and does not modify, move, or delete files.
 
+Check saved links directly:
+
+```bash
+python3 -m memoreef.cli check-links --vault /tmp/memoreef-vault --limit 100 --timeout 5
+```
+
+The link check report classifies saved URLs as ok, broken, suspicious, or unknown using direct HTTP HEAD/GET requests to the saved URLs only. It does not use third-party APIs and does not modify, move, or delete files.
+
 Generate the static local app dashboard:
 
 ```bash
