@@ -156,6 +156,14 @@ python3 -m memoreef.cli plan-agent-finish --vault /tmp/memoreef-vault --decision
 
 The agent finish plan JSON groups reviewed taste examples into Pearl, Keep, and Sink, then lists the remaining Drops for a later agent task. It does not modify Markdown, and it does not classify the remaining Drops yet.
 
+Draft agent proposals from an agent finish plan:
+
+```bash
+python3 -m memoreef.cli draft-agent-proposals --plan /tmp/agent-finish-plan.json
+```
+
+The agent proposals JSON suggests status, Pearl state, confidence, priority, note location, and rationale for each remaining Drop using deterministic local heuristics. It does not modify Markdown; applying proposals is a future task.
+
 These are browser-only prototypes with inline sample data. They are not connected to real vault files yet.
 
 ## Near-term roadmap

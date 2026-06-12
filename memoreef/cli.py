@@ -4,6 +4,8 @@ import argparse
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
+from urllib.parse import urlsplit
 
 from . import __version__
 from .bookmarks import (
@@ -324,6 +326,156 @@ def build_agent_finish_plan(
     return output, plan, warnings
 
 
+def tokens_for_drop(drop: dict[str, object]) -> set[str]:
+    values: list[str] = [
+        str(drop.get("title") or ""),
+        str(drop.get("summary") or ""),
+    ]
+    for key in ("tags", "folders"):
+        items = drop.get(key, [])
+        if isinstance(items, list):
+            values.extend(str(item) for item in items)
+    url = str(drop.get("url") or "")
+    if url:
+        parsed = urlsplit(url)
+        values.extend([parsed.hostname or "", parsed.path])
+    text = " ".join(values).lower()
+    return {token for token in re.findall(r"[a-z0-9]+", text) if len(token) > 1}
+
+
+def taste_tokens(examples: object) -> set[str]:
+    if not isinstance(examples, list):
+        return set()
+    tokens: set[str] = set()
+    for example in examples:
+        if isinstance(example, dict):
+            tokens.update(tokens_for_drop(example))
+    return tokens
+
+
+def build_proposal_rationale(scores: dict[str, int], proposed_status: str, proposed_pearl: bool) -> list[str]:
+    rationale: list[str] = []
+    if proposed_pearl:
+        rationale.append("Strongest overlap is with Pearl examples.")
+    elif proposed_status == "discarded":
+        rationale.append("Strongest overlap is with Sink examples.")
+    elif proposed_status == "reef":
+        rationale.append("Shares tags, folders, title, summary, or URL terms with kept or Pearl examples.")
+        rationale.append("No strong sink signal found.")
+    else:
+        rationale.append("No clear taste signal was found.")
+    rationale.append(f"Local overlap scores: pearl={scores['pearl']}, keep={scores['keep']}, sink={scores['sink']}.")
+    return rationale
+
+
+def classify_proposal(drop: dict[str, object], taste_examples: dict[str, object]) -> dict[str, object]:
+    drop_tokens = tokens_for_drop(drop)
+    scores = {
+        "pearl": len(drop_tokens & taste_tokens(taste_examples.get("pearl"))),
+        "keep": len(drop_tokens & taste_tokens(taste_examples.get("keep"))),
+        "sink": len(drop_tokens & taste_tokens(taste_examples.get("sink"))),
+    }
+    positive_score = max(scores["pearl"], scores["keep"])
+    ordered_scores = sorted(scores.values(), reverse=True)
+    top_score = ordered_scores[0] if ordered_scores else 0
+    second_score = ordered_scores[1] if len(ordered_scores) > 1 else 0
+    clearly_dominant = top_score >= 2 and top_score >= second_score + 2
+
+    proposed_status = "drift"
+    if scores["sink"] >= 2 and scores["sink"] >= positive_score + 2:
+        proposed_status = "discarded"
+    elif positive_score >= 2 and positive_score >= scores["sink"] + 2:
+        proposed_status = "reef"
+
+    proposed_pearl = scores["pearl"] >= 2 and scores["pearl"] >= max(scores["keep"], scores["sink"]) + 2
+    if proposed_pearl:
+        proposed_status = "reef"
+
+    if clearly_dominant:
+        confidence = "high"
+    elif top_score >= 2:
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    if proposed_pearl:
+        priority = "high"
+        note_location = "MemoReef/Pearls"
+    elif proposed_status == "reef":
+        priority = "normal"
+        note_location = "MemoReef/Reef"
+    elif proposed_status == "discarded":
+        priority = "low"
+        note_location = "MemoReef/Discarded"
+    else:
+        priority = "low"
+        note_location = "MemoReef/Drops"
+
+    tags = drop.get("tags", [])
+    if not isinstance(tags, list):
+        tags = []
+
+    return {
+        "id": drop.get("id", ""),
+        "path": drop.get("path", ""),
+        "title": drop.get("title", ""),
+        "url": drop.get("url", ""),
+        "current_status": drop.get("status", "drift"),
+        "proposed_status": proposed_status,
+        "proposed_pearl": proposed_pearl,
+        "confidence": confidence,
+        "priority": priority,
+        "suggested_tags": [str(tag) for tag in tags],
+        "suggested_note_location": note_location,
+        "rationale": build_proposal_rationale(scores, proposed_status, proposed_pearl),
+        "requires_user_review": confidence != "high",
+    }
+
+
+def draft_agent_proposals(plan: Path, output: Path | None = None) -> tuple[Path, dict[str, object], list[str]]:
+    plan_path = plan.expanduser().resolve()
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    warnings: list[str] = []
+
+    remaining_drops = payload.get("remaining_drops")
+    if not isinstance(remaining_drops, list):
+        warnings.append("remaining_drops must be a list")
+        remaining_drops = []
+
+    raw_taste_examples = payload.get("taste_examples", {})
+    if not isinstance(raw_taste_examples, dict):
+        warnings.append("taste_examples must be an object")
+        raw_taste_examples = {}
+
+    proposals = [classify_proposal(drop, raw_taste_examples) for drop in remaining_drops if isinstance(drop, dict)]
+    skipped = len(remaining_drops) - len(proposals)
+    if skipped:
+        warnings.append(f"skipped {skipped} malformed remaining Drops")
+
+    if output is None:
+        output = plan_path.parent / f"{timestamp_for_filename()}-agent-proposals.json"
+    output = output.expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    summary = {
+        "proposed": len(proposals),
+        "pearl": sum(1 for proposal in proposals if proposal["proposed_pearl"]),
+        "reef": sum(1 for proposal in proposals if proposal["proposed_status"] == "reef"),
+        "discarded": sum(1 for proposal in proposals if proposal["proposed_status"] == "discarded"),
+        "needs_review": sum(1 for proposal in proposals if proposal["requires_user_review"]),
+    }
+    proposal_payload = {
+        "version": 1,
+        "created_at": utc_now_iso(),
+        "plan_source": str(plan_path),
+        "summary": summary,
+        "proposals": proposals,
+        "warnings": warnings,
+    }
+    output.write_text(json.dumps(proposal_payload, indent=2) + "\n", encoding="utf-8")
+    return output, proposal_payload, warnings
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="memoreef",
@@ -364,6 +516,10 @@ def build_parser() -> argparse.ArgumentParser:
     plan_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
     plan_cmd.add_argument("--decisions", type=Path, required=True, help="Review decisions JSON exported from Review Mode.")
     plan_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults inside the vault.")
+
+    proposals_cmd = sub.add_parser("draft-agent-proposals", help="Draft proposals from an agent finish plan.")
+    proposals_cmd.add_argument("--plan", type=Path, required=True, help="Agent finish plan JSON.")
+    proposals_cmd.add_argument("--output", type=Path, default=None, help="Output JSON path. Defaults next to the plan.")
 
     return parser
 
@@ -430,6 +586,20 @@ def main(argv: list[str] | None = None) -> int:
         print("Created agent finish plan:")
         print(f"- reviewed examples: {reviewed}")
         print(f"- remaining drops: {remaining}")
+        print(f"- warnings: {len(warnings)}")
+        print(f"- output: {output}")
+        for warning in warnings:
+            print(f"  - {warning}")
+        return 0
+
+    if args.command == "draft-agent-proposals":
+        output, proposals, warnings = draft_agent_proposals(args.plan, args.output)
+        summary = proposals.get("summary", {})
+        proposed = summary.get("proposed", 0) if isinstance(summary, dict) else 0
+        needs_review = summary.get("needs_review", 0) if isinstance(summary, dict) else 0
+        print("Drafted agent proposals:")
+        print(f"- proposed: {proposed}")
+        print(f"- needs review: {needs_review}")
         print(f"- warnings: {len(warnings)}")
         print(f"- output: {output}")
         for warning in warnings:

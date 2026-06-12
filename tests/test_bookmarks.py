@@ -603,6 +603,102 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertEqual(written[0].read_text(encoding="utf-8"), before)
 
+    def write_plan(self, path: Path, remaining: object, taste_examples=None):
+        path.write_text(
+            json.dumps({"version": 1, "remaining_drops": remaining, "taste_examples": taste_examples or {"pearl": [], "keep": [], "sink": []}}),
+            encoding="utf-8",
+        )
+
+    def test_draft_agent_proposals_explicit_output(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "agent-finish-plan.json"
+            output_path = Path(tmp) / "agent-proposals.json"
+            self.write_plan(plan_path, [{"id": "a", "path": "a.md", "title": "Local AI agents", "tags": ["ai-agents"], "status": "drift"}])
+
+            with redirect_stdout(stdout):
+                result = main(["draft-agent-proposals", "--plan", str(plan_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(data["summary"]["proposed"], 1)
+            self.assertIn("proposed_status", data["proposals"][0])
+            self.assertIn("Drafted agent proposals:", stdout.getvalue())
+
+    def test_draft_agent_proposals_default_output_path(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "agent-finish-plan.json"
+            self.write_plan(plan_path, [{"id": "a", "path": "a.md", "title": "Local AI agents"}])
+
+            with redirect_stdout(stdout):
+                result = main(["draft-agent-proposals", "--plan", str(plan_path)])
+
+            outputs = list(Path(tmp).glob("*-agent-proposals.json"))
+            self.assertEqual(result, 0)
+            self.assertEqual(len(outputs), 1)
+
+    def test_draft_agent_proposals_pearl_sink_and_weak_rules(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "agent-finish-plan.json"
+            output_path = Path(tmp) / "agent-proposals.json"
+            taste = {
+                "pearl": [{"title": "local ai agents research", "tags": ["ai-agents", "research"]}],
+                "keep": [],
+                "sink": [{"title": "coupon spam deals", "tags": ["spam", "coupons"]}],
+            }
+            remaining = [
+                {"id": "p", "path": "p.md", "title": "local ai agents research", "tags": ["ai-agents", "research"], "status": "drift"},
+                {"id": "s", "path": "s.md", "title": "coupon spam deals", "tags": ["spam", "coupons"], "status": "drift"},
+                {"id": "w", "path": "w.md", "title": "unrelated orchard", "tags": ["keepme"], "status": "drift"},
+            ]
+            self.write_plan(plan_path, remaining, taste)
+
+            with redirect_stdout(stdout):
+                result = main(["draft-agent-proposals", "--plan", str(plan_path), "--output", str(output_path)])
+
+            proposals = {item["id"]: item for item in json.loads(output_path.read_text(encoding="utf-8"))["proposals"]}
+            self.assertEqual(result, 0)
+            self.assertEqual(proposals["p"]["proposed_status"], "reef")
+            self.assertEqual(proposals["p"]["proposed_pearl"], True)
+            self.assertEqual(proposals["s"]["proposed_status"], "discarded")
+            self.assertEqual(proposals["w"]["proposed_status"], "drift")
+            self.assertEqual(proposals["w"]["confidence"], "low")
+            self.assertEqual(proposals["w"]["requires_user_review"], True)
+            self.assertEqual(proposals["w"]["suggested_tags"], ["keepme"])
+
+    def test_draft_agent_proposals_malformed_remaining_warns_zero(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "agent-finish-plan.json"
+            output_path = Path(tmp) / "agent-proposals.json"
+            self.write_plan(plan_path, "not-a-list")
+
+            with redirect_stdout(stdout):
+                result = main(["draft-agent-proposals", "--plan", str(plan_path), "--output", str(output_path)])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(data["summary"]["proposed"], 0)
+            self.assertEqual(len(data["warnings"]), 1)
+
+    def test_draft_agent_proposals_does_not_modify_markdown(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Local AI agents", "https://example.com")], vault_path)
+            before = written[0].read_text(encoding="utf-8")
+            plan_path = Path(tmp) / "agent-finish-plan.json"
+            output_path = Path(tmp) / "agent-proposals.json"
+            self.write_plan(plan_path, [{"id": "a", "path": "a.md", "title": "Local AI agents"}])
+
+            with redirect_stdout(stdout):
+                result = main(["draft-agent-proposals", "--plan", str(plan_path), "--output", str(output_path)])
+
+            self.assertEqual(result, 0)
+            self.assertEqual(written[0].read_text(encoding="utf-8"), before)
+
 
 if __name__ == "__main__":
     unittest.main()

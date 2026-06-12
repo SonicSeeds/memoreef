@@ -304,3 +304,27 @@ Create a structured local handoff for agents to finish sorting Drops after the u
 - Missing files and malformed decisions produce warnings and continue.
 - Reviewed Drops are excluded from `remaining_drops`.
 - Markdown Drop files are not modified.
+
+## Task 11 — Draft agent finish proposals
+
+### Goal
+Draft reviewable agent proposals for remaining Drops from an agent finish plan.
+
+### Requirements
+
+- Read an agent finish plan JSON.
+- Draft proposals for remaining Drops.
+- Include proposed status, pearl state, confidence, priority, suggested note location, rationale, and review flag.
+- Use deterministic local token-overlap heuristics only.
+- Preserve existing Drop tags as suggested tags; do not invent new tags.
+- Do not modify Markdown files.
+- Do not apply proposals yet.
+
+### Acceptance criteria
+
+- `python3 -m memoreef.cli draft-agent-proposals --plan <agent-finish-plan.json>` writes proposals next to the plan.
+- `--output` writes the proposal JSON to an explicit path.
+- Weak or tied signals remain `drift` and require user review.
+- Pearl-like remaining Drops can be proposed as pearls.
+- Sink-like remaining Drops can be proposed as discarded.
+- Markdown Drop files are not modified.
