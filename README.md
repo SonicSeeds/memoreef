@@ -68,9 +68,7 @@ See [docs/GRANT_BRIEF.md](docs/GRANT_BRIEF.md) for the grant-oriented project na
 
 ## Screenshots
 
-| Live landing page | Live Octopus/Pearls section |
-| --- | --- |
-| ![MemoReef live landing page](docs/screenshots/live-landing-hero.png) | ![MemoReef live Octopus Pearls section](docs/screenshots/live-landing-octopus.png) |
+![MemoReef live landing page Octopus/Pearls section](docs/screenshots/landing-page.png)
 
 | Review Mode prototype | Mobile app prototype |
 | --- | --- |
