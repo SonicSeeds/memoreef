@@ -39,9 +39,9 @@
       margin: 0;
       color: var(--ink);
       background:
+        linear-gradient(180deg, rgba(1, 6, 10, .06), rgba(1, 6, 10, .56) 48%, #02080d 100%),
+        url("img/masters/reef-octopus-master-v3.webp") center top / cover fixed,
         radial-gradient(circle at 50% -10%, rgba(103, 245, 211, .18), transparent 18rem),
-        radial-gradient(circle at 90% 20%, rgba(169, 156, 255, .16), transparent 16rem),
-        radial-gradient(circle at 12% 64%, rgba(255, 119, 107, .12), transparent 15rem),
         linear-gradient(180deg, #0a2b3b 0%, var(--deep) 38%, var(--abyss) 100%);
       overflow-x: hidden;
       touch-action: manipulation;
@@ -56,19 +56,14 @@
     }
 
     body::before {
-      background-image:
-        linear-gradient(rgba(255,255,255,.034) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,.026) 1px, transparent 1px);
-      background-size: 64px 64px;
-      mask-image: linear-gradient(to bottom, rgba(0,0,0,.85), transparent 86%);
-      opacity: .58;
+      display: none;
     }
 
     body::after {
       background:
-        radial-gradient(ellipse at 50% 100%, rgba(103,245,211,.16), transparent 46%),
-        repeating-radial-gradient(ellipse at 50% 105%, rgba(103,245,211,.08) 0 2px, transparent 2px 24px);
-      opacity: .54;
+        linear-gradient(90deg, rgba(1,6,10,.44), rgba(1,6,10,.04) 48%, rgba(1,6,10,.5)),
+        radial-gradient(circle at 74% 58%, rgba(255,200,107,.16), transparent 12rem);
+      opacity: .68;
     }
 
     button,
@@ -105,13 +100,12 @@
       height: 38px;
       border-radius: 14px;
       flex: 0 0 auto;
-      border: 1px solid rgba(255,255,255,.16);
-      background:
-        radial-gradient(circle at 68% 34%, var(--pearl) 0 8%, transparent 9%),
-        radial-gradient(circle at 36% 66%, rgba(103,245,211,.92) 0 10%, transparent 11%),
-        conic-gradient(from 215deg, #12394a, #0c7380, #67f5d3, #ff776b, #12394a);
-      box-shadow: 0 0 30px rgba(103,245,211,.22), inset 0 0 20px rgba(0,0,0,.36);
+      display: grid;
+      place-items: center;
+      filter: drop-shadow(0 0 16px rgba(103,245,211,.24));
     }
+
+    .mark img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
     .brand-copy { min-width: 0; }
     h1 {
@@ -227,16 +221,7 @@
     .drop-card.pearl-hint { border-color: rgba(246,237,215,.78); }
 
     .card-reef {
-      position: absolute;
-      inset: auto -30px -22px -30px;
-      height: 150px;
-      pointer-events: none;
-      background:
-        radial-gradient(circle at 20% 70%, rgba(255,119,107,.2) 0 4%, transparent 5%),
-        radial-gradient(circle at 74% 62%, rgba(103,245,211,.2) 0 5%, transparent 6%),
-        repeating-linear-gradient(135deg, rgba(103,245,211,.13) 0 8px, transparent 8px 23px);
-      mask-image: linear-gradient(to top, black, transparent 85%);
-      opacity: .8;
+      display: none;
     }
 
     .decision-badge {
@@ -370,7 +355,7 @@
 
     .primary-actions {
       display: grid;
-      grid-template-columns: 1fr 1.15fr 1fr;
+      grid-template-columns: repeat(3, 1fr);
       gap: 10px;
       align-items: center;
     }
@@ -379,40 +364,40 @@
     .escape-btn,
     .sheet-btn {
       border: 1px solid rgba(255,255,255,.16);
-      border-radius: 999px;
+      border-radius: 18px;
       color: var(--ink);
-      background: rgba(7, 28, 39, .72);
+      background: rgba(255,255,255,.06);
       font: inherit;
       font-weight: 800;
       cursor: pointer;
       box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
     }
     .action-btn {
-      min-height: 54px;
-      padding: 10px 12px;
+      min-height: 56px;
+      display: grid;
+      place-items: center;
+      gap: 3px;
+      padding: 8px;
     }
-    .action-btn small {
-      display: block;
-      margin-top: 3px;
-      color: var(--muted);
-      font-size: 10px;
-      font-weight: 600;
-    }
-    .sink-btn { border-color: rgba(255,119,107,.32); color: #ffd4cf; }
-    .keep-btn { border-color: rgba(103,245,211,.35); color: #d8fff6; }
+    .action-btn svg { width: 19px; height: 19px; stroke: currentColor; stroke-width: 1.9; fill: none; }
+    .action-btn span { font-size: 12px; font-weight: 780; }
+    .sink-btn { border-color: rgba(255,119,107,.24); background: rgba(255,119,107,.08); }
+    .keep-btn { border-color: rgba(103,245,211,.26); background: rgba(103,245,211,.09); }
     .pearl-btn {
-      min-height: 64px;
-      color: #1b1710;
-      border-color: rgba(246,237,215,.8);
-      background: linear-gradient(135deg, #fff8e7, #e6d2a4);
-      box-shadow: 0 12px 36px rgba(246,237,215,.18), inset 0 1px 0 rgba(255,255,255,.75);
+      color: #fff1cd;
+      border-color: rgba(255,200,107,.32);
+      background: rgba(255,200,107,.12);
     }
-    .pearl-btn small { color: rgba(27,23,16,.64); }
 
     .escape-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
+    }
+    .escape-btn,
+    .sheet-btn {
+      border-radius: 999px;
+      background: rgba(7, 28, 39, .72);
     }
     .escape-btn {
       min-height: 46px;
@@ -559,6 +544,7 @@
       line-height: 1.45;
       scrollbar-width: none;
     }
+    .history:empty { display: none; }
     .history::-webkit-scrollbar { display: none; }
     .history-item {
       display: flex;
@@ -571,16 +557,18 @@
 
     @media (min-width: 720px) {
       .app {
-        width: min(960px, calc(100% - 36px));
-        grid-template-columns: 430px minmax(260px, 1fr);
-        grid-template-rows: auto auto 1fr;
-        column-gap: 24px;
-        align-items: start;
+        width: min(430px, 100%);
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto 1fr auto;
+        column-gap: 0;
+        align-items: stretch;
       }
       header,
       .summary,
-      .bridge-controls { grid-column: 1 / -1; }
-      .actions { align-self: end; }
+      .bridge-controls,
+      .stage,
+      .actions { grid-column: 1; }
+      .actions { align-self: auto; }
       .history {
         max-height: 220px;
         padding: 18px;
@@ -588,7 +576,7 @@
         border-radius: 24px;
         background: rgba(4,20,29,.5);
       }
-      .stage { min-height: 560px; }
+      .stage { min-height: 520px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -605,7 +593,7 @@
   <main class="app" aria-label="MemoReef Review Mode prototype">
     <header>
       <div class="brand" aria-label="MemoReef">
-        <div class="mark" aria-hidden="true"></div>
+        <div class="mark" aria-hidden="true"><img src="img/logo-symbol.svg" alt="" /></div>
         <div class="brand-copy">
           <h1>MemoReef</h1>
           <p class="tagline">Review a few. Let agents sort the reef.</p>
@@ -668,9 +656,15 @@
 
     <section class="actions" aria-label="Review actions">
       <div class="primary-actions">
-        <button class="action-btn sink-btn" id="sinkBtn" type="button">Sink<small>swipe left</small></button>
-        <button class="action-btn pearl-btn" id="pearlBtn" type="button">Pearl<small>high value</small></button>
-        <button class="action-btn keep-btn" id="keepBtn" type="button">Keep<small>swipe right</small></button>
+        <button class="action-btn sink-btn" id="sinkBtn" type="button" aria-label="Sink this drop">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg><span>Sink</span>
+        </button>
+        <button class="action-btn pearl-btn" id="pearlBtn" type="button" aria-label="Mark this drop as pearl">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 15 9l6 .9-4.5 4.3 1.1 6.1L12 17.2 6.4 20.3l1.1-6.1L3 9.9 9 9l3-6Z"/></svg><span>Pearl</span>
+        </button>
+        <button class="action-btn keep-btn" id="keepBtn" type="button" aria-label="Keep this drop">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>Keep</span>
+        </button>
       </div>
       <div class="escape-actions">
         <button class="escape-btn agent" id="agentFinishBtn" type="button">Let agents finish</button>

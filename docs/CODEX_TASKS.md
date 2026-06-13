@@ -150,28 +150,28 @@ Prepare for the swipe/keyboard UI by formalizing statuses.
 - Existing Drops remain valid.
 - Tests cover default and explicit states.
 
-## Task 6 — Static Drift triage prototype
+## Task 6 — Mobile-first Review Mode prototype
 
 ### Goal
-Create a local web prototype for the Tinder-like triage flow using sample JSON data. This is not yet connected to the filesystem.
+Create a local web prototype for the swipe-style Review Mode flow using sample JSON data. This is browser-only and exchanges local review-session JSON files with the CLI.
 
 ### Path
 
 ```text
-site/triage.html
+site/swipe.html
 ```
 
 ### Requirements
 
 - Marine MemoReef visual language.
-- Card stack for Drops.
+- Mobile-first card stack for Drops.
 - Keyboard shortcuts:
   - `K`: keep in Reef
   - `P`: mark Pearl
   - `D`: send to Deep
   - `X`: discard
   - `ArrowRight`: next
-- Visible decision history.
+- Visible review progress and decision export.
 - No backend required.
 
 ### Acceptance criteria

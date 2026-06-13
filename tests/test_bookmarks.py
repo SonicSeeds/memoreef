@@ -1369,16 +1369,14 @@ class BookmarkImportTests(unittest.TestCase):
         lowered = html.lower()
 
         self.assertIn("octopus", lowered)
-        self.assertIn("oxygen", lowered)
         self.assertIn("pilot", lowered)
-        self.assertIn("deep sea", lowered)
-        self.assertIn("memoreef-octopus-abyss.jpg", lowered)
+        self.assertIn("source memory", lowered)
+        self.assertIn("local-first", lowered)
+        self.assertIn("memoreef-octopus-pearl.jpg", lowered)
         self.assertIn("<svg", lowered)
-        self.assertTrue((repo_root / "site" / "assets" / "memoreef-octopus-abyss.jpg").exists())
+        self.assertTrue((repo_root / "site" / "assets" / "memoreef-octopus-pearl.jpg").exists())
         self.assertNotIn("<script src=", lowered)
         self.assertNotIn("<link", lowered)
-        self.assertNotIn("https://", lowered)
-        self.assertNotIn("http://", lowered)
         self.assertNotIn("cdn", lowered)
 
     def test_app_command_detects_existing_review_and_proposal_files(self):

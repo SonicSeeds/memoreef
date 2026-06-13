@@ -31,7 +31,7 @@ MemoReef is not a generic bookmark manager. It is a local-first source reef:
 - **Drift**: unsorted inbox state for new Drops.
 - **Reef**: the living source library in Markdown/Obsidian.
 - **Deep**: long-term archive state for saved sources.
-- **Pearls**: high-value sources worth citing or reusing.
+- **Pearls**: high-value sources worth citing or using in emerging projects.
 - **Shoals**: related source clusters.
 - **Dive**: local search/library retrieval over saved Drops.
 
@@ -65,6 +65,16 @@ Not implemented yet:
 MemoReef is being built with focused Codex tasks that keep changes small, reviewable, and test-backed. Codex contributes implementation work such as importers, tests, UI prototypes, refactors, and documentation, while Tao/Hermes handles product direction, architecture, taste, verification, and repo orchestration.
 
 See [docs/GRANT_BRIEF.md](docs/GRANT_BRIEF.md) for the grant-oriented project narrative.
+
+## Screenshots
+
+| Landing page | Review Mode |
+| --- | --- |
+| ![MemoReef landing page](docs/screenshots/landing-desktop.png) | ![MemoReef Review Mode swipe prototype](docs/screenshots/review-mode-swipe.png) |
+
+| Mobile prototype | Generated pilot app |
+| --- | --- |
+| ![MemoReef mobile app prototype](docs/screenshots/mobile-app-prototype.png) | ![MemoReef generated pilot app](docs/screenshots/generated-pilot-app.png) |
 
 ## Example output
 
@@ -168,12 +178,6 @@ open /tmp/memoreef-pilot/MemoReef/app/briefs.html
 ```
 
 Send back feedback from the checklist in `app/pilot.html`: whether import worked, which steps were confusing, whether useful sources surfaced, what was missing, and whether you would use it again.
-
-Open the static Drift triage prototype:
-
-```bash
-open site/triage.html
-```
 
 Open the mobile-first Review Mode prototype:
 

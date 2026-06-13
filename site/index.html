@@ -3,38 +3,57 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MemoReef - Local source memory for saved links.</title>
-  <meta name="description" content="MemoReef turns chaotic browser bookmarks into a private local Markdown source reef with review, briefs, and agent-ready context." />
+  <title>MemoReef — Turn saved links into source memory</title>
+  <meta name="description" content="MemoReef is an open-source, local-first source memory system that turns bookmark chaos into Markdown Drops, triage queues, agent briefs, and pearl ideas." />
+  <meta property="og:title" content="MemoReef — Source memory from the deep" />
+  <meta property="og:description" content="Descend through saved links, triage, agent extraction, and pearl ideas in a local-first open-source knowledge reef." />
+  <meta property="og:image" content="assets/memoreef-octopus-pearl.jpg" />
   <style>
     :root {
       color-scheme: dark;
-      --ink: #f3fbfb;
-      --muted: #a7bdc2;
-      --dim: #66848b;
-      --surface: #12495c;
-      --deep: #06171f;
-      --abyss: #02070b;
-      --panel: rgba(5, 20, 28, .62);
-      --line: rgba(186, 246, 255, .16);
-      --glow: #79f2dc;
-      --pearl: #f1e8cf;
-      --coral: #ff8d7a;
-      --violet: #b49cff;
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 16px;
+      --abyss: #010508;
+      --deep: #031219;
+      --midnight: #06232d;
+      --teal-950: #021015;
+      --teal-900: #042631;
+      --teal-800: #073947;
+      --teal-700: #0a5560;
+      --teal-400: #31e6d0;
+      --teal-300: #8cf7e8;
+      --pearl: #f5ead0;
+      --gold: #ffc86b;
+      --coral: #ff705f;
+      --red: #b8322b;
+      --violet: #b7a4ff;
+      --ink: #f3fffd;
+      --soft: #b9d1d4;
+      --muted: #719098;
+      --line: rgba(166, 255, 244, .18);
+      --glass: rgba(2, 18, 25, .58);
+      --panel: rgba(3, 20, 27, .72);
+      --depth: 0;
+      --section: 0;
+      --mx: 50vw;
+      --my: 50vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; background: var(--abyss); }
+    html { background: var(--abyss); scroll-behavior: smooth; }
     body {
       margin: 0;
       min-height: 100vh;
+      overflow-x: hidden;
       color: var(--ink);
       background:
-        radial-gradient(circle at 28% -10%, rgba(226, 255, 248, .36), transparent 18rem),
-        radial-gradient(circle at 72% 8%, rgba(121, 242, 220, .18), transparent 23rem),
-        linear-gradient(180deg, #15556a 0%, #092936 24%, #04151e 56%, #010408 100%);
-      overflow-x: hidden;
+        radial-gradient(circle at var(--mx) var(--my), rgba(49, 230, 208, .08), transparent 18rem),
+        linear-gradient(180deg,
+          #147187 0%,
+          #0b4151 16%,
+          #062532 34%,
+          #03141e 59%,
+          #01070d 82%,
+          #000306 100%);
     }
 
     body::before,
@@ -43,453 +62,859 @@
       position: fixed;
       inset: 0;
       pointer-events: none;
-      z-index: -3;
+      z-index: -5;
     }
+
     body::before {
       background:
-        linear-gradient(105deg, transparent 0 18%, rgba(255,255,255,.16) 22%, transparent 28% 100%),
-        linear-gradient(83deg, transparent 0 60%, rgba(121,242,220,.1) 64%, transparent 71% 100%);
-      opacity: calc(.78 - (var(--depth, 0) * .48));
-      transform: translateY(calc(var(--depth, 0) * -60px));
+        linear-gradient(104deg, transparent 0 10%, rgba(227,255,251,.21) 13%, transparent 18% 100%),
+        linear-gradient(82deg, transparent 0 54%, rgba(140,247,232,.14) 59%, transparent 67% 100%),
+        radial-gradient(ellipse at 50% -8%, rgba(242,255,255,.35), transparent 32rem);
+      opacity: calc(.95 - var(--depth) * .78);
+      transform: translate3d(0, calc(var(--depth) * -140px), 0);
+      filter: blur(.4px);
     }
+
     body::after {
       background:
-        radial-gradient(ellipse at 50% 105%, rgba(121, 242, 220, calc(.08 + var(--depth, 0) * .18)), transparent 44%),
-        radial-gradient(circle at 18% 72%, rgba(180, 156, 255, .12), transparent 18rem),
-        linear-gradient(180deg, rgba(2,7,11,0), rgba(2,7,11, calc(var(--depth, 0) * .68)));
-      z-index: -2;
+        radial-gradient(circle at 76% 72%, rgba(255,112,95, calc(.02 + var(--depth) * .16)), transparent 22rem),
+        radial-gradient(circle at 86% 86%, rgba(255,200,107, calc(.04 + var(--depth) * .16)), transparent 18rem),
+        linear-gradient(180deg, transparent 0%, rgba(0,3,6, calc(var(--depth) * .72)) 100%);
+      z-index: -4;
     }
 
-    .surface {
+    a { color: inherit; }
+    .wrap { width: min(1180px, calc(100% - 44px)); margin: 0 auto; }
+
+    .grain,
+    .caustics,
+    .depth-meter,
+    .marine-life,
+    .cursor-light {
       position: fixed;
-      inset: -80px -12vw auto;
-      height: 240px;
-      z-index: -1;
+      inset: 0;
       pointer-events: none;
+    }
+
+    .grain {
+      z-index: 1;
+      opacity: .14;
+      mix-blend-mode: screen;
+      background-image:
+        radial-gradient(circle at 20% 30%, rgba(255,255,255,.6) 0 .6px, transparent .8px),
+        radial-gradient(circle at 80% 60%, rgba(255,255,255,.42) 0 .7px, transparent .9px);
+      background-size: 103px 127px, 151px 179px;
+      animation: plankton 18s linear infinite;
+    }
+
+    @keyframes plankton { to { background-position: 120px -220px, -180px -260px; } }
+
+    .caustics {
+      z-index: 0;
+      opacity: calc(.45 - var(--depth) * .27);
       background:
-        radial-gradient(ellipse at 34% 74%, rgba(255,255,255,.34), transparent 34%),
-        radial-gradient(ellipse at 72% 60%, rgba(121,242,220,.22), transparent 32%),
-        linear-gradient(180deg, rgba(226,255,248,.32), rgba(18,73,92,.02));
-      filter: blur(12px);
-      animation: surface-drift 10s ease-in-out infinite alternate;
-      opacity: calc(1 - (var(--depth, 0) * .72));
+        repeating-linear-gradient(100deg, transparent 0 36px, rgba(177,255,247,.065) 42px, transparent 58px),
+        repeating-linear-gradient(78deg, transparent 0 52px, rgba(255,255,255,.04) 60px, transparent 74px);
+      filter: blur(10px);
+      transform: translate3d(calc(var(--depth) * -50px), calc(var(--depth) * -160px), 0) rotate(calc(var(--depth) * -3deg));
+      animation: caustic-drift 10s ease-in-out infinite alternate;
     }
 
-    @keyframes surface-drift {
-      from { transform: translate3d(-1.5%, -5px, 0) rotate(-1deg); }
-      to { transform: translate3d(1.5%, 8px, 0) rotate(1deg); }
+    @keyframes caustic-drift {
+      from { background-position: 0 0, 0 0; }
+      to { background-position: 120px 80px, -90px 130px; }
     }
 
-    .wrap { width: min(1160px, calc(100% - 40px)); margin: 0 auto; }
+    .cursor-light {
+      z-index: 2;
+      background: radial-gradient(circle at var(--mx) var(--my), rgba(140,247,232,.15), transparent 12rem);
+      mix-blend-mode: screen;
+    }
+
     header {
-      position: sticky;
+      position: fixed;
       top: 0;
-      z-index: 20;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 20px;
-      padding: 22px 0;
-      backdrop-filter: blur(14px);
+      left: 0;
+      right: 0;
+      z-index: 30;
+      padding: 18px 0;
+      transition: background .3s ease, border-color .3s ease, transform .3s ease;
+      background: linear-gradient(180deg, rgba(1,5,8,.58), rgba(1,5,8,0));
+      border-bottom: 1px solid transparent;
     }
+
+    body.is-scrolled header {
+      background: rgba(1, 8, 12, .72);
+      border-bottom-color: rgba(166,255,244,.1);
+      backdrop-filter: blur(18px);
+    }
+
+    .nav-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
     .brand {
       display: inline-flex;
       align-items: center;
       gap: 12px;
-      color: var(--ink);
       text-decoration: none;
-      font-weight: 760;
-      letter-spacing: -.03em;
+      font-weight: 820;
+      letter-spacing: -.04em;
       font-size: 20px;
     }
     .mark {
-      width: 34px;
-      height: 34px;
-      border-radius: 12px;
+      width: 36px;
+      height: 36px;
+      border-radius: 14px;
+      position: relative;
+      overflow: hidden;
       background:
-        radial-gradient(circle at 68% 32%, var(--pearl) 0 9%, transparent 10%),
-        radial-gradient(circle at 36% 68%, var(--glow) 0 10%, transparent 11%),
-        conic-gradient(from 210deg, #0a2c3c, #126b76, #79f2dc, #ff8d7a, #0a2c3c);
-      box-shadow: 0 0 34px rgba(121,242,220,.26), inset 0 0 18px rgba(0,0,0,.38);
+        radial-gradient(circle at 66% 33%, var(--pearl) 0 8%, transparent 9%),
+        radial-gradient(circle at 35% 68%, var(--teal-300) 0 9%, transparent 10%),
+        conic-gradient(from 220deg, #061820, #0b5f69, #31e6d0, #ffc86b, #b8322b, #061820);
+      box-shadow: 0 0 36px rgba(49,230,208,.28), inset 0 0 18px rgba(0,0,0,.44);
     }
-    nav { display: flex; gap: 18px; align-items: center; color: var(--muted); font-size: 14px; }
-    nav a { color: var(--muted); text-decoration: none; }
-    nav a:hover { color: var(--ink); }
+    .mark::after {
+      content: "";
+      position: absolute;
+      inset: 4px;
+      border-radius: 11px;
+      border: 1px solid rgba(255,255,255,.17);
+    }
+
+    nav { display: flex; align-items: center; gap: 20px; color: var(--soft); font-size: 14px; }
+    nav a { text-decoration: none; opacity: .78; transition: opacity .2s ease, color .2s ease; }
+    nav a:hover, nav a:focus-visible { opacity: 1; color: var(--teal-300); }
+    .nav-cta {
+      min-height: 40px;
+      padding: 0 14px;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid rgba(140,247,232,.28);
+      border-radius: 999px;
+      background: rgba(140,247,232,.08);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    }
 
     .hero {
-      min-height: calc(100vh - 78px);
+      min-height: 100svh;
       display: grid;
-      grid-template-columns: 1.08fr .92fr;
       align-items: center;
-      gap: 54px;
-      padding: 42px 0 110px;
+      padding: 120px 0 90px;
+      position: relative;
+      z-index: 4;
     }
+
+    .hero-grid { display: grid; grid-template-columns: 1.02fr .98fr; gap: clamp(28px, 5vw, 76px); align-items: center; }
     .eyebrow {
       display: inline-flex;
       align-items: center;
       gap: 10px;
+      width: fit-content;
       padding: 8px 12px;
-      border: 1px solid var(--line);
+      border: 1px solid rgba(140,247,232,.24);
       border-radius: 999px;
-      color: #c6fff1;
-      background: rgba(2, 10, 15, .32);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.07);
+      color: #c5fff6;
+      background: rgba(1, 10, 14, .34);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 0 30px rgba(49,230,208,.08);
       font-size: 13px;
+      letter-spacing: .02em;
     }
     .pulse {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: var(--glow);
-      box-shadow: 0 0 18px var(--glow);
+      background: var(--teal-300);
+      box-shadow: 0 0 18px var(--teal-300);
     }
+
+    h1, h2, h3, p { text-wrap: pretty; }
     h1 {
-      margin: 28px 0 22px;
-      font-size: clamp(48px, 7.6vw, 104px);
-      line-height: .96;
-      letter-spacing: -.058em;
-      max-width: 900px;
+      margin: 24px 0 22px;
+      max-width: 920px;
+      font-size: clamp(50px, 8.5vw, 126px);
+      line-height: .88;
+      letter-spacing: -.075em;
     }
     .gradient-text {
       color: transparent;
-      background: linear-gradient(100deg, #ffffff 0%, #c5fff3 42%, #f4e8c7 70%, #ffad9f 100%);
+      background:
+        radial-gradient(circle at 20% 20%, #fff 0, #fff 22%, transparent 23%),
+        linear-gradient(105deg, #ffffff 0%, #bafef2 38%, #f6ead0 66%, #ff9c89 100%);
       -webkit-background-clip: text;
       background-clip: text;
     }
     .lead {
       margin: 0;
-      max-width: 660px;
-      color: #c0d2d6;
-      font-size: clamp(18px, 2vw, 23px);
-      line-height: 1.45;
+      max-width: 690px;
+      color: #c3d7d9;
+      font-size: clamp(18px, 2.1vw, 24px);
+      line-height: 1.5;
     }
-    .actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 32px; }
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 34px; }
     .button {
+      min-height: 50px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 48px;
+      gap: 10px;
       padding: 0 18px;
+      border: 1px solid rgba(166,255,244,.18);
       border-radius: 999px;
-      border: 1px solid var(--line);
+      background: rgba(255,255,255,.055);
       color: var(--ink);
-      background: rgba(255,255,255,.06);
       text-decoration: none;
-      font-weight: 720;
+      font-weight: 780;
       box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+      cursor: pointer;
+      transition: transform .22s ease, border-color .22s ease, background .22s ease, box-shadow .22s ease;
+    }
+    .button:hover, .button:focus-visible {
+      transform: translateY(-2px);
+      border-color: rgba(140,247,232,.42);
+      background: rgba(140,247,232,.1);
+      box-shadow: 0 20px 70px rgba(49,230,208,.14), inset 0 1px 0 rgba(255,255,255,.14);
     }
     .button.primary {
-      border-color: rgba(121,242,220,.34);
-      background: linear-gradient(135deg, rgba(121,242,220,.22), rgba(12,92,102,.5));
-      box-shadow: 0 22px 60px rgba(37, 226, 198, .16), inset 0 1px 0 rgba(255,255,255,.16);
+      border-color: rgba(140,247,232,.42);
+      background: linear-gradient(135deg, rgba(49,230,208,.26), rgba(8,86,97,.56));
+      box-shadow: 0 24px 80px rgba(49,230,208,.2), inset 0 1px 0 rgba(255,255,255,.18);
     }
 
     .command {
-      margin-top: 22px;
-      max-width: 650px;
-      padding: 15px 16px;
-      border: 1px solid rgba(241,232,207,.18);
-      border-radius: 8px;
+      margin: 22px 0 0;
+      max-width: 680px;
+      padding: 16px 18px;
+      border: 1px solid rgba(245,234,208,.18);
+      border-radius: 18px;
+      background: rgba(0,0,0,.28);
       color: var(--pearl);
-      background: rgba(0,0,0,.34);
       overflow-x: auto;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+      font-size: 13px;
+      line-height: 1.55;
     }
 
-    .archive-window {
+    .descent-card {
       position: relative;
       min-height: 620px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 30px;
+      border: 1px solid rgba(166,255,244,.16);
       overflow: hidden;
       background:
-        radial-gradient(circle at 48% 90%, rgba(121,242,220,.18), transparent 16rem),
-        linear-gradient(180deg, rgba(13, 65, 83, .7), rgba(1, 7, 12, .84));
-      box-shadow: 0 30px 100px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08);
+        radial-gradient(circle at 55% 12%, rgba(255,255,255,.16), transparent 12rem),
+        radial-gradient(circle at 42% 86%, rgba(49,230,208,.18), transparent 18rem),
+        linear-gradient(180deg, rgba(11, 83, 96, .52), rgba(1, 8, 13, .82));
+      box-shadow: 0 40px 130px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08);
+      transform: perspective(1200px) rotateX(calc((.5 - var(--section)) * 2deg)) rotateY(-4deg);
     }
-    .archive-window::before {
+
+    .descent-card::before {
       content: "";
       position: absolute;
       inset: 0;
       background:
-        radial-gradient(circle at 18% 20%, rgba(255,255,255,.18) 0 2px, transparent 3px),
-        radial-gradient(circle at 82% 28%, rgba(121,242,220,.22) 0 2px, transparent 3px),
-        radial-gradient(circle at 70% 68%, rgba(255,141,122,.2) 0 2px, transparent 3px),
-        radial-gradient(circle at 36% 76%, rgba(255,255,255,.14) 0 2px, transparent 3px);
+        radial-gradient(circle at 30% 20%, rgba(255,255,255,.28) 0 2px, transparent 3px),
+        radial-gradient(circle at 77% 32%, rgba(140,247,232,.26) 0 2px, transparent 3px),
+        radial-gradient(circle at 68% 72%, rgba(255,112,95,.22) 0 2px, transparent 3px),
+        radial-gradient(circle at 24% 82%, rgba(255,255,255,.16) 0 2px, transparent 3px);
       animation: slow-drift 12s ease-in-out infinite alternate;
     }
-    @keyframes slow-drift { to { transform: translate3d(12px, -18px, 0); } }
-    .clutter, .reef-stack { position: absolute; left: 7%; right: 7%; display: grid; gap: 12px; }
-    .clutter { top: 9%; }
-    .reef-stack { bottom: 8%; transform: translateY(calc(var(--depth, 0) * -22px)); }
-    .scrap, .source-card {
-      border: 1px solid rgba(255,255,255,.14);
-      border-radius: 8px;
-      background: rgba(255,255,255,.07);
-      box-shadow: 0 14px 42px rgba(0,0,0,.22);
-    }
-    .scrap {
-      height: 48px;
-      width: 72%;
-      transform: rotate(var(--r));
-      opacity: calc(.8 - var(--depth, 0) * .58);
-    }
-    .scrap:nth-child(2) { margin-left: 14%; width: 61%; }
-    .scrap:nth-child(3) { margin-left: 5%; width: 84%; }
-    .source-card { padding: 16px; background: rgba(4,22,30,.74); }
-    .source-card strong { display: block; letter-spacing: -.02em; }
-    .source-card span { color: var(--muted); font-size: 14px; }
-    .reef-line { height: 6px; margin-top: 12px; border-radius: 99px; background: linear-gradient(90deg, var(--glow), rgba(180,156,255,.8), transparent); }
+    @keyframes slow-drift { to { transform: translate3d(16px, -24px, 0); } }
 
-    section.depth {
-      min-height: 92vh;
+    .source-scraps, .drop-stack, .agent-orbit { position: absolute; left: 8%; right: 8%; display: grid; gap: 12px; }
+    .source-scraps { top: 9%; }
+    .drop-stack { bottom: 9%; transform: translateY(calc(var(--depth) * -34px)); }
+    .scrap, .drop, .orbit-chip {
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.07);
+      box-shadow: 0 18px 52px rgba(0,0,0,.25);
+      backdrop-filter: blur(10px);
+    }
+    .scrap { height: 50px; width: 70%; border-radius: 17px; transform: rotate(var(--r)); opacity: calc(.9 - var(--depth) * .56); }
+    .scrap:nth-child(2) { margin-left: 16%; width: 58%; }
+    .scrap:nth-child(3) { margin-left: 4%; width: 84%; }
+    .drop {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(2, 20, 27, .74);
+    }
+    .drop strong { display: block; letter-spacing: -.02em; }
+    .drop span { display: block; margin-top: 5px; color: var(--soft); font-size: 14px; }
+    .reef-line { height: 6px; margin-top: 13px; border-radius: 99px; background: linear-gradient(90deg, var(--teal-300), var(--violet), transparent); }
+
+    .agent-orbit {
+      top: 39%;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      opacity: .84;
+    }
+    .orbit-chip {
+      min-height: 78px;
+      border-radius: 20px;
+      padding: 14px;
+      color: #d8fffa;
+      font-size: 13px;
+      animation: orbit-float 4.8s ease-in-out infinite alternate;
+    }
+    .orbit-chip:nth-child(2) { animation-delay: -1.4s; }
+    .orbit-chip:nth-child(3) { animation-delay: -2.7s; }
+    @keyframes orbit-float { to { transform: translate3d(0, -18px, 0); } }
+
+    .scroll-cue {
+      position: absolute;
+      left: 50%;
+      bottom: 30px;
+      transform: translateX(-50%);
+      display: grid;
+      justify-items: center;
+      gap: 9px;
+      color: rgba(223,255,251,.7);
+      font-size: 12px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      z-index: 6;
+    }
+    .scroll-cue i {
+      width: 1px;
+      height: 48px;
+      background: linear-gradient(180deg, transparent, var(--teal-300), transparent);
+      animation: cue 1.8s ease-in-out infinite;
+    }
+    @keyframes cue { 50% { transform: translateY(12px); opacity: .48; } }
+
+    section.story {
+      min-height: 105svh;
       display: grid;
       align-items: center;
-      padding: 100px 0;
+      position: relative;
+      z-index: 4;
+      padding: 110px 0;
     }
-    .section-grid { display: grid; grid-template-columns: .9fr 1.1fr; gap: 42px; align-items: center; }
-    .kicker { color: var(--glow); text-transform: uppercase; letter-spacing: .16em; font-weight: 800; font-size: 12px; }
-    h2 { margin: 12px 0 16px; font-size: clamp(36px, 5.8vw, 76px); line-height: .94; letter-spacing: -.06em; }
-    .section-copy { color: #bdd0d4; font-size: 18px; line-height: 1.6; max-width: 660px; }
+    .story-grid { display: grid; grid-template-columns: .86fr 1.14fr; gap: clamp(34px, 5vw, 86px); align-items: center; }
+    .story:nth-of-type(even) .story-grid { grid-template-columns: 1.08fr .92fr; }
+    .kicker {
+      color: var(--teal-300);
+      text-transform: uppercase;
+      letter-spacing: .18em;
+      font-size: 12px;
+      font-weight: 840;
+    }
+    h2 {
+      margin: 14px 0 18px;
+      max-width: 820px;
+      font-size: clamp(38px, 6vw, 86px);
+      line-height: .9;
+      letter-spacing: -.067em;
+    }
+    .section-copy {
+      margin: 0;
+      max-width: 680px;
+      color: #bbd2d5;
+      font-size: clamp(17px, 1.5vw, 20px);
+      line-height: 1.68;
+    }
+    .section-copy + .section-copy { margin-top: 14px; }
+
+    .glass-panel {
+      border: 1px solid rgba(166,255,244,.16);
+      border-radius: 30px;
+      padding: clamp(20px, 3vw, 32px);
+      background: linear-gradient(180deg, rgba(5, 35, 45, .52), rgba(1, 9, 14, .68));
+      backdrop-filter: blur(22px);
+      box-shadow: 0 34px 120px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.08);
+    }
     .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
     .card {
-      min-height: 164px;
+      min-height: 170px;
+      border: 1px solid rgba(166,255,244,.15);
+      border-radius: 23px;
       padding: 20px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel);
-      box-shadow: 0 20px 70px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.05);
+      background: rgba(3, 20, 27, .65);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.055);
+      transition: transform .24s ease, border-color .24s ease, background .24s ease;
     }
-    .card b { display: block; margin-bottom: 8px; color: var(--ink); font-size: 18px; }
-    .card p { margin: 0; color: var(--muted); line-height: 1.55; }
+    .card:hover { transform: translateY(-4px); border-color: rgba(140,247,232,.35); background: rgba(7, 46, 58, .62); }
+    .card b { display: block; margin-bottom: 8px; color: #f4fffd; font-size: 18px; letter-spacing: -.02em; }
+    .card p { margin: 0; color: var(--soft); line-height: 1.55; }
+
+    .fish-lane {
+      position: fixed;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+      opacity: calc(1 - max(0, (var(--depth) - .45) * 2));
+    }
+    .fish {
+      position: absolute;
+      width: var(--w);
+      height: calc(var(--w) * .34);
+      top: var(--top);
+      left: -18vw;
+      opacity: .7;
+      filter: drop-shadow(0 0 14px rgba(140,247,232,.24));
+      animation: fish-swim var(--speed) linear infinite;
+      animation-delay: var(--delay);
+    }
+    .fish::before {
+      content: "";
+      position: absolute;
+      inset: 14% 20% 14% 0;
+      border-radius: 50% 55% 55% 50%;
+      background: linear-gradient(90deg, rgba(189,255,247,.65), rgba(49,230,208,.16));
+      clip-path: polygon(0 50%, 18% 18%, 76% 8%, 100% 50%, 76% 92%, 18% 82%);
+    }
+    .fish::after {
+      content: "";
+      position: absolute;
+      right: 0;
+      top: 9%;
+      width: 28%;
+      height: 82%;
+      background: rgba(140,247,232,.25);
+      clip-path: polygon(0 50%, 100% 0, 74% 50%, 100% 100%);
+    }
+    @keyframes fish-swim {
+      0% { transform: translate3d(0, 0, 0) scaleX(1); }
+      45% { transform: translate3d(55vw, -16px, 0) scaleX(1); }
+      100% { transform: translate3d(132vw, 14px, 0) scaleX(1); }
+    }
+
+    .medusa {
+      width: min(420px, 74vw);
+      aspect-ratio: 1;
+      position: relative;
+      margin-inline: auto;
+      filter: drop-shadow(0 0 50px rgba(183,164,255,.24));
+      transform: translateY(calc((.36 - var(--depth)) * 70px));
+      animation: medusa-pulse 5s ease-in-out infinite alternate;
+    }
+    @keyframes medusa-pulse { to { transform: translateY(calc((.36 - var(--depth)) * 70px - 24px)) scale(1.03); } }
+    .medusa .bell {
+      position: absolute;
+      left: 17%; right: 17%; top: 12%; height: 42%;
+      border-radius: 52% 52% 44% 44%;
+      background:
+        radial-gradient(circle at 50% 30%, rgba(255,255,255,.52), transparent 18%),
+        linear-gradient(180deg, rgba(214,207,255,.44), rgba(49,230,208,.08));
+      border: 1px solid rgba(255,255,255,.22);
+      box-shadow: inset 0 2px 20px rgba(255,255,255,.16), 0 0 70px rgba(183,164,255,.16);
+      backdrop-filter: blur(12px);
+    }
+    .medusa .tentacle {
+      position: absolute;
+      top: 50%;
+      left: var(--left);
+      width: 2px;
+      height: var(--h);
+      border-radius: 999px;
+      background: linear-gradient(180deg, rgba(219,255,250,.72), rgba(183,164,255,.18), transparent);
+      transform-origin: top;
+      transform: rotate(var(--rot));
+      animation: jellytrail 4.5s ease-in-out infinite alternate;
+      animation-delay: var(--delay);
+    }
+    @keyframes jellytrail { to { transform: rotate(calc(var(--rot) * -1)) translateY(18px); opacity: .5; } }
+
+    .triage-flow { display: grid; gap: 14px; }
+    .flow-row {
+      display: grid;
+      grid-template-columns: 116px 1fr;
+      gap: 14px;
+      align-items: stretch;
+    }
+    .flow-state {
+      border-radius: 20px;
+      border: 1px solid rgba(140,247,232,.2);
+      display: grid;
+      place-items: center;
+      color: var(--teal-300);
+      font-weight: 840;
+      letter-spacing: -.02em;
+      background: rgba(49,230,208,.07);
+    }
+    .flow-note {
+      min-height: 98px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,.1);
+      padding: 18px;
+      background: rgba(255,255,255,.045);
+    }
+    .flow-note b { display: block; margin-bottom: 6px; }
+    .flow-note span { color: var(--soft); line-height: 1.45; }
+
+    .tentacle-field {
+      position: relative;
+      min-height: 620px;
+      border-radius: 32px;
+      overflow: hidden;
+      border: 1px solid rgba(166,255,244,.14);
+      background: radial-gradient(circle at 78% 78%, rgba(255,112,95,.12), transparent 16rem), rgba(1, 10, 16, .42);
+    }
+    .tentacle-svg {
+      position: absolute;
+      inset: -6% -12% -6% -10%;
+      width: 124%;
+      height: 112%;
+      opacity: calc(.52 + var(--depth) * .18);
+    }
+    .tentacle-svg path {
+      fill: none;
+      stroke-linecap: round;
+      stroke-dasharray: 920;
+      stroke-dashoffset: calc(920 - var(--depth) * 1200);
+      filter: drop-shadow(0 0 18px rgba(49,230,208,.2));
+    }
+    .knowledge-node {
+      position: absolute;
+      border-radius: 999px;
+      border: 1px solid rgba(245,234,208,.22);
+      padding: 10px 13px;
+      background: rgba(245,234,208,.08);
+      color: var(--pearl);
+      font-weight: 720;
+      font-size: 13px;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 36px rgba(255,200,107,.08);
+    }
 
     .octopus-stage {
+      min-height: 150svh;
       position: relative;
-      min-height: 126vh;
       display: grid;
       align-items: end;
       overflow: hidden;
-      margin-top: -10vh;
-      padding-bottom: 18vh;
       isolation: isolate;
+      margin-top: -8vh;
+      z-index: 4;
     }
-    .octopus-stage::before,
-    .octopus-stage::after {
-      content: "";
+    .octopus-backdrop {
       position: absolute;
-      pointer-events: none;
-      z-index: 1;
-    }
-    .octopus-stage::before {
       inset: 0;
+      z-index: 0;
       background:
-        radial-gradient(circle at 72% 86%, rgba(255, 129, 92, calc(.08 + var(--depth, 0) * .1)), transparent 24rem),
-        radial-gradient(circle at 82% 74%, rgba(121, 242, 220, calc(.09 + var(--depth, 0) * .16)), transparent 22rem),
-        linear-gradient(90deg, rgba(1,4,8,.72) 0%, rgba(1,4,8,.38) 42%, rgba(1,4,8,.05) 100%),
-        linear-gradient(180deg, rgba(1,4,8,0) 0%, rgba(1,4,8,.72) 100%);
-    }
-    .octopus-stage::after {
-      inset: 12vh 0 0;
-      background-image:
-        radial-gradient(circle, rgba(208,255,249,.18) 0 1px, transparent 1.6px),
-        radial-gradient(circle, rgba(255,181,147,.13) 0 1px, transparent 1.8px);
-      background-size: 130px 150px, 210px 240px;
-      background-position: 15% 12%, 76% 28%;
-      opacity: calc(.18 + var(--depth, 0) * .22);
-      transform: translateY(calc(var(--depth, 0) * -44px));
-      mask-image: linear-gradient(to bottom, transparent, #000 24%, #000 82%, transparent);
+        linear-gradient(90deg, rgba(0,3,6,.88) 0%, rgba(0,3,6,.54) 41%, rgba(0,3,6,.08) 100%),
+        linear-gradient(180deg, rgba(0,3,6,.18) 0%, rgba(0,3,6,.96) 88%);
     }
     .octopus-photo {
       position: absolute;
-      right: clamp(18px, 4.2vw, 76px);
-      bottom: clamp(24px, 5vh, 72px);
-      z-index: 0;
-      width: min(980px, 82vw);
+      right: max(-110px, -5vw);
+      bottom: 0;
+      z-index: -1;
+      width: min(1360px, 96vw);
       max-width: none;
-      opacity: calc(.66 + var(--depth, 0) * .3);
-      transform: translate3d(0, calc(58px - var(--depth, 0) * 104px), 0) scale(calc(.94 + var(--depth, 0) * .045));
-      filter: saturate(1.16) contrast(1.12) brightness(1.05) drop-shadow(0 0 86px rgba(121,242,220,.16));
+      opacity: calc(.55 + var(--depth) * .43);
+      transform: translate3d(0, calc(160px - var(--depth) * 230px), 0) scale(calc(.95 + var(--depth) * .08));
+      filter: saturate(1.14) contrast(1.11) brightness(.96) drop-shadow(0 0 92px rgba(49,230,208,.16));
       mask-image:
-        linear-gradient(to left, #000 0 88%, transparent 100%),
-        linear-gradient(to top, #000 0 88%, transparent 100%);
+        linear-gradient(to right, transparent 0%, #000 25%, #000 100%),
+        linear-gradient(to top, #000 0 86%, transparent 100%);
       mask-composite: intersect;
     }
-    .tentacle-trace {
+    .reef-glow {
       position: absolute;
-      inset: 5vh 0 auto auto;
-      width: min(920px, 80vw);
-      height: 72vh;
-      z-index: 2;
-      opacity: calc(.12 + var(--depth, 0) * .26);
-      pointer-events: none;
-      transform: translateY(calc(80px - var(--depth, 0) * 120px));
+      right: 13vw;
+      bottom: 23vh;
+      z-index: 1;
+      width: 190px;
+      height: 190px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(245,234,208,.7), rgba(255,200,107,.22) 24%, transparent 66%);
+      filter: blur(4px);
+      opacity: calc(.25 + var(--depth) * .48);
+      mix-blend-mode: screen;
+      animation: pearl-glow 3.6s ease-in-out infinite alternate;
     }
-    .tentacle-trace path {
-      fill: none;
-      stroke-linecap: round;
-      stroke-dasharray: 1 24;
-      animation: shimmer 7s linear infinite;
+    @keyframes pearl-glow { to { transform: scale(1.13); opacity: .88; } }
+    .final-copy {
+      position: relative;
+      z-index: 3;
+      padding: 0 0 24vh;
     }
-    @keyframes shimmer { to { stroke-dashoffset: -96; } }
+    .final-panel {
+      width: min(780px, 100%);
+      padding: clamp(24px, 4vw, 42px);
+      border: 1px solid rgba(140,247,232,.22);
+      border-radius: 32px;
+      background: linear-gradient(180deg, rgba(1, 10, 14, .82), rgba(0, 3, 6, .72));
+      backdrop-filter: blur(24px);
+      box-shadow: 0 44px 150px rgba(0,0,0,.64), 0 0 100px rgba(49,230,208,.08), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 26px 0 0; }
+    .stat { border-top: 1px solid rgba(166,255,244,.18); padding-top: 14px; }
+    .stat b { display: block; color: var(--pearl); font-size: clamp(24px, 4vw, 40px); letter-spacing: -.05em; }
+    .stat span { color: #9fb9bf; font-size: 13px; line-height: 1.3; }
 
     .final-cta {
       position: relative;
-      z-index: 3;
-      margin-top: -12vh;
-      padding: 0 0 130px;
+      z-index: 5;
+      margin-top: -18vh;
+      padding: 0 0 110px;
       text-align: center;
     }
     .final-cta .panel {
-      width: min(860px, calc(100% - 40px));
+      width: min(920px, calc(100% - 44px));
       margin: 0 auto;
-      padding: 34px;
-      border: 1px solid rgba(121,242,220,.22);
-      border-radius: 8px;
-      background: linear-gradient(180deg, rgba(2, 13, 18, .9), rgba(1, 6, 10, .82));
-      backdrop-filter: blur(22px);
-      box-shadow: 0 34px 130px rgba(0,0,0,.68), 0 0 90px rgba(121,242,220,.08), inset 0 1px 0 rgba(255,255,255,.07);
+      padding: clamp(26px, 4vw, 44px);
+      border: 1px solid rgba(140,247,232,.22);
+      border-radius: 34px;
+      background: linear-gradient(180deg, rgba(2, 14, 19, .9), rgba(1, 6, 10, .82));
+      backdrop-filter: blur(24px);
+      box-shadow: 0 40px 140px rgba(0,0,0,.7), 0 0 90px rgba(49,230,208,.08), inset 0 1px 0 rgba(255,255,255,.07);
     }
+    .final-cta .section-copy { margin-left: auto; margin-right: auto; }
 
     .bubble {
       position: fixed;
-      width: var(--size);
-      height: var(--size);
       left: var(--x);
       top: var(--y);
-      z-index: 50;
-      border: 1px solid rgba(205,255,248,.58);
+      width: var(--size);
+      height: var(--size);
+      z-index: 60;
       border-radius: 50%;
       pointer-events: none;
-      animation: bubble-rise 1.7s ease-out forwards;
-      box-shadow: inset 0 0 10px rgba(255,255,255,.18), 0 0 18px rgba(121,242,220,.18);
+      border: 1px solid rgba(214,255,250,.62);
+      background: radial-gradient(circle at 30% 28%, rgba(255,255,255,.66), rgba(255,255,255,.05) 34%, transparent 70%);
+      box-shadow: inset 0 0 10px rgba(255,255,255,.18), 0 0 18px rgba(49,230,208,.22);
+      animation: bubble-rise 1.8s ease-out forwards;
     }
-    @keyframes bubble-rise {
-      to { transform: translate3d(var(--drift), -86px, 0) scale(.35); opacity: 0; }
+    @keyframes bubble-rise { to { transform: translate3d(var(--drift), -96px, 0) scale(.34); opacity: 0; } }
+
+    .depth-meter {
+      z-index: 26;
+      left: auto;
+      right: 22px;
+      top: 50%;
+      bottom: auto;
+      width: 38px;
+      height: 220px;
+      transform: translateY(-50%);
+      display: grid;
+      place-items: center;
+    }
+    .depth-meter::before {
+      content: "";
+      width: 1px;
+      height: 100%;
+      background: linear-gradient(180deg, rgba(140,247,232,.0), rgba(140,247,232,.42), rgba(255,112,95,.34));
+    }
+    .depth-dot {
+      position: absolute;
+      top: calc(var(--depth) * 100%);
+      left: 50%;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--pearl);
+      box-shadow: 0 0 18px var(--pearl), 0 0 40px rgba(49,230,208,.3);
+    }
+
+    .skip-link {
+      position: fixed;
+      left: 16px;
+      top: 16px;
+      z-index: 100;
+      transform: translateY(-140%);
+      background: var(--pearl);
+      color: #061219;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-weight: 800;
+    }
+    .skip-link:focus { transform: translateY(0); }
+
+    :focus-visible { outline: 3px solid rgba(245,234,208,.8); outline-offset: 4px; }
+
+    @media (max-width: 940px) {
+      nav a:not(.nav-cta) { display: none; }
+      .hero-grid, .story-grid, .story:nth-of-type(even) .story-grid { grid-template-columns: 1fr; }
+      .descent-card { min-height: 540px; transform: none; }
+      .cards, .stats { grid-template-columns: 1fr; }
+      .flow-row { grid-template-columns: 1fr; }
+      .flow-state { min-height: 56px; justify-content: start; padding-left: 18px; place-items: center start; }
+      .agent-orbit { grid-template-columns: 1fr; top: 34%; }
+      .octopus-photo { width: 152vw; right: -44vw; opacity: .68; }
+      .reef-glow { right: 20vw; bottom: 18vh; width: 120px; height: 120px; }
+      .final-copy { padding-bottom: 34vh; }
+      .depth-meter { display: none; }
+      h1 { font-size: clamp(48px, 16vw, 78px); }
+      h2 { font-size: clamp(38px, 12vw, 62px); }
+    }
+
+    @media (max-width: 560px) {
+      .wrap { width: min(100% - 28px, 1180px); }
+      header { padding: 12px 0; }
+      .brand { font-size: 18px; }
+      .nav-cta { display: none; }
+      .hero { padding-top: 96px; }
+      section.story { padding: 76px 0; }
+      .descent-card { min-height: 500px; border-radius: 24px; }
+      .glass-panel, .final-panel, .final-cta .panel { border-radius: 24px; }
+      .fish { opacity: .45; }
+      .tentacle-field { min-height: 520px; }
+      .octopus-stage { min-height: 132svh; }
     }
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-    }
-    @media (max-width: 840px) {
-      header { position: relative; align-items: flex-start; }
-      nav { display: none; }
-      .hero, .section-grid { grid-template-columns: 1fr; }
-      .hero { padding-top: 18px; }
-      .archive-window { min-height: 520px; }
-      .cards { grid-template-columns: 1fr; }
-      section.depth { padding: 76px 0; }
-      .octopus-photo { right: -18vw; width: 132vw; opacity: .72; }
-      .tentacle-trace { width: 120vw; opacity: .18; }
+      .bubble, .caustics, .grain, .fish-lane { display: none !important; }
+      .octopus-photo, .tentacle-svg path, .medusa { transform: none !important; }
     }
   </style>
 </head>
 <body>
-  <div class="surface" aria-hidden="true"></div>
-  <header class="wrap">
-    <a class="brand" href="#top" aria-label="MemoReef home"><span class="mark" aria-hidden="true"></span>MemoReef</a>
-    <nav aria-label="Landing page navigation">
-      <a href="#problem">Problem</a>
-      <a href="#workflow">Workflow</a>
-      <a href="#briefs">Briefs</a>
-      <a href="#pilot">Pilot</a>
-    </nav>
+  <a class="skip-link" href="#content">Skip animation</a>
+  <div class="caustics" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="cursor-light" aria-hidden="true"></div>
+  <div class="depth-meter" aria-hidden="true"><span class="depth-dot"></span></div>
+  <div class="fish-lane marine-life" aria-hidden="true">
+    <span class="fish" style="--top:18vh;--w:92px;--speed:22s;--delay:-2s"></span>
+    <span class="fish" style="--top:30vh;--w:58px;--speed:18s;--delay:-9s"></span>
+    <span class="fish" style="--top:54vh;--w:116px;--speed:29s;--delay:-14s"></span>
+    <span class="fish" style="--top:72vh;--w:72px;--speed:24s;--delay:-6s"></span>
+  </div>
+
+  <header>
+    <div class="wrap nav-row">
+      <a class="brand" href="#top" aria-label="MemoReef home"><span class="mark" aria-hidden="true"></span>MemoReef</a>
+      <nav aria-label="Landing page navigation">
+        <a href="#drop">Drop</a>
+        <a href="#triage">Triage</a>
+        <a href="#agent">Agent reef</a>
+        <a href="#pearl">Pearl</a>
+        <a class="nav-cta" href="#pilot">Run local pilot</a>
+      </nav>
+    </div>
   </header>
 
   <main id="top">
-    <section class="hero wrap" aria-label="MemoReef hero">
-      <div>
-        <div class="eyebrow"><span class="pulse" aria-hidden="true"></span>Local-first source memory</div>
-        <h1><span class="gradient-text">Descend from bookmark chaos into a source reef.</span></h1>
-        <p class="lead">MemoReef turns saved links into private Markdown Drops with review state, local reports, searchable context, and agent-ready briefs.</p>
-        <div class="actions">
-          <a class="button primary" href="#pilot">Run the pilot</a>
-          <a class="button" href="#workflow">See the workflow</a>
-        </div>
-        <pre class="command">python3 -m memoreef.cli pilot --bookmarks bookmarks.html --vault /tmp/memoreef-pilot</pre>
-      </div>
-      <div class="archive-window" aria-label="Messy sources becoming an organized reef">
-        <div class="clutter" aria-hidden="true">
-          <div class="scrap" style="--r:-4deg"></div>
-          <div class="scrap" style="--r:3deg"></div>
-          <div class="scrap" style="--r:-1deg"></div>
-        </div>
-        <div class="reef-stack">
-          <article class="source-card"><strong>Local AI agent playbook</strong><span>Reef · Pearl · AI Agents</span><div class="reef-line"></div></article>
-          <article class="source-card"><strong>Markdown archive patterns</strong><span>Deep · Local knowledge base</span><div class="reef-line"></div></article>
-          <article class="source-card"><strong>Duplicate report</strong><span>Clutter grouped before review</span><div class="reef-line"></div></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="depth wrap" id="problem">
-      <div class="section-grid">
+    <section class="hero" id="content" aria-label="MemoReef immersive hero">
+      <div class="wrap hero-grid">
         <div>
-          <div class="kicker">The surface layer</div>
-          <h2>Saved links become a junk drawer.</h2>
-          <p class="section-copy">Bookmarks mix great sources with duplicates, stale rumors, private files, and half-remembered research. When an agent needs context later, the useful material is still trapped in a browser export.</p>
+          <div class="eyebrow"><span class="pulse" aria-hidden="true"></span>Open-source · local-first source memory</div>
+          <h1><span class="gradient-text">Sink saved links into a living knowledge reef.</span></h1>
+          <p class="lead">MemoReef turns bookmark chaos into Markdown Drops, review queues, agent-ready briefs, and pearl ideas — without trapping your sources in someone else’s server.</p>
+          <div class="actions">
+            <a class="button primary" href="#drop">Begin the descent</a>
+            <a class="button" href="#pilot">Run the pilot</a>
+          </div>
+          <pre class="command">python3 -m memoreef.cli pilot --bookmarks bookmarks.html --vault /tmp/memoreef-pilot</pre>
         </div>
-        <div class="cards">
-          <div class="card"><b>Duplicates drift together</b><p>Exact URLs, same-domain clusters, and similar titles are reported locally before they waste review time.</p></div>
-          <div class="card"><b>Private sources stay private</b><p>File URLs and personal research remain on disk. The static app opens directly in the browser.</p></div>
-          <div class="card"><b>Status is explicit</b><p>Drift, Reef, Deep, discarded, and Pearl states are written into Markdown frontmatter.</p></div>
-          <div class="card"><b>Nothing requires a server</b><p>The pilot creates files you can inspect, back up, edit, sync, or delete yourself.</p></div>
+
+        <div class="descent-card" aria-label="Saved links descending into organized MemoReef Drops">
+          <div class="source-scraps" aria-hidden="true">
+            <div class="scrap" style="--r:-4deg"></div>
+            <div class="scrap" style="--r:3deg"></div>
+            <div class="scrap" style="--r:-1deg"></div>
+          </div>
+          <div class="agent-orbit" aria-hidden="true">
+            <div class="orbit-chip">URLs</div>
+            <div class="orbit-chip">notes</div>
+            <div class="orbit-chip">signals</div>
+          </div>
+          <div class="drop-stack">
+            <article class="drop"><strong>Local AI agent playbook</strong><span>Reef · Pearl · AI Agents</span><div class="reef-line"></div></article>
+            <article class="drop"><strong>Markdown archive patterns</strong><span>Deep · Local knowledge base</span><div class="reef-line"></div></article>
+            <article class="drop"><strong>Duplicate report</strong><span>Clutter grouped before review</span><div class="reef-line"></div></article>
+          </div>
         </div>
       </div>
+      <div class="scroll-cue" aria-hidden="true"><span>Scroll to dive</span><i></i></div>
     </section>
 
-    <section class="depth wrap" id="workflow">
-      <div class="section-grid">
+    <section class="story wrap" id="drop">
+      <div class="story-grid">
         <div>
-          <div class="kicker">The reef layer</div>
-          <h2>Review turns clutter into a local library.</h2>
-          <p class="section-copy">Import a browser export, open the generated pilot app, review a small queue, then regenerate the local pages. The app stays calm and practical while the landing page carries the cinematic ocean.</p>
+          <div class="kicker">01 · Dropping info</div>
+          <h2>At the surface, everything looks like a fish.</h2>
+          <p class="section-copy">Saved links swim past as loose fragments: tutorials, papers, tools, half-useful threads, repeated tabs, private file URLs, and the occasional treasure pretending to be clutter.</p>
+          <p class="section-copy">MemoReef starts by importing the mess and turning each source into a readable local Markdown Drop.</p>
         </div>
-        <div class="cards">
-          <div class="card"><b>Markdown Drops</b><p>Each saved source becomes a readable file with frontmatter, source URL, notes, and an agent brief section.</p></div>
-          <div class="card"><b>Review sessions</b><p>Focused JSON queues let you review Drift items, Pearls, projects, shoals, tags, hosts, or small samples.</p></div>
-          <div class="card"><b>Local reports</b><p>Duplicate reports, garden suggestions, search results, and project briefs are generated beside the vault.</p></div>
-          <div class="card"><b>Static app pages</b><p>Dashboard, tour, library, review, reports, briefs, pilot, and Drop detail pages open without a backend.</p></div>
+        <div class="glass-panel cards">
+          <article class="card"><b>Browser exports become files</b><p>Every bookmark can become a local Markdown source with URL, title, host, tags, notes, status, and agent brief fields.</p></article>
+          <article class="card"><b>No backend required</b><p>The pilot app opens from disk. Your archive remains inspectable, portable, editable, and boring in the best possible way.</p></article>
+          <article class="card"><b>Signal survives</b><p>Hosts, projects, labels, and source quality move into structured frontmatter instead of browser chrome.</p></article>
+          <article class="card"><b>Open-source by design</b><p>The archive format stays human-readable even if the interface changes later. That is the point. Lock-in is just clutter with a payment form.</p></article>
         </div>
       </div>
     </section>
 
-    <section class="depth wrap" id="briefs">
-      <div class="section-grid">
+    <section class="story wrap" id="triage">
+      <div class="story-grid">
+        <div class="glass-panel triage-flow" aria-label="MemoReef triage flow">
+          <div class="flow-row"><div class="flow-state">Drift</div><div class="flow-note"><b>Unreviewed but not lost</b><span>Fresh imports land in a calm queue instead of demanding immediate perfect organization.</span></div></div>
+          <div class="flow-row"><div class="flow-state">Reef</div><div class="flow-note"><b>Useful source memory</b><span>Reliable material graduates into the library where agents and humans can find it again.</span></div></div>
+          <div class="flow-row"><div class="flow-state">Deep</div><div class="flow-note"><b>Long-term references</b><span>Dense papers, guides, and source collections get retained without flooding the review surface.</span></div></div>
+          <div class="flow-row"><div class="flow-state">Pearl</div><div class="flow-note"><b>High-value idea material</b><span>The best sources become briefs, claims, and prompts for real work — not another forgotten save.</span></div></div>
+        </div>
         <div>
-          <div class="kicker">The handoff layer</div>
-          <h2>Agents get briefs, not a swamp.</h2>
-          <p class="section-copy">Project briefs collect selected Drops into local Markdown with source URLs, summaries, labels, gaps, and instructions that tell an agent to cite sources and avoid invented claims.</p>
-        </div>
-        <div class="cards">
-          <div class="card"><b>Source memory</b><p>Useful saves become reusable context for future work instead of disappearing into browser chrome.</p></div>
-          <div class="card"><b>Pearl selection</b><p>High-value sources can be marked and filtered for citation-quality handoffs.</p></div>
-          <div class="card"><b>Readable forever</b><p>The core archive is Markdown. MemoReef can improve, but your sources are not trapped.</p></div>
-          <div class="card"><b>Offline pilot</b><p>No account, subscription, AI API, network call, or server is needed to test the workflow.</p></div>
+          <div class="kicker">02 · Triage current</div>
+          <h2>A floating medusa filters the noise.</h2>
+          <p class="section-copy">Review is not a spreadsheet punishment. MemoReef separates what is duplicate, stale, private, promising, source-worthy, or immediately useful.</p>
+          <div class="medusa" aria-hidden="true">
+            <div class="bell"></div>
+            <i class="tentacle" style="--left:31%;--h:45%;--rot:8deg;--delay:-.1s"></i>
+            <i class="tentacle" style="--left:41%;--h:54%;--rot:-4deg;--delay:-1.2s"></i>
+            <i class="tentacle" style="--left:50%;--h:62%;--rot:2deg;--delay:-2.1s"></i>
+            <i class="tentacle" style="--left:59%;--h:50%;--rot:-7deg;--delay:-.7s"></i>
+            <i class="tentacle" style="--left:69%;--h:42%;--rot:5deg;--delay:-1.8s"></i>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="octopus-stage" aria-label="Deep sea octopus archive">
-      <img class="octopus-photo" src="assets/memoreef-octopus-abyss.jpg" alt="Hyperrealistic red, gold, and teal octopus resting on the deep sea floor with tentacles reaching upward" />
-      <svg class="tentacle-trace" viewBox="0 0 920 760" aria-hidden="true">
-        <path d="M880 716 C716 548 702 404 570 292 C456 196 320 168 172 52" stroke="rgba(121,242,220,.42)" stroke-width="2" />
-        <path d="M820 734 C666 626 642 482 528 398 C430 326 294 316 92 248" stroke="rgba(255,181,147,.34)" stroke-width="1.6" />
-        <path d="M756 746 C612 668 560 540 478 462 C396 384 274 400 132 372" stroke="rgba(241,232,207,.25)" stroke-width="1.2" />
-      </svg>
+    <section class="story wrap" id="agent">
+      <div class="story-grid">
+        <div>
+          <div class="kicker">03 · Agent octopus</div>
+          <h2>Tentacles extract knowledge without swallowing the archive.</h2>
+          <p class="section-copy">MemoReef prepares source briefs so an agent can reason with context, cite URLs, respect gaps, and avoid confident nonsense. A rare creature, apparently.</p>
+          <p class="section-copy">The octopus does not replace the library. It reaches through it.</p>
+        </div>
+        <div class="tentacle-field" aria-label="Agent tentacles connecting source memory to briefs">
+          <svg class="tentacle-svg" viewBox="0 0 900 620" aria-hidden="true">
+            <path d="M846 560 C690 480 686 320 542 250 C404 182 280 174 70 70" stroke="rgba(49,230,208,.56)" stroke-width="16" />
+            <path d="M842 582 C710 526 648 430 522 386 C384 338 262 392 86 314" stroke="rgba(255,112,95,.48)" stroke-width="12" />
+            <path d="M804 540 C654 422 566 510 422 446 C300 392 258 246 112 222" stroke="rgba(255,200,107,.42)" stroke-width="8" />
+            <path d="M858 514 C708 396 720 250 586 160 C464 78 278 94 160 36" stroke="rgba(245,234,208,.32)" stroke-width="5" />
+          </svg>
+          <span class="knowledge-node" style="left:18%;top:18%">sources</span>
+          <span class="knowledge-node" style="left:32%;top:65%">claims</span>
+          <span class="knowledge-node" style="left:55%;top:38%">briefs</span>
+          <span class="knowledge-node" style="left:75%;top:78%">ideas</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="octopus-stage" id="pearl" aria-label="MemoReef octopus presenting pearl ideas">
+      <div class="octopus-backdrop" aria-hidden="true"></div>
+      <img class="octopus-photo" src="assets/memoreef-octopus-pearl.jpg" alt="A cinematic red and gold octopus resting in a dark teal coral reef, presenting a glowing pearl in an open shell." />
+      <div class="reef-glow" aria-hidden="true"></div>
+      <div class="wrap final-copy">
+        <div class="final-panel">
+          <div class="kicker">04 · Pearl output</div>
+          <h2>The Octopus surfaces Pearls from your Reef.</h2>
+          <p class="section-copy">Pearls are your highest-value sources — referenced often, shaping a project. MemoReef stores your bookmarks as local, Obsidian-ready Drops, so your AI agents can tag, cluster, and use them as a shared knowledge base for emerging projects.</p>
+          <div class="stats" aria-label="MemoReef output types">
+            <div class="stat"><b>Drops</b><span>Individual Markdown source records</span></div>
+            <div class="stat"><b>Briefs</b><span>Agent-readable project context</span></div>
+            <div class="stat"><b>Pearls</b><span>High-value source-backed ideas</span></div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="final-cta" id="pilot">
       <div class="panel">
         <div class="kicker">Pilot-ready</div>
         <h2>Open it locally. Inspect every file.</h2>
-        <p class="section-copy" style="margin-left:auto;margin-right:auto;">MemoReef generates a premium static pilot app for your own bookmark export: dashboard, tour, library, review launcher, reports, briefs, checklist, and Drop detail pages.</p>
+        <p class="section-copy">MemoReef generates a static local pilot app for your own bookmark export: dashboard, tour, library, review launcher, reports, briefs, checklist, and Drop detail pages.</p>
         <pre class="command" style="margin-left:auto;margin-right:auto;text-align:left;">rm -rf /tmp/memoreef-pilot
 python3 -m memoreef.cli pilot --bookmarks examples/bookmarks.html --vault /tmp/memoreef-pilot --review-limit 10
 open /tmp/memoreef-pilot/MemoReef/app/pilot.html</pre>
         <div class="actions" style="justify-content:center">
           <a class="button primary" href="#top">Back to surface</a>
+          <a class="button" href="https://memoreef.de" rel="noopener">memoreef.de</a>
         </div>
       </div>
     </section>
@@ -498,32 +923,53 @@ open /tmp/memoreef-pilot/MemoReef/app/pilot.html</pre>
   <script>
     (function () {
       var root = document.documentElement;
-      function updateDepth() {
-        var max = Math.max(1, document.body.scrollHeight - window.innerHeight);
-        var depth = Math.min(1, Math.max(0, window.scrollY / max));
-        root.style.setProperty("--depth", depth.toFixed(3));
-      }
-      updateDepth();
-      window.addEventListener("scroll", updateDepth, { passive: true });
-      window.addEventListener("resize", updateDepth);
+      var body = document.body;
+      var sections = Array.prototype.slice.call(document.querySelectorAll("section"));
 
-      if (!matchMedia("(pointer: fine)").matches || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      var last = 0;
-      window.addEventListener("pointermove", function (event) {
-        var now = Date.now();
-        if (now - last < 95) return;
-        last = now;
-        var bubble = document.createElement("span");
-        var size = Math.round(6 + Math.random() * 15) + "px";
-        bubble.className = "bubble";
-        bubble.setAttribute("aria-label", "oxygen bubble");
-        bubble.style.setProperty("--x", event.clientX + "px");
-        bubble.style.setProperty("--y", event.clientY + "px");
-        bubble.style.setProperty("--size", size);
-        bubble.style.setProperty("--drift", Math.round((Math.random() - .5) * 54) + "px");
-        document.body.appendChild(bubble);
-        setTimeout(function () { bubble.remove(); }, 1800);
-      }, { passive: true });
+      function clamp(n, min, max) { return Math.min(max, Math.max(min, n)); }
+
+      function update() {
+        var max = Math.max(1, document.body.scrollHeight - window.innerHeight);
+        var depth = clamp(window.scrollY / max, 0, 1);
+        root.style.setProperty("--depth", depth.toFixed(4));
+        body.classList.toggle("is-scrolled", window.scrollY > 20);
+
+        var viewportCenter = window.innerHeight * .52;
+        var nearest = 0;
+        sections.forEach(function (section, index) {
+          var rect = section.getBoundingClientRect();
+          if (rect.top < viewportCenter) nearest = index;
+        });
+        root.style.setProperty("--section", (nearest / Math.max(1, sections.length - 1)).toFixed(3));
+      }
+
+      update();
+      window.addEventListener("scroll", update, { passive: true });
+      window.addEventListener("resize", update);
+
+      if (matchMedia("(pointer: fine)").matches) {
+        var lastBubble = 0;
+        window.addEventListener("pointermove", function (event) {
+          root.style.setProperty("--mx", event.clientX + "px");
+          root.style.setProperty("--my", event.clientY + "px");
+
+          if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+          var now = Date.now();
+          if (now - lastBubble < 82) return;
+          lastBubble = now;
+
+          var bubble = document.createElement("span");
+          var size = Math.round(5 + Math.random() * 17) + "px";
+          bubble.className = "bubble";
+          bubble.setAttribute("aria-hidden", "true");
+          bubble.style.setProperty("--x", event.clientX + "px");
+          bubble.style.setProperty("--y", event.clientY + "px");
+          bubble.style.setProperty("--size", size);
+          bubble.style.setProperty("--drift", Math.round((Math.random() - .5) * 64) + "px");
+          document.body.appendChild(bubble);
+          setTimeout(function () { bubble.remove(); }, 1900);
+        }, { passive: true });
+      }
     }());
   </script>
 </body>
