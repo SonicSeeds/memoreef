@@ -186,13 +186,13 @@
       position: relative;
       display: grid;
       align-items: center;
-      min-height: 448px;
+      min-height: 520px;
     }
 
     .card-wrap {
       position: relative;
-      height: min(62dvh, 510px);
-      min-height: 410px;
+      height: min(72dvh, 620px);
+      min-height: 500px;
       perspective: 1200px;
     }
 
@@ -210,10 +210,11 @@
       position: absolute;
       inset: 0;
       display: grid;
-      grid-template-rows: auto 1fr auto;
+      grid-template-rows: auto minmax(0, 1fr) auto;
       border: 1px solid rgba(210, 253, 255, .2);
       border-radius: 34px;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
       background:
         linear-gradient(180deg, rgba(13, 50, 66, .94), rgba(4, 20, 29, .98)),
         radial-gradient(circle at 20% 12%, rgba(103,245,211,.18), transparent 18rem);
@@ -269,6 +270,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: wrap;
       gap: 10px;
       color: var(--muted);
       font-size: 12px;
@@ -288,6 +290,7 @@
     .source-chip span {
       overflow: hidden;
       text-overflow: ellipsis;
+      overflow-wrap: anywhere;
     }
     .agent-chip { color: #d8fff6; }
     .agent-chip::before {
@@ -303,22 +306,24 @@
       position: relative;
       z-index: 2;
       display: grid;
-      align-content: center;
-      gap: 16px;
+      align-content: start;
+      gap: 14px;
       padding: 10px 22px 0;
     }
     .card-body h2 {
       margin: 0;
-      font-size: clamp(28px, 9vw, 42px);
-      line-height: .97;
-      letter-spacing: -.06em;
+      font-size: clamp(24px, 7.2vw, 36px);
+      line-height: 1.02;
+      letter-spacing: -.045em;
       text-wrap: balance;
+      overflow-wrap: anywhere;
     }
     .summary-copy {
       margin: 0;
       color: #c2d7df;
       font-size: 15px;
       line-height: 1.45;
+      overflow-wrap: anywhere;
     }
     .meta-row {
       display: flex;
@@ -342,6 +347,7 @@
       color: #d9fff6;
       font-size: 13px;
       line-height: 1.38;
+      overflow-wrap: anywhere;
     }
     .agent-note b { color: var(--pearl); }
 
@@ -352,9 +358,7 @@
     }
     .url {
       display: block;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      overflow-wrap: anywhere;
       color: var(--dim);
       font-size: 12px;
       text-decoration: none;
@@ -786,7 +790,8 @@
       sheetCopy: document.getElementById('sheetCopy'),
       sheetActions: document.getElementById('sheetActions'),
       reviewSessionInput: document.getElementById('reviewSessionInput'),
-      exportDecisionsButton: document.getElementById('exportDecisionsButton')
+      exportDecisionsButton: document.getElementById('exportDecisionsButton'),
+      sampleNotice: document.querySelector('.sample-notice')
     };
 
     function renderStats() {
@@ -970,6 +975,9 @@
         state.history = [];
         els.history.innerHTML = '';
         els.done.classList.remove('show');
+        if (els.sampleNotice) {
+          els.sampleNotice.innerHTML = '<b>Real review session loaded.</b> You are reviewing Drops from your MemoReef vault.';
+        }
         renderCard();
         showToast(`Loaded ${drops.length} Drops from review session JSON.`);
       } catch (error) {
@@ -1007,6 +1015,9 @@
       state.history = [];
       els.history.innerHTML = '';
       els.done.classList.remove('show');
+      if (els.sampleNotice) {
+        els.sampleNotice.innerHTML = '<b>Sample data shown.</b> Load a review-session JSON from your MemoReef vault to review real bookmarks.';
+      }
       renderCard();
       showToast('Prototype restarted. Same ocean, fewer consequences.');
     }
