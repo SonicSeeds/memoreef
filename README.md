@@ -4,23 +4,56 @@
 
 MemoReef imports browser bookmarks, plain URL lists, and simple CSV link exports into an Obsidian-compatible Markdown vault and turns saved links into an agent-readable source library for future projects.
 
-This is an early MVP scaffold. The first useful path is intentionally simple:
+## Install and run locally
+
+MemoReef is a local Python app. It does not need a server, account, database, or API key.
+
+Requirements:
+
+- Python 3.11+
+- Git
+
+On macOS, if `python3 --version` is older than 3.11, install a newer Python first:
 
 ```bash
-python3 -m memoreef.cli import examples/bookmarks.html --vault /tmp/memoreef-vault
+brew install python@3.11
+# or: uv python install 3.11
 ```
-
-It can also import one-URL-per-line text files and CSV files with `title,url,source,tags` columns:
 
 ```bash
-python3 -m memoreef.cli import-links links.txt --vault /tmp/memoreef-vault
-python3 -m memoreef.cli import-csv links.csv --vault /tmp/memoreef-vault
+git clone https://github.com/SonicSeeds/memoreef.git
+cd memoreef
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools
+python -m pip install -e .
 ```
 
-It creates Markdown Drops under:
+Create a local pilot vault from the included example bookmarks:
+
+```bash
+memoreef pilot --bookmarks examples/bookmarks.html --vault /tmp/memoreef-pilot --review-limit 3
+open /tmp/memoreef-pilot/MemoReef/app/pilot.html
+```
+
+Or run commands directly from the checkout without installing the console script:
+
+```bash
+python3.11 -m memoreef.cli pilot --bookmarks examples/bookmarks.html --vault /tmp/memoreef-pilot --review-limit 3
+```
+
+The pilot creates Markdown Drops under:
 
 ```text
-/tmp/memoreef-vault/MemoReef/Drops/
+/tmp/memoreef-pilot/MemoReef/Drops/
+```
+
+Import your own browser bookmarks, URL lists, or CSV files with `title,url,source,tags` columns:
+
+```bash
+memoreef import /path/to/bookmarks.html --vault /tmp/memoreef-vault
+memoreef import-links /path/to/links.txt --vault /tmp/memoreef-vault
+memoreef import-csv /path/to/links.csv --vault /tmp/memoreef-vault
 ```
 
 ## Product shape
