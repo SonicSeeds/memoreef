@@ -1363,20 +1363,18 @@ class BookmarkImportTests(unittest.TestCase):
                     self.assertNotIn("https://", html)
                     self.assertNotIn("http://", html)
 
-    def test_landing_page_has_deep_sea_octopus_and_no_external_assets(self):
+    def test_landing_page_redirect_points_to_current_public_site(self):
         repo_root = Path(__file__).parent.parent
         html = (repo_root / "site" / "index.html").read_text(encoding="utf-8")
         lowered = html.lower()
 
-        self.assertIn("octopus", lowered)
-        self.assertIn("pilot", lowered)
-        self.assertIn("source memory", lowered)
-        self.assertIn("local-first", lowered)
-        self.assertIn("memoreef-octopus-pearl.jpg", lowered)
-        self.assertIn("<svg", lowered)
-        self.assertTrue((repo_root / "site" / "assets" / "memoreef-octopus-pearl.jpg").exists())
+        self.assertIn("save sources", lowered)
+        self.assertIn("let ideas surface", lowered)
+        self.assertIn("https://memoreef.de/", lowered)
+        self.assertIn("rel=\"canonical\"", lowered)
+        self.assertNotIn("memoreef-octopus-abyss.jpg", lowered)
+        self.assertNotIn("memoreef-octopus-pearl.jpg", lowered)
         self.assertNotIn("<script src=", lowered)
-        self.assertNotIn("<link", lowered)
         self.assertNotIn("cdn", lowered)
 
     def test_app_command_detects_existing_review_and_proposal_files(self):

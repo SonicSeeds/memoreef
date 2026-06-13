@@ -50,7 +50,7 @@ Implemented:
 - Generate agent finish plans and deterministic proposal drafts.
 - Create duplicate, dead-link, metadata, garden suggestion, and library search reports.
 - Generate a refined static local app with dashboard, pilot, tour, library, review, reports, briefs, and Drop detail pages.
-- Provide a premium self-contained landing page at `site/index.html` with a cinematic deep-sea MemoReef story.
+- Provide browser-only Review Mode and mobile app prototypes, plus the live cinematic landing page at [memoreef.de](https://memoreef.de/).
 
 Not implemented yet:
 
@@ -68,13 +68,13 @@ See [docs/GRANT_BRIEF.md](docs/GRANT_BRIEF.md) for the grant-oriented project na
 
 ## Screenshots
 
-| Landing page | Review Mode |
+| Live landing page | Live Octopus/Pearls section |
 | --- | --- |
-| ![MemoReef landing page](docs/screenshots/landing-desktop.png) | ![MemoReef Review Mode swipe prototype](docs/screenshots/review-mode-swipe.png) |
+| ![MemoReef live landing page](docs/screenshots/live-landing-hero.png) | ![MemoReef live Octopus Pearls section](docs/screenshots/live-landing-octopus.png) |
 
-| Mobile prototype | Generated pilot app |
+| Review Mode prototype | Mobile app prototype |
 | --- | --- |
-| ![MemoReef mobile app prototype](docs/screenshots/mobile-app-prototype.png) | ![MemoReef generated pilot app](docs/screenshots/generated-pilot-app.png) |
+| ![MemoReef Review Mode swipe prototype](docs/screenshots/review-mode-swipe.png) | ![MemoReef mobile app prototype](docs/screenshots/mobile-app-prototype.png) |
 
 ## Example output
 
@@ -153,7 +153,7 @@ python3 -m memoreef.cli pilot --csv /path/to/links.csv --vault /tmp/memoreef-pil
 
 The pilot command imports your export, creates a review session, creates a duplicate report, generates static app pages, and writes `MemoReef/PILOT_README.md`. It is offline-only: no network calls, no AI calls, no backend, and no server.
 
-The generated pilot app pages are self-contained HTML with inline CSS. They are designed as a calm local workspace, while `site/index.html` carries the more cinematic public landing vision with a local deep-sea octopus image asset in `site/assets/`.
+The generated pilot app pages are self-contained HTML with inline CSS. They are designed as a calm local workspace. The public cinematic landing page lives at [memoreef.de](https://memoreef.de/).
 
 Review a few items:
 
