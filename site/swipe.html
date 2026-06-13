@@ -145,6 +145,17 @@
       box-shadow: 0 0 18px var(--reef);
     }
 
+    .sample-notice {
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 209, 102, .24);
+      border-radius: 18px;
+      background: rgba(255, 209, 102, .08);
+      color: #fff3cf;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .sample-notice b { color: #ffe29b; }
+
     .summary {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -603,6 +614,10 @@
       </div>
       <div class="mode-pill">Review Mode</div>
     </header>
+
+    <aside class="sample-notice" aria-label="Sample data notice">
+      <b>Sample data shown.</b> Load a review-session JSON from your MemoReef vault to review real bookmarks.
+    </aside>
 
     <section class="summary" aria-label="Review progress">
       <div class="stat"><strong id="reviewedCount">37</strong><span>reviewed</span></div>
