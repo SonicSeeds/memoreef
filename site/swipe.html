@@ -931,7 +931,7 @@
         </button>
       </div>
       <div class="escape-actions">
-        <button class="escape-btn agent" id="agentFinishBtn" type="button">Let agents finish</button>
+        <button class="escape-btn agent" id="agentFinishBtn" type="button">Tag kept/Pearls</button>
         <button class="escape-btn" id="laterBtn" type="button">Continue later</button>
       </div>
       <div class="history" id="history" aria-label="Review history"></div>
@@ -1199,15 +1199,15 @@
       els.sheetActions.innerHTML = '';
 
       if (kind === 'agents') {
-        els.sheetTitle.textContent = 'Let agents finish?';
-        els.sheetCopy.textContent = `You reviewed ${state.reviewed} items. Agents will process the remaining ${state.remaining} using your choices as taste signal.`;
-        addSheetButton('Let agents finish', 'primary', () => finishWithAgents());
+        els.sheetTitle.textContent = 'Tag kept and Pearl Drops?';
+        els.sheetCopy.textContent = `You reviewed ${state.reviewed} items. MemoReef will save pending decisions, then add local agent-suggested tags to kept and Pearl Drops in this vault.`;
+        addSheetButton('Tag kept/Pearls', 'primary', () => finishWithAgents());
         addSheetButton('Keep reviewing', 'neutral', closeSheet);
       } else {
         els.sheetTitle.textContent = 'Continue sorting later';
         els.sheetCopy.textContent = `Progress saved: ${state.reviewed} reviewed, ${state.remaining} still waiting in Review Mode. No forced decisions. Civilized.`;
         addSheetButton('Save and leave review', 'primary', () => continueLater());
-        addSheetButton('Let agents finish instead', 'neutral', () => openSheet('agents'));
+        addSheetButton('Tag kept/Pearls instead', 'neutral', () => openSheet('agents'));
         addSheetButton('Keep reviewing', 'neutral', closeSheet);
       }
 
@@ -1227,13 +1227,39 @@
       els.sheet.classList.remove('show');
     }
 
-    function finishWithAgents() {
+    async function finishWithAgents() {
       closeSheet();
+      if (localApiMode) {
+        await saveLocalDecisions({ quiet: true });
+        try {
+          showToast('Tagging kept and Pearl Drops...');
+          const response = await fetch('/api/tag-reviewed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+          });
+          const data = await response.json();
+          if (!response.ok || data.ok === false) {
+            throw new Error(data.error || `HTTP ${response.status}`);
+          }
+          els.cardWrap.style.display = 'none';
+          els.done.classList.add('show');
+          els.doneTitle.textContent = 'Kept and Pearl Drops are tagged';
+          els.doneCopy.textContent = `Local agents scanned ${data.considered || 0} Drops, found ${data.eligible || 0} kept/Pearl items, updated ${data.updated || 0}, and added ${data.tags_added || 0} tags.`;
+          setLocalStatus(`${data.tags_added || 0} tags added · kept/Pearls updated`);
+          showToast(`Tagged ${data.updated || 0} reviewed Drops. Tiny librarians filed actual paperwork.`);
+          return;
+        } catch (error) {
+          showToast(`Could not tag reviewed Drops: ${error.message}`);
+          setLocalStatus('Agent tagging failed');
+          return;
+        }
+      }
       els.cardWrap.style.display = 'none';
       els.done.classList.add('show');
-      els.doneTitle.textContent = 'Agents are finishing the reef';
-      els.doneCopy.textContent = `They will classify, tag, dedupe, and write notes for the remaining ${state.remaining} items using your review taste.`;
-      showToast('Agents finishing the remaining reef. The tiny librarians have been released.');
+      els.doneTitle.textContent = 'Export decisions, then tag locally';
+      els.doneCopy.textContent = 'Static mode cannot write tags. Export decisions, apply them to the vault, then run: python3.11 -m memoreef.cli tag-reviewed --vault /path/to/vault';
+      showToast('Static mode cannot tag files directly. No fake librarians released.');
     }
 
     function continueLater() {

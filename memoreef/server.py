@@ -7,7 +7,7 @@ from pathlib import Path
 import socket
 from urllib.parse import parse_qs, urlparse
 
-from .cli import apply_review_decision_payload, build_review_session_payload, default_review_filters
+from .cli import apply_review_decision_payload, build_review_session_payload, default_review_filters, tag_reviewed_drops
 
 
 SITE_DIR = Path(__file__).resolve().parent.parent / "site"
@@ -62,7 +62,14 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/review-decisions":
             self.handle_review_decisions()
             return
+        if parsed.path == "/api/tag-reviewed":
+            self.handle_tag_reviewed()
+            return
         self.send_error_json(404, "Not found")
+
+    def handle_tag_reviewed(self) -> None:
+        result = tag_reviewed_drops(self.server.vault, self.server.root)
+        self.send_json(result)
 
     def handle_review_session(self, query: dict[str, list[str]]) -> None:
         limit = self.server.limit

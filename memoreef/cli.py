@@ -2238,6 +2238,154 @@ GARDEN_STOPWORDS = {
     "about", "guide", "article", "page", "local",
 }
 
+TAG_STOPWORDS = GARDEN_STOPWORDS | {
+    "com", "www", "http", "https", "html", "blog", "news", "post", "posts", "read", "reading",
+    "best", "new", "free", "review", "reviews", "source", "sources", "bookmark", "bookmarks",
+    "memo", "memoreef", "drop", "drops", "untitled", "not", "enriched", "yet", "example",
+}
+
+
+def tag_slug(value: str, max_len: int = 42) -> str:
+    value = value.lower().strip()
+    value = re.sub(r"https?://", "", value)
+    value = re.sub(r"[^a-z0-9]+", "-", value)
+    value = value.strip("-")
+    return value[:max_len].strip("-")
+
+
+def tag_tokens_from_text(value: str) -> list[str]:
+    tokens: list[str] = []
+    for token in re.findall(r"[a-z0-9]+", value.lower()):
+        token = singularize_token(token)
+        if len(token) >= 3 and token not in TAG_STOPWORDS:
+            tokens.append(token)
+    return tokens
+
+
+def reviewed_drop_for_tagging(frontmatter: dict[str, object]) -> bool:
+    status = str(frontmatter.get("status") or "").strip().lower()
+    return bool(frontmatter.get("pearl", False)) or status in {"reef", "deep"}
+
+
+def tag_candidate_scores(frontmatter: dict[str, object], body: str) -> dict[str, int]:
+    scores: dict[str, int] = {}
+
+    def add(tag: str, weight: int = 1) -> None:
+        normalized = tag_slug(tag)
+        if not normalized or normalized in TAG_STOPWORDS or len(normalized) < 3:
+            return
+        scores[normalized] = scores.get(normalized, 0) + weight
+
+    for key in ("tags", "folders", "projects", "shoals"):
+        for label in garden_list(frontmatter.get(key)):
+            add(label, 4 if key == "tags" else 3)
+
+    hostname = str(frontmatter.get("hostname") or "") or (urlsplit(str(frontmatter.get("canonical_url") or frontmatter.get("url") or "")).hostname or "")
+    for host_part in hostname.lower().split("."):
+        add(host_part, 1)
+
+    text_fields = [
+        str(frontmatter.get("title") or ""),
+        str(frontmatter.get("page_title") or ""),
+        str(frontmatter.get("page_description") or ""),
+        str(frontmatter.get("url") or ""),
+        body,
+    ]
+    for key in ("title", "page_title"):
+        for token in tag_tokens_from_text(str(frontmatter.get(key) or "")):
+            add(token, 3)
+    token_stream = tag_tokens_from_text(" ".join(text_fields))
+    for token in token_stream:
+        add(token, 1)
+    for left, right in zip(token_stream, token_stream[1:]):
+        if left != right:
+            add(f"{left}-{right}", 2)
+
+    return scores
+
+
+def suggested_tags_for_drop(frontmatter: dict[str, object], body: str, max_tags: int = 6) -> list[str]:
+    existing = {tag_slug(tag) for tag in garden_list(frontmatter.get("tags"))}
+    scored = tag_candidate_scores(frontmatter, body)
+    ranked = sorted(scored.items(), key=lambda item: (-item[1], item[0]))
+    suggestions: list[str] = []
+    for tag, _score in ranked:
+        if tag in existing or tag in suggestions:
+            continue
+        suggestions.append(tag)
+        if len(suggestions) >= max_tags:
+            break
+    return suggestions
+
+
+def tag_reviewed_drops(vault: Path, root: str = "MemoReef", dry_run: bool = False, limit: int | None = None) -> dict[str, object]:
+    vault_path = vault.expanduser().resolve()
+    drops_dir = vault_path / root / "Drops"
+    warnings: list[str] = []
+    items: list[dict[str, object]] = []
+    considered = 0
+    eligible = 0
+    updated = 0
+    tags_added = 0
+
+    if not drops_dir.exists():
+        return {
+            "ok": True,
+            "considered": 0,
+            "eligible": 0,
+            "updated": 0,
+            "tags_added": 0,
+            "items": [],
+            "warnings": [f"{root}/Drops not found"],
+        }
+
+    for path in sorted(drops_dir.rglob("*.md")):
+        if limit is not None and considered >= limit:
+            break
+        considered += 1
+        try:
+            content = path.read_text(encoding="utf-8", errors="replace")
+            frontmatter, body = parse_markdown_frontmatter(content)
+        except OSError as error:
+            warnings.append(f"{path}: {error}")
+            continue
+        if not reviewed_drop_for_tagging(frontmatter):
+            continue
+        eligible += 1
+        existing_tags = existing_frontmatter_labels(frontmatter.get("tags"))
+        suggestions = suggested_tags_for_drop(frontmatter, body)
+        updated_tags, added_count = append_unique_labels(existing_tags, suggestions)
+        relative_path = path.resolve().relative_to(vault_path).as_posix()
+        items.append(
+            {
+                "path": relative_path,
+                "title": str(frontmatter.get("title") or path.stem),
+                "added_tags": suggestions,
+                "existing_tags": existing_tags,
+            }
+        )
+        if added_count == 0:
+            continue
+        if not dry_run:
+            updates = {
+                "tags": updated_tags,
+                "agent_tagged_at": utc_now_iso(),
+                "agent_tag_count": len(updated_tags),
+            }
+            path.write_text(update_markdown_frontmatter(content, updates), encoding="utf-8")
+        updated += 1
+        tags_added += added_count
+
+    return {
+        "ok": True,
+        "considered": considered,
+        "eligible": eligible,
+        "updated": updated,
+        "tags_added": tags_added,
+        "items": items,
+        "warnings": warnings,
+    }
+
 
 def garden_list(value: object) -> list[str]:
     if not isinstance(value, list):
@@ -3744,6 +3892,12 @@ def build_parser() -> argparse.ArgumentParser:
     refresh_cmd.add_argument("--limit", type=int, default=None, help="Refresh only the first N Drops.")
     refresh_cmd.add_argument("--timeout", type=float, default=5, help="HTTP timeout in seconds. Default: 5")
 
+    tag_reviewed_cmd = sub.add_parser("tag-reviewed", help="Add local agent-suggested tags to kept and Pearl Drops.")
+    tag_reviewed_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    tag_reviewed_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    tag_reviewed_cmd.add_argument("--dry-run", action="store_true", help="Preview tags without modifying Markdown files.")
+    tag_reviewed_cmd.add_argument("--limit", type=int, default=None, help="Tag only the first N Drops scanned.")
+
     gardens_cmd = sub.add_parser("suggest-gardens", help="Create local project and shoal suggestion report.")
     gardens_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     gardens_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
@@ -4058,6 +4212,32 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  - {item}")
         for warning in warnings:
             print(f"  - {warning}")
+        return 0
+
+    if args.command == "tag-reviewed":
+        result = tag_reviewed_drops(args.vault, args.root, args.dry_run, args.limit)
+        if args.dry_run:
+            print("Dry run reviewed Drop tagging:")
+            print(f"- files that would update: {result['updated']}")
+        else:
+            print("Tagged reviewed Drops:")
+            print(f"- files updated: {result['updated']}")
+        print(f"- files scanned: {result['considered']}")
+        print(f"- kept/Pearl eligible: {result['eligible']}")
+        print(f"- tags added: {result['tags_added']}")
+        warnings = result.get("warnings", [])
+        print(f"- warnings: {len(warnings) if isinstance(warnings, list) else 0}")
+        items = result.get("items", [])
+        if isinstance(items, list):
+            for item in items[:10]:
+                if not isinstance(item, dict):
+                    continue
+                added_tags = item.get("added_tags", [])
+                if isinstance(added_tags, list) and added_tags:
+                    print(f"  - {item.get('path')}: {', '.join(str(tag) for tag in added_tags)}")
+        if isinstance(warnings, list):
+            for warning in warnings:
+                print(f"  - {warning}")
         return 0
 
     if args.command == "suggest-gardens":

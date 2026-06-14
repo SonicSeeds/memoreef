@@ -106,7 +106,7 @@ Implemented:
 - Mark imported items as `status: drift`, `agent_ready: true`, and triage-ready Drop frontmatter.
 - Export and apply local Review Mode decisions.
 - Serve local Review Mode with direct vault autosave for decisions.
-- Generate agent finish plans and deterministic proposal drafts.
+- Generate agent finish plans, deterministic proposal drafts, and local agent tags for kept/Pearl Drops.
 - Create duplicate, dead-link, metadata, garden suggestion, and library search reports.
 - Generate a refined static local app with dashboard, pilot, tour, library, review, reports, briefs, and Drop detail pages.
 - Provide a browser-only Review Mode prototype with sample data until a real review-session JSON is loaded, a non-functional mobile app mockup, and the live cinematic landing page at [memoreef.de](https://memoreef.de/).
@@ -276,7 +276,7 @@ python3.11 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault
 open site/swipe.html
 ```
 
-The separate mobile app mockup at `site/mobile.html` is visual only. Real phone triage uses the filesystem-backed server above: run `serve --mobile` or `serve --lan` on the Mac and open the printed LAN/Tailscale URL on the phone.
+The separate mobile app mockup at `site/mobile.html` is visual only. Real phone triage uses the filesystem-backed server above: run `phone` on the computer with the vault and open the printed LAN/Tailscale URL or generated QR on the phone.
 
 Create filtered review sessions for focused queues:
 
@@ -330,7 +330,16 @@ python3.11 -m memoreef.cli apply-review-decisions --vault /tmp/memoreef-vault --
 python3.11 -m memoreef.cli apply-review-decisions --vault /tmp/memoreef-vault --decisions /tmp/memoreef-review-decisions.json
 ```
 
-This updates `status`, `pearl`, and `triaged_at` only. It does not move or delete files, and it does not assign categories, tags, priority, or note locations yet.
+This updates `status`, `pearl`, and `triaged_at` only. It does not move or delete files.
+
+Tag kept and Pearl Drops with local agent-suggested tags:
+
+```bash
+python3.11 -m memoreef.cli tag-reviewed --vault /tmp/memoreef-vault --dry-run
+python3.11 -m memoreef.cli tag-reviewed --vault /tmp/memoreef-vault
+```
+
+`tag-reviewed` scans Drops that are already kept (`status: reef` or `status: deep`) or marked `pearl: true`, then appends conservative lowercase/hyphen tags from the Drop title, URL, folder path, projects, shoals, page metadata, and note text. It preserves existing tags, skips Drift/Sink items, writes `agent_tagged_at` and `agent_tag_count`, and does not call an external API. In local server Review Mode, the **Tag kept/Pearls** button first saves pending decisions and then calls this same local tagger through `/api/tag-reviewed`.
 
 Create an agent finish plan for the remaining unreviewed Drops:
 

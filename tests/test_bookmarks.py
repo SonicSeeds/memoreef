@@ -1122,6 +1122,83 @@ class BookmarkImportTests(unittest.TestCase):
         self.assertEqual(result, 0)
         mocked_qr.assert_called_once_with("http://100.64.0.5:9999/", vault_path.resolve() / "MemoReef" / "phone-triage-qr.png")
 
+    def test_tag_reviewed_adds_tags_only_to_kept_and_pearl_drops(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault(
+                [
+                    Bookmark("Local-first agent research workflow", "https://research.example/agent-workflow", folders=["AI Agents"], status="reef"),
+                    Bookmark("Hydration plant care rituals", "https://garden.example/hydration-plants", folders=["Product Design"], status="reef", pearl=True),
+                    Bookmark("Random coupon page", "https://coupon.example/deals", folders=["Inbox"], status="drift"),
+                ],
+                vault_path,
+                allow_duplicates=True,
+            )
+            result = main(["tag-reviewed", "--vault", str(vault_path)])
+            kept_frontmatter, _ = parse_markdown_frontmatter(written[0].read_text(encoding="utf-8"))
+            pearl_frontmatter, _ = parse_markdown_frontmatter(written[1].read_text(encoding="utf-8"))
+            drift_frontmatter, _ = parse_markdown_frontmatter(written[2].read_text(encoding="utf-8"))
+
+        self.assertEqual(result, 0)
+        kept_tags = kept_frontmatter.get("tags", [])
+        pearl_tags = pearl_frontmatter.get("tags", [])
+        if not isinstance(kept_tags, list) or not isinstance(pearl_tags, list):
+            self.fail("expected tag lists")
+        self.assertIn("ai-agents", kept_tags)
+        self.assertIn("agent", kept_tags)
+        self.assertIn("product-design", pearl_tags)
+        self.assertIn("hydration", pearl_tags)
+        self.assertIn("agent_tagged_at", kept_frontmatter)
+        self.assertNotIn("agent_tagged_at", drift_frontmatter)
+
+    def test_tag_reviewed_dry_run_does_not_modify_markdown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault(
+                [Bookmark("Searchable markdown archives", "https://archive.example/search", folders=["Knowledge Management"], status="reef")],
+                vault_path,
+                allow_duplicates=True,
+            )
+            before = written[0].read_text(encoding="utf-8")
+            result = main(["tag-reviewed", "--vault", str(vault_path), "--dry-run"])
+            after = written[0].read_text(encoding="utf-8")
+
+        self.assertEqual(result, 0)
+        self.assertEqual(after, before)
+
+    def test_local_server_tag_reviewed_endpoint_updates_reviewed_drops(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault(
+                [Bookmark("Biopunk moss specimen design", "https://moss.example/specimen", folders=["Design Systems"], status="reef")],
+                vault_path,
+                allow_duplicates=True,
+            )
+            try:
+                server = create_server(vault_path, host="127.0.0.1", port=0, limit=50)
+            except PermissionError as error:
+                self.skipTest(f"localhost socket binding unavailable: {error}")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                port = server.server_port
+                request = urllib.request.Request(f"http://127.0.0.1:{port}/api/tag-reviewed", data=b"{}", method="POST", headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                frontmatter, _ = parse_markdown_frontmatter(written[0].read_text(encoding="utf-8"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["updated"], 1)
+        endpoint_tags = frontmatter.get("tags", [])
+        if not isinstance(endpoint_tags, list):
+            self.fail("expected endpoint tag list")
+        self.assertIn("biopunk", endpoint_tags)
+        self.assertIn("agent_tagged_at", frontmatter)
+
     def write_plan_decisions(self, path: Path, vault_path: Path, items: list[tuple[Path, str]]):
         decisions = []
         for drop_path, decision in items:
