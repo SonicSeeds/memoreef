@@ -891,7 +891,7 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("status: reef", content)
             self.assertIn("pearl: true", content)
 
-    def test_apply_review_decisions_sink_updates_frontmatter(self):
+    def test_apply_review_decisions_sink_moves_drop_to_discarded_with_delete_after(self):
         stdout = io.StringIO()
         with tempfile.TemporaryDirectory() as tmp:
             vault_path = Path(tmp) / "vault"
@@ -902,10 +902,15 @@ class BookmarkImportTests(unittest.TestCase):
             with redirect_stdout(stdout):
                 result = main(["apply-review-decisions", "--vault", str(vault_path), "--decisions", str(decisions_path)])
 
-            content = written[0].read_text(encoding="utf-8")
+            discarded = vault_path / "MemoReef" / "Discarded" / written[0].name
+            content = discarded.read_text(encoding="utf-8")
             self.assertEqual(result, 0)
+            self.assertFalse(written[0].exists())
+            self.assertTrue(discarded.exists())
             self.assertIn("status: discarded", content)
             self.assertIn("pearl: false", content)
+            self.assertIn("discarded_at: \"2026-06-12T12:45:00Z\"", content)
+            self.assertIn("delete_after: \"2026-07-12T12:45:00Z\"", content)
 
     def test_apply_review_decisions_dry_run_does_not_modify_file(self):
         stdout = io.StringIO()

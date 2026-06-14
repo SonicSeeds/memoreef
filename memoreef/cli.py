@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape as html_escape
 from html.parser import HTMLParser
 import json
@@ -1114,6 +1114,40 @@ def review_decision_fields(decision: str) -> dict[str, object] | None:
     return None
 
 
+def parse_iso_datetime(value: object) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        return datetime.now(timezone.utc)
+    normalized = value.strip().strip('"')
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return datetime.now(timezone.utc)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def discard_delete_after(reviewed_at: object, days: int = 30) -> str:
+    return (parse_iso_datetime(reviewed_at) + timedelta(days=days)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def discarded_target_for_drop(target: Path, drops_dir: Path, discarded_dir: Path) -> Path:
+    relative = target.relative_to(drops_dir)
+    destination = discarded_dir / relative
+    if not destination.exists():
+        return destination
+    stem = destination.stem
+    suffix = destination.suffix
+    counter = 2
+    while True:
+        candidate = destination.with_name(f"{stem}-{counter}{suffix}")
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
 def apply_review_decisions(
     vault: Path,
     decisions: Path,
@@ -1132,6 +1166,7 @@ def apply_review_decision_payload(
 ) -> tuple[int, int, list[str]]:
     vault_path = vault.expanduser().resolve()
     drops_dir = (vault_path / root / "Drops").resolve()
+    discarded_dir = (vault_path / root / "Discarded").resolve()
     reviewed_at = payload.get("reviewed_at") or utc_now_iso()
     decision_items = payload.get("decisions")
 
@@ -1184,9 +1219,19 @@ def apply_review_decision_payload(
             continue
 
         fields["triaged_at"] = str(reviewed_at)
+        if raw_decision == "sink":
+            fields["discarded_at"] = str(reviewed_at)
+            fields["delete_after"] = discard_delete_after(reviewed_at)
         if not dry_run:
             content = target.read_text(encoding="utf-8", errors="replace")
-            target.write_text(update_markdown_frontmatter(content, fields), encoding="utf-8")
+            updated_content = update_markdown_frontmatter(content, fields)
+            if raw_decision == "sink":
+                destination = discarded_target_for_drop(target, drops_dir, discarded_dir)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_text(updated_content, encoding="utf-8")
+                target.unlink()
+            else:
+                target.write_text(updated_content, encoding="utf-8")
         updated += 1
 
     return updated, skipped, warnings
