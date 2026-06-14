@@ -35,6 +35,10 @@
     html,
     body { min-height: 100%; }
 
+    html {
+      overscroll-behavior-x: none;
+    }
+
     body {
       margin: 0;
       color: var(--ink);
@@ -44,7 +48,8 @@
         radial-gradient(circle at 50% -10%, rgba(103, 245, 211, .18), transparent 18rem),
         linear-gradient(180deg, #0a2b3b 0%, var(--deep) 38%, var(--abyss) 100%);
       overflow-x: hidden;
-      touch-action: manipulation;
+      touch-action: pan-y;
+      overscroll-behavior-x: none;
     }
 
     body::before,
@@ -81,6 +86,7 @@
       grid-template-rows: auto auto auto auto;
       align-content: start;
       gap: 12px;
+      overscroll-behavior-x: none;
     }
 
     header {
@@ -225,6 +231,9 @@
       border-radius: 34px;
       overflow-x: hidden;
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      touch-action: pan-y;
       background:
         linear-gradient(180deg, rgba(13, 50, 66, .94), rgba(4, 20, 29, .98)),
         radial-gradient(circle at 20% 12%, rgba(103,245,211,.18), transparent 18rem);
@@ -240,6 +249,7 @@
     .drop-card.dragging {
       cursor: grabbing;
       transition: none;
+      touch-action: none;
     }
     .drop-card.sink-hint { border-color: rgba(255,119,107,.62); }
     .drop-card.keep-hint { border-color: rgba(103,245,211,.68); }
@@ -1425,9 +1435,16 @@
         startX: event.clientX,
         startY: event.clientY,
         x: 0,
-        y: 0
+        y: 0,
+        active: false,
+        axis: ''
       };
-      els.card.setPointerCapture(event.pointerId);
+    }
+
+    function activateDrag(event, axis) {
+      drag.active = true;
+      drag.axis = axis;
+      try { els.card.setPointerCapture(event.pointerId); } catch (_) {}
       els.card.classList.add('dragging');
     }
 
@@ -1435,24 +1452,46 @@
       if (!drag || event.pointerId !== drag.pointerId) return;
       drag.x = event.clientX - drag.startX;
       drag.y = event.clientY - drag.startY;
-      const rotate = drag.x / 18;
-      els.card.style.transform = `translate(${drag.x}px, ${drag.y}px) rotate(${rotate}deg)`;
+      const absX = Math.abs(drag.x);
+      const absY = Math.abs(drag.y);
+
+      if (!drag.active) {
+        if (absY > 12 && absY > absX * 1.15) {
+          return;
+        }
+        if (absX > 16 && absX > absY * 1.1) {
+          activateDrag(event, 'x');
+        } else if (drag.y < -28 && absY > absX * 1.4 && els.card.scrollTop <= 2) {
+          activateDrag(event, 'y');
+        } else {
+          return;
+        }
+      }
+
+      if (event.cancelable) event.preventDefault();
+      const visualY = drag.axis === 'x' ? Math.max(-34, Math.min(34, drag.y)) : drag.y;
+      const rotate = drag.axis === 'x' ? drag.x / 18 : 0;
+      els.card.style.transform = `translate(${drag.x}px, ${visualY}px) rotate(${rotate}deg)`;
       clearHints();
       els.card.classList.add('dragging');
-      if (drag.x < -86) els.card.classList.add('sink-hint', 'show-sink');
-      if (drag.x > 86) els.card.classList.add('keep-hint', 'show-keep');
-      if (drag.y < -96 && Math.abs(drag.x) < 120) els.card.classList.add('pearl-hint', 'show-pearl');
+      if (drag.axis === 'x' && drag.x < -86) els.card.classList.add('sink-hint', 'show-sink');
+      if (drag.axis === 'x' && drag.x > 86) els.card.classList.add('keep-hint', 'show-keep');
+      if (drag.axis === 'y' && drag.y < -96 && absX < 120) els.card.classList.add('pearl-hint', 'show-pearl');
     }
 
     function pointerUp(event) {
       if (!drag || event.pointerId !== drag.pointerId) return;
-      const { x, y } = drag;
+      const { x, y, active, axis } = drag;
       drag = null;
       try { els.card.releasePointerCapture(event.pointerId); } catch (_) {}
       clearHints();
-      if (x < -110) return decide('Sink');
-      if (x > 110) return decide('Keep');
-      if (y < -125 && Math.abs(x) < 140) return decide('Pearl');
+      if (!active) {
+        els.card.style.transform = '';
+        return;
+      }
+      if (axis === 'x' && x < -110) return decide('Sink');
+      if (axis === 'x' && x > 110) return decide('Keep');
+      if (axis === 'y' && y < -125 && Math.abs(x) < 140) return decide('Pearl');
       els.card.style.transform = '';
     }
 
