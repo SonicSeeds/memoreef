@@ -1124,7 +1124,7 @@
     els.card.addEventListener('pointercancel', pointerUp);
     function handleDecisionKey(event) {
       const target = event.target;
-      const isTyping = target && ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName);
+      const isTyping = target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable);
       if (isTyping) return;
       if (event.key === 'ArrowLeft') {
         event.preventDefault();
