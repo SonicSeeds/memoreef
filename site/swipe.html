@@ -710,18 +710,26 @@
       }
       .stage {
         min-height: 0;
+        display: block;
       }
       .card-wrap {
-        height: clamp(340px, 51dvh, 500px);
-        min-height: 340px;
+        height: auto;
+        min-height: 0;
+        perspective: none;
       }
       .drop-card {
+        position: relative;
+        inset: auto;
+        min-height: 62dvh;
+        max-height: none;
+        overflow: visible;
+        touch-action: pan-y;
         border-radius: 24px;
         --card-pad-left: 16px;
         --card-pad-right: 16px;
       }
       .back-card {
-        border-radius: 22px;
+        display: none;
       }
       .card-top {
         padding-top: 16px;
@@ -1274,7 +1282,7 @@
       els.done.classList.remove('show');
       hideNotice();
       const statusMessage = localApiMode
-        ? `${drops.length} Drift Drops loaded · autosaves to vault`
+        ? `${drops.length} Drift Drops loaded · autosaves to vault · mobile-v2`
         : `${drops.length} Drops loaded · export decisions JSON when done`;
       setLocalStatus(statusMessage);
       renderCard();
@@ -1299,7 +1307,7 @@
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
         applyReviewSessionData(data, { decisions: [] });
-        setLocalStatus(`${drops.length} Drift Drops loaded · autosaves to vault`);
+        setLocalStatus(`${drops.length} Drift Drops loaded · autosaves to vault · mobile-v2`);
       } catch (error) {
         showNotice(`<b>Local MemoReef server error.</b> ${escapeHtml(error.message)}. Static JSON import/export is still available.`);
         setLocalStatus('Local vault connection failed');
@@ -1426,8 +1434,10 @@
     }
 
     let drag = null;
+    let lastTouchAt = 0;
 
     function pointerDown(event) {
+      if (Date.now() - lastTouchAt < 700) return;
       if (!drops[state.index]) return;
       if (event.target.closest('a, button, input, label, select, textarea')) return;
       drag = {
@@ -1481,9 +1491,63 @@
 
     function pointerUp(event) {
       if (!drag || event.pointerId !== drag.pointerId) return;
+      try { els.card.releasePointerCapture(event.pointerId); } catch (_) {}
+      finishDrag(event.pointerId);
+    }
+
+    function touchStart(event) {
+      lastTouchAt = Date.now();
+      if (!drops[state.index] || event.touches.length !== 1) return;
+      if (event.target.closest('a, button, input, label, select, textarea')) return;
+      const touch = event.touches[0];
+      drag = {
+        pointerId: 'touch',
+        startX: touch.clientX,
+        startY: touch.clientY,
+        x: 0,
+        y: 0,
+        active: false,
+        axis: ''
+      };
+    }
+
+    function touchMove(event) {
+      if (!drag || drag.pointerId !== 'touch' || event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      drag.x = touch.clientX - drag.startX;
+      drag.y = touch.clientY - drag.startY;
+      const absX = Math.abs(drag.x);
+      const absY = Math.abs(drag.y);
+
+      if (!drag.active) {
+        if (absY > 12 && absY > absX * 1.1) return;
+        if (absX > 14 && absX > absY * 1.05) {
+          drag.active = true;
+          drag.axis = 'x';
+          els.card.classList.add('dragging');
+        } else {
+          return;
+        }
+      }
+
+      event.preventDefault();
+      const visualY = Math.max(-28, Math.min(28, drag.y));
+      els.card.style.transform = `translate(${drag.x}px, ${visualY}px) rotate(${drag.x / 18}deg)`;
+      clearHints();
+      els.card.classList.add('dragging');
+      if (drag.x < -86) els.card.classList.add('sink-hint', 'show-sink');
+      if (drag.x > 86) els.card.classList.add('keep-hint', 'show-keep');
+    }
+
+    function touchEnd() {
+      if (!drag || drag.pointerId !== 'touch') return;
+      finishDrag('touch');
+    }
+
+    function finishDrag(pointerId) {
+      if (!drag || drag.pointerId !== pointerId) return;
       const { x, y, active, axis } = drag;
       drag = null;
-      try { els.card.releasePointerCapture(event.pointerId); } catch (_) {}
       clearHints();
       if (!active) {
         els.card.style.transform = '';
@@ -1509,6 +1573,10 @@
     els.card.addEventListener('pointermove', pointerMove);
     els.card.addEventListener('pointerup', pointerUp);
     els.card.addEventListener('pointercancel', pointerUp);
+    els.card.addEventListener('touchstart', touchStart, { passive: true });
+    els.card.addEventListener('touchmove', touchMove, { passive: false });
+    els.card.addEventListener('touchend', touchEnd, { passive: true });
+    els.card.addEventListener('touchcancel', touchEnd, { passive: true });
     function handleDecisionKey(event) {
       const target = event.target;
       const isTyping = target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable);
