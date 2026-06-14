@@ -87,6 +87,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      min-width: 0;
     }
 
     .brand {
@@ -128,6 +129,8 @@
       display: inline-flex;
       align-items: center;
       gap: 7px;
+      flex: 0 1 auto;
+      min-width: 0;
       padding: 8px 10px;
       border: 1px solid var(--line);
       border-radius: 999px;
@@ -186,11 +189,14 @@
       position: relative;
       display: grid;
       align-items: center;
+      min-width: 0;
       min-height: 520px;
     }
 
     .card-wrap {
       position: relative;
+      min-width: 0;
+      width: 100%;
       height: min(72dvh, 620px);
       min-height: 500px;
       perspective: 1200px;
@@ -209,6 +215,7 @@
     .drop-card {
       position: absolute;
       inset: 0;
+      min-width: 0;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
       border: 1px solid rgba(210, 253, 255, .2);
@@ -266,6 +273,7 @@
       padding: 22px var(--card-pad-right) 0 var(--card-pad-left);
       position: relative;
       z-index: 2;
+      min-width: 0;
     }
 
     .source-row {
@@ -274,6 +282,7 @@
       justify-content: space-between;
       flex-wrap: wrap;
       gap: 10px;
+      min-width: 0;
       color: var(--muted);
       font-size: 12px;
     }
@@ -307,6 +316,7 @@
     .card-body {
       position: relative;
       z-index: 2;
+      min-width: 0;
       display: grid;
       align-content: center;
       gap: 14px;
@@ -314,14 +324,18 @@
     }
     .card-body h2 {
       margin: 0;
+      min-width: 0;
+      max-width: 100%;
       font-size: clamp(24px, 7.2vw, 36px);
       line-height: 1.02;
       letter-spacing: -.045em;
-      text-wrap: balance;
       overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .summary-copy {
       margin: 0;
+      min-width: 0;
+      max-width: 100%;
       color: #c2d7df;
       font-size: 15px;
       line-height: 1.45;
@@ -331,6 +345,7 @@
       display: flex;
       flex-wrap: wrap;
       gap: 7px;
+      min-width: 0;
     }
     .meta-row span {
       padding: 7px 9px;
@@ -342,6 +357,8 @@
     }
 
     .agent-note {
+      min-width: 0;
+      max-width: 100%;
       border: 1px solid rgba(103,245,211,.22);
       border-radius: 18px;
       padding: 12px;
@@ -356,18 +373,19 @@
     .card-bottom {
       position: relative;
       z-index: 2;
+      min-width: 0;
       padding: 0 var(--card-pad-right) 22px var(--card-pad-left);
     }
     .url {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
+      display: inline-block;
+      min-width: 0;
       max-width: 100%;
       padding: 9px 11px;
       border: 1px solid rgba(103,245,211,.2);
       border-radius: 999px;
       background: rgba(103,245,211,.07);
       overflow-wrap: anywhere;
+      word-break: break-word;
       color: #c9fff4;
       font-size: 12px;
       text-decoration: none;
@@ -375,7 +393,8 @@
     }
     .url::before {
       content: "Open source ↗";
-      flex: 0 0 auto;
+      display: inline-block;
+      margin-right: 7px;
       color: var(--reef);
       font-weight: 850;
     }
@@ -966,7 +985,6 @@
         addHistory(action, drop);
         state.isDeciding = false;
         renderCard();
-        showToast(`${action}: ${drop.title}`);
       }, 230);
     }
 
