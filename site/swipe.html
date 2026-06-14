@@ -803,13 +803,16 @@
 
     let drops = sampleDrops.map(drop => ({ ...drop, tags: [...drop.tags] }));
     let decisions = [];
+    let currentReviewStorageKey = '';
+    const reviewStoragePrefix = 'memoreef-review-decisions:';
 
     const state = {
       index: 0,
       reviewed: initialStats.reviewed,
       remaining: initialStats.remaining,
       pearls: initialStats.pearls,
-      history: []
+      history: [],
+      isDeciding: false
     };
 
     const els = {
@@ -852,6 +855,31 @@
     function formatDropContext(drop) {
       const folders = Array.isArray(drop.folders) && drop.folders.length ? drop.folders.join(' / ') : '';
       return folders || drop.path || 'Loaded from review session JSON.';
+    }
+
+    function dropDecisionId(drop) {
+      return String(drop.id || drop.path || drop.url || drop.title || '');
+    }
+
+    function reviewStorageKeyForFile(file) {
+      return `${reviewStoragePrefix}${file.name}:${file.size}:${file.lastModified}`;
+    }
+
+    function loadStoredDecisions(key) {
+      if (!key) return [];
+      try {
+        const stored = JSON.parse(window.localStorage.getItem(key) || '[]');
+        return Array.isArray(stored) ? stored : [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function saveStoredDecisions() {
+      if (!currentReviewStorageKey) return;
+      try {
+        window.localStorage.setItem(currentReviewStorageKey, JSON.stringify(decisions));
+      } catch (_) {}
     }
 
     function decisionFor(action, drop) {
@@ -912,14 +940,17 @@
     }
 
     function decide(action) {
+      if (state.isDeciding) return;
       const drop = drops[state.index];
       if (!drop) return;
+      state.isDeciding = true;
 
       const direction = action === 'Sink' ? -1 : action === 'Keep' ? 1 : 0;
       const y = action === 'Pearl' ? -150 : 18;
       const rotation = action === 'Sink' ? -18 : action === 'Keep' ? 18 : 0;
       const className = action === 'Sink' ? 'show-sink' : action === 'Keep' ? 'show-keep' : 'show-pearl';
       decisions.push(decisionFor(action, drop));
+      saveStoredDecisions();
 
       clearHints();
       els.card.classList.add(className);
@@ -927,11 +958,13 @@
       els.card.style.opacity = '0';
 
       window.setTimeout(() => {
-        state.index += 1;
+        drops.splice(state.index, 1);
+        if (state.index >= drops.length) state.index = 0;
         state.reviewed += 1;
-        state.remaining = Math.max(0, state.remaining - 1);
+        state.remaining = drops.length;
         if (action === 'Pearl') state.pearls += 1;
         addHistory(action, drop);
+        state.isDeciding = false;
         renderCard();
         showToast(`${action}: ${drop.title}`);
       }, 230);
@@ -1011,20 +1044,24 @@
         if (!data || !Array.isArray(data.drops)) {
           throw new Error('Missing drops array');
         }
-        drops = data.drops.map(normalizeLoadedDrop);
-        decisions = [];
+        const allDrops = data.drops.map(normalizeLoadedDrop);
+        currentReviewStorageKey = reviewStorageKeyForFile(file);
+        decisions = loadStoredDecisions(currentReviewStorageKey);
+        const reviewedIds = new Set(decisions.map(decision => String(decision.id || '')));
+        drops = allDrops.filter(drop => !reviewedIds.has(dropDecisionId(drop)));
         state.index = 0;
-        state.reviewed = 0;
+        state.reviewed = decisions.length;
         state.remaining = drops.length;
-        state.pearls = drops.filter(drop => drop.pearl).length;
+        state.pearls = decisions.filter(decision => decision.pearl).length;
+        state.isDeciding = false;
         state.history = [];
         els.history.innerHTML = '';
         els.done.classList.remove('show');
         if (els.sampleNotice) {
-          els.sampleNotice.innerHTML = '<b>Real review session loaded.</b> You are reviewing Drops from your MemoReef vault.';
+          els.sampleNotice.innerHTML = `<b>Real review session loaded.</b> ${drops.length} unreviewed Drops visible. ${decisions.length} already sorted in this browser.`;
         }
         renderCard();
-        showToast(`Loaded ${drops.length} Drops from review session JSON.`);
+        showToast(`Loaded ${drops.length} unreviewed Drops from review session JSON.`);
       } catch (error) {
         showToast(`Could not load review session JSON: ${error.message}`);
       } finally {
@@ -1053,11 +1090,13 @@
     function restart() {
       drops = sampleDrops.map(drop => ({ ...drop, tags: [...drop.tags] }));
       decisions = [];
+      currentReviewStorageKey = '';
       state.index = 0;
       state.reviewed = initialStats.reviewed;
       state.remaining = initialStats.remaining;
       state.pearls = initialStats.pearls;
       state.history = [];
+      state.isDeciding = false;
       els.history.innerHTML = '';
       els.done.classList.remove('show');
       if (els.sampleNotice) {
