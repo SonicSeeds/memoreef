@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, parse_markdown_frontmatter, update_markdown_frontmatter, write_bookmarks_to_vault
 from memoreef.cli import main
-from memoreef.server import create_server
+from memoreef.server import create_server, is_loopback_bind, review_mode_urls
 
 
 class FakeHTTPHeaders:
@@ -1027,6 +1027,15 @@ class BookmarkImportTests(unittest.TestCase):
             thread.start()
             base_url = f"http://127.0.0.1:{server.server_port}"
             try:
+                with urllib.request.urlopen(f"{base_url}/api/status", timeout=5) as response:
+                    status_code = response.status
+                    status = json.loads(response.read().decode("utf-8"))
+
+                self.assertEqual(status_code, 200)
+                self.assertEqual(status["ok"], True)
+                self.assertEqual(status["vault"], str(vault_path.resolve()))
+                self.assertEqual(status["root"], "MemoReef")
+
                 with urllib.request.urlopen(f"{base_url}/api/review-session", timeout=5) as response:
                     session_status = response.status
                     session = json.loads(response.read().decode("utf-8"))
@@ -1063,6 +1072,26 @@ class BookmarkImportTests(unittest.TestCase):
                 server.shutdown()
                 thread.join(timeout=5)
                 server.server_close()
+
+    def test_review_mode_urls_include_localhost_and_lan_addresses(self):
+        self.assertTrue(is_loopback_bind("127.0.0.1"))
+        self.assertTrue(is_loopback_bind("localhost"))
+        self.assertFalse(is_loopback_bind("0.0.0.0"))
+
+        urls = review_mode_urls("0.0.0.0", 8765, ["192.168.1.23", "100.64.0.5"])
+
+        self.assertEqual(urls[0], "http://localhost:8765/")
+        self.assertIn("http://192.168.1.23:8765/", urls)
+        self.assertIn("http://100.64.0.5:8765/", urls)
+        self.assertIn("http://0.0.0.0:8765/", urls)
+
+    def test_serve_mobile_option_binds_all_interfaces(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("memoreef.server.serve") as mocked_serve:
+                result = main(["serve", "--vault", tmp, "--mobile", "--port", "9999", "--limit", "3"])
+
+        self.assertEqual(result, 0)
+        mocked_serve.assert_called_once_with(Path(tmp), "MemoReef", "0.0.0.0", 9999, 3)
 
     def write_plan_decisions(self, path: Path, vault_path: Path, items: list[tuple[Path, str]]):
         decisions = []

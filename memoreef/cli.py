@@ -3753,6 +3753,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     serve_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
     serve_cmd.add_argument("--host", default="127.0.0.1", help="Bind host. Default: 127.0.0.1")
+    serve_cmd.add_argument("--lan", "--mobile", action="store_true", help="Bind to 0.0.0.0 for phone access on trusted LAN/Tailscale.")
     serve_cmd.add_argument("--port", type=int, default=8765, help="Bind port. Default: 8765")
     serve_cmd.add_argument("--limit", type=int, default=50, help="Maximum Drift Drops to load into Review Mode. Default: 50")
 
@@ -4094,7 +4095,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "serve":
         from .server import serve
 
-        serve(args.vault, args.root, args.host, args.port, args.limit)
+        host = "0.0.0.0" if args.lan else args.host
+        serve(args.vault, args.root, host, args.port, args.limit)
         return 0
 
     if args.command == "demo":

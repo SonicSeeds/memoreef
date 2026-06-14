@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import ipaddress
 import json
 from pathlib import Path
+import socket
 from urllib.parse import parse_qs, urlparse
 
 from .cli import apply_review_decision_payload, build_review_session_payload, default_review_filters
@@ -148,6 +150,64 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
         return "application/octet-stream"
 
 
+def is_loopback_bind(host: str) -> bool:
+    normalized = host.strip().lower()
+    if normalized in {"localhost", "::1", "[::1]"}:
+        return True
+    try:
+        return ipaddress.ip_address(normalized.strip("[]")).is_loopback
+    except ValueError:
+        return False
+
+
+def local_ipv4_addresses() -> list[str]:
+    addresses: set[str] = set()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("8.8.8.8", 80))
+            address = probe.getsockname()[0]
+            if not ipaddress.ip_address(address).is_loopback:
+                addresses.add(address)
+    except OSError:
+        pass
+    try:
+        hostnames = {socket.gethostname(), socket.getfqdn()}
+        for hostname in hostnames:
+            for family, _type, _proto, _canonname, sockaddr in socket.getaddrinfo(hostname, None, socket.AF_INET):
+                if family == socket.AF_INET:
+                    address = sockaddr[0]
+                    if not ipaddress.ip_address(address).is_loopback:
+                        addresses.add(address)
+    except OSError:
+        return []
+    return sorted(addresses)
+
+
+def review_mode_urls(host: str, port: int, addresses: list[str] | None = None) -> list[str]:
+    urls: list[str] = []
+
+    def add(url: str) -> None:
+        if url not in urls:
+            urls.append(url)
+
+    normalized = host.strip()
+    if normalized in {"0.0.0.0", ""}:
+        add(f"http://localhost:{port}/")
+        for address in addresses if addresses is not None else local_ipv4_addresses():
+            add(f"http://{address}:{port}/")
+        add(f"http://0.0.0.0:{port}/")
+    elif is_loopback_bind(normalized):
+        add(f"http://localhost:{port}/")
+        if normalized not in {"localhost", "::1", "[::1]"}:
+            add(f"http://{normalized}:{port}/")
+    else:
+        add(f"http://{normalized}:{port}/")
+        for address in addresses if addresses is not None else local_ipv4_addresses():
+            add(f"http://{address}:{port}/")
+        add(f"http://localhost:{port}/")
+    return urls
+
+
 def create_server(vault: Path, root: str = "MemoReef", host: str = "127.0.0.1", port: int = 8765, limit: int = 50) -> MemoReefHTTPServer:
     return MemoReefHTTPServer((host, port), MemoReefRequestHandler, vault, root, limit)
 
@@ -155,8 +215,14 @@ def create_server(vault: Path, root: str = "MemoReef", host: str = "127.0.0.1", 
 def serve(vault: Path, root: str = "MemoReef", host: str = "127.0.0.1", port: int = 8765, limit: int = 50) -> None:
     server = create_server(vault, root, host, port, limit)
     try:
-        print(f"Serving MemoReef Review Mode at http://{host}:{server.server_port}/")
+        print("Serving MemoReef Review Mode:")
+        for url in review_mode_urls(host, server.server_port):
+            print(f"- {url}")
         print(f"Connected vault: {server.vault}")
+        if not is_loopback_bind(host):
+            print("WARNING: MemoReef is bound to a network-accessible host.")
+            print("The local vault write API can be reached by devices on this network.")
+            print("Use this only on a trusted LAN or Tailscale network, and stop the server when done.")
         print("Press Ctrl+C to stop.")
         server.serve_forever()
     except KeyboardInterrupt:

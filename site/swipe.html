@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>MemoReef Review Mode Prototype</title>
-  <meta name="description" content="Mobile-first MemoReef Review Mode prototype with swipe triage, Pearl marking, agent finish, and continue-later flows." />
+  <title>MemoReef Review Mode</title>
+  <meta name="description" content="Mobile-friendly MemoReef Review Mode with swipe triage, Pearl marking, agent finish, continue-later flows, and local vault autosave." />
   <style>
     :root {
       color-scheme: dark;
@@ -301,6 +301,7 @@
       background: rgba(255,255,255,.055);
       white-space: nowrap;
     }
+    .source-chip { max-width: 100%; }
     .source-chip span {
       overflow: hidden;
       text-overflow: ellipsis;
@@ -351,12 +352,15 @@
       min-width: 0;
     }
     .meta-row span {
+      min-width: 0;
+      max-width: 100%;
       padding: 7px 9px;
       border: 1px solid rgba(255,255,255,.12);
       border-radius: 999px;
       color: #d9eef3;
       background: rgba(255,255,255,.055);
       font-size: 12px;
+      overflow-wrap: anywhere;
     }
 
     .agent-note {
@@ -670,6 +674,125 @@
       border-top: 1px solid rgba(255,255,255,.07);
     }
     .history-item b { color: var(--ink); font-weight: 750; }
+    .history-item span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      text-align: right;
+    }
+
+    @media (max-width: 520px) {
+      body {
+        background-attachment: scroll;
+      }
+      .app {
+        width: 100%;
+        padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+        gap: 10px;
+      }
+      header { gap: 8px; }
+      .tagline { white-space: normal; }
+      .mode-pill { padding: 7px 9px; }
+      .bridge-controls {
+        grid-template-columns: 1fr;
+      }
+      .keyboard-hint {
+        display: none;
+      }
+      .stage {
+        min-height: 0;
+      }
+      .card-wrap {
+        height: clamp(340px, 51dvh, 500px);
+        min-height: 340px;
+      }
+      .drop-card {
+        border-radius: 24px;
+        --card-pad-left: 16px;
+        --card-pad-right: 16px;
+      }
+      .back-card {
+        border-radius: 22px;
+      }
+      .card-top {
+        padding-top: 16px;
+      }
+      .card-body {
+        align-content: start;
+        gap: 11px;
+        padding-top: 12px;
+      }
+      .card-body h2 {
+        font-size: clamp(22px, 7vw, 28px);
+        line-height: 1.1;
+      }
+      .summary-copy {
+        font-size: 14px;
+      }
+      .card-bottom {
+        padding-bottom: 16px;
+      }
+      .actions {
+        position: sticky;
+        bottom: max(8px, env(safe-area-inset-bottom));
+        z-index: 10;
+        padding-top: 4px;
+      }
+      .local-status {
+        min-height: 42px;
+        border-radius: 16px;
+        background: rgba(3, 18, 26, .86);
+        backdrop-filter: blur(14px);
+      }
+      .primary-actions {
+        gap: 8px;
+      }
+      .action-btn {
+        min-height: 72px;
+        border-radius: 20px;
+        gap: 5px;
+      }
+      .action-btn svg {
+        width: 24px;
+        height: 24px;
+      }
+      .action-btn span {
+        font-size: 14px;
+      }
+      .escape-actions {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .escape-btn {
+        min-height: 48px;
+      }
+      .history {
+        max-height: 72px;
+        background: rgba(2, 12, 18, .72);
+        border-radius: 14px;
+        padding: 4px 8px 0;
+      }
+    }
+
+    @media (max-width: 360px) {
+      .summary {
+        gap: 6px;
+      }
+      .stat {
+        padding: 9px 7px;
+      }
+      .stat strong {
+        font-size: 18px;
+      }
+      .primary-actions {
+        grid-template-columns: 1fr;
+      }
+      .action-btn {
+        min-height: 58px;
+        grid-template-columns: auto auto;
+        align-content: center;
+        justify-content: center;
+      }
+    }
 
     @media (min-width: 720px) {
       .app {
@@ -707,7 +830,7 @@
   </style>
 </head>
 <body>
-  <main class="app" aria-label="MemoReef Review Mode prototype">
+  <main class="app" aria-label="MemoReef Review Mode">
     <header>
       <div class="brand" aria-label="MemoReef">
         <div class="mark" aria-hidden="true"><img src="img/logo-symbol.svg" alt="" /></div>
@@ -772,7 +895,7 @@
       <section class="done-state" id="doneState" aria-live="polite">
         <h2 id="doneTitle">Reef complete</h2>
         <p id="doneCopy">All visible cards are reviewed. Agents can now write clean Markdown notes and sort the library quietly.</p>
-        <button class="sheet-btn primary" id="restartBtn" type="button">Restart prototype</button>
+        <button class="sheet-btn primary" id="restartBtn" type="button">Restart review</button>
       </section>
     </section>
 
@@ -1262,12 +1385,19 @@
       showNotice('<b>Sample data shown.</b> Load a review-session JSON from your MemoReef vault to review real bookmarks.');
       setLocalStatus('Sample mode · decisions stay in this browser until exported');
       renderCard();
-      showToast('Prototype restarted. Same ocean, fewer consequences.');
+      showToast('Review restarted with sample data.');
     }
 
-    function maybeEnableLocalApiMode() {
-      const localHosts = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
-      if (!['http:', 'https:'].includes(window.location.protocol) || !localHosts.has(window.location.hostname)) {
+    async function maybeEnableLocalApiMode() {
+      if (!['http:', 'https:'].includes(window.location.protocol)) {
+        return;
+      }
+      let status;
+      try {
+        const response = await fetch('/api/status', { cache: 'no-store' });
+        status = await response.json();
+        if (!response.ok || status.ok === false) return;
+      } catch (_) {
         return;
       }
       localApiMode = true;
@@ -1280,7 +1410,8 @@
       }
       els.exportDecisionsButton.textContent = 'Autosaves to vault';
       hideNotice();
-      setLocalStatus('Loading Drift Drops from local vault...');
+      const root = status && status.root ? `/${status.root}` : '';
+      setLocalStatus(`Connected to local vault${root} · loading Drift Drops...`);
       loadLocalReviewSession();
     }
 
