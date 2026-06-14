@@ -44,7 +44,6 @@
       color: var(--ink);
       background:
         linear-gradient(180deg, rgba(1, 6, 10, .06), rgba(1, 6, 10, .56) 48%, #02080d 100%),
-        url("img/masters/reef-octopus-master-v3.webp") center top / cover fixed,
         radial-gradient(circle at 50% -10%, rgba(103, 245, 211, .18), transparent 18rem),
         linear-gradient(180deg, #0a2b3b 0%, var(--deep) 38%, var(--abyss) 100%);
       overflow-x: hidden;
@@ -61,15 +60,19 @@
     }
 
     body::before {
-      display: none;
+      display: block;
+      background: url("img/kling_sources/horizontal/s5-octopus-horizontal-16x9-source.png") center center / cover no-repeat;
+      filter: blur(18px) saturate(.9);
+      opacity: .46;
+      transform: scale(1.08);
     }
 
     body::after {
       background:
-        linear-gradient(90deg, rgba(1,6,10,.56), rgba(1,6,10,.12) 48%, rgba(1,6,10,.6)),
-        linear-gradient(180deg, rgba(1,6,10,.18), rgba(1,6,10,.72)),
-        radial-gradient(circle at 74% 58%, rgba(255,200,107,.16), transparent 12rem);
-      opacity: .78;
+        linear-gradient(90deg, rgba(1,6,10,.64), rgba(1,6,10,.18) 48%, rgba(1,6,10,.66)),
+        linear-gradient(180deg, rgba(1,6,10,.12) 0%, rgba(1,6,10,.72) 34%, rgba(2,8,13,.98) 54%, #02080d 100%),
+        radial-gradient(circle at 74% 58%, rgba(255,200,107,.08), transparent 12rem);
+      opacity: 1;
     }
 
     button,
