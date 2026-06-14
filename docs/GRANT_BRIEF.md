@@ -30,7 +30,7 @@ MemoReef should not let agents blindly summarize or act on a giant messy archive
 
 The triage model is intentionally simple: keep useful sources in the Reef, mark high-value sources as Pearls, send long-term or uncertain material to the Deep, and discard weak material. This step protects the quality of future agent output. It also gives the user a fast way to convert old saved links into a curated library that reflects current priorities rather than historical clutter.
 
-The repo already includes triage-ready frontmatter fields, a browser-only Review Mode fallback, and a local filesystem-backed Review Mode server. The local app loads Drift Drops from an Obsidian-compatible vault, lets the user sort with keyboard or button controls, autosaves Keep/Pearl/Sink decisions back to Markdown frontmatter, and archives sunk Drops outside the active reef with a 30-day delete marker.
+The repo already includes triage-ready frontmatter fields, a browser-only Review Mode fallback, and a local filesystem-backed Review Mode server. The local app loads Drift Drops from an Obsidian-compatible vault, lets the user sort with keyboard or button controls, autosaves Keep/Pearl/Sink decisions back to Markdown frontmatter, archives sunk Drops outside the active reef with a 30-day delete marker, and can tag kept/Pearl Drops locally after review. This turns human triage into immediate agent-readable structure without requiring a hosted account or external AI service.
 
 ## How Codex Is Being Used
 
@@ -46,10 +46,10 @@ Open source matters here because the storage model, importers, triage convention
 
 ## Current Status
 
-Currently implemented: a Python CLI package, browser bookmark HTML import, plain URL list import, CSV link import, Obsidian-compatible Markdown Drops, Drift/Reef/Deep/Discarded/Pearl frontmatter fields, import inspection, import logs, a guided offline pilot command and checklist page, local Review Mode JSON export/application, filesystem-backed Review Mode autosave, Sink-to-Discarded archive lifecycle with 30-day delete markers, agent finish plans and deterministic proposals, duplicate/link/metadata/garden reports, library search, project brief export, a demo vault, a generated local dashboard/pilot/library/tour with Drop detail, review launcher, reports, and briefs pages, a static landing page, and browser-only triage prototypes.
+Currently implemented: a Python CLI package, browser bookmark HTML import, plain URL list import, CSV link import, Obsidian-compatible Markdown Drops, Drift/Reef/Deep/Discarded/Pearl frontmatter fields, import inspection, import logs, a guided offline pilot command and checklist page, local Review Mode JSON export/application, filesystem-backed Review Mode autosave, phone triage over trusted LAN/Tailscale with a self-serve URL/QR workflow, Sink-to-Discarded archive lifecycle with 30-day delete markers, local reviewed-Drop tagging for kept/Pearl items, agent finish plans and deterministic proposals, duplicate/link/metadata/garden reports, library search, project brief export, a demo vault, a generated local dashboard/pilot/library/tour with Drop detail, review launcher, reports, and briefs pages, a static landing page, and browser-only triage prototypes.
 
-Not implemented yet: full article extraction, automatic AI-generated summaries and tags, an Obsidian plugin, a browser extension, a mobile app with vault sync, or a hosted sync/account layer.
+Not implemented yet: full article extraction, LLM-generated summaries and deeper semantic tagging, an Obsidian plugin, a browser extension, a mobile app with vault sync, or a hosted sync/account layer.
 
 ## Next Milestones
 
-The next milestones are to make Review Mode filesystem-backed, improve importer coverage across real browser exports and saved-link formats, add safer article extraction/summarization, refine generated project briefs from curated Drops, and document the storage conventions so other local-first tools can read and build on MemoReef vaults.
+The next milestones are to improve the quality and reviewability of local tagging/garden suggestions, add safer article extraction/summarization, refine generated project briefs from curated Drops, and document the storage conventions so other local-first tools can read and build on MemoReef vaults.

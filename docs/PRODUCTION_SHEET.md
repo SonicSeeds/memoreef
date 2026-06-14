@@ -27,21 +27,28 @@ Path: `/Users/sonic/MemoReef`
 
 Implemented:
 
-- Python package `memoreef`.
-- CLI command via `python3 -m memoreef.cli import`.
-- Netscape bookmark HTML parser.
-- Markdown writer for Obsidian-style Drops.
-- Example bookmark export.
-- Unit tests.
+- Python package `memoreef` with CLI import, pilot, app, review, report, search, brief, and tagging workflows.
+- Netscape bookmark HTML parser plus plain URL-list and CSV importers.
+- Markdown writer for Obsidian-style Drops with Drift/Reef/Deep/Discarded/Pearl frontmatter.
+- Import inspection, URL canonicalization, dedupe behavior, and import logs.
+- Guided local pilot flow with generated `PILOT_README.md` and `app/pilot.html`.
+- Filesystem-backed Review Mode server with direct Keep/Pearl/Sink autosave to the vault.
+- Self-serve phone triage via trusted LAN/Tailscale URL/QR from `phone`.
+- Local reviewed-Drop tagger via `tag-reviewed` and `POST /api/tag-reviewed`.
+- Duplicate, link-check, metadata, garden-suggestion, library-search, and project-brief commands.
+- Generated static local app pages: dashboard, pilot, tour, library, review, reports, briefs, and Drop detail pages.
+- Premium static landing page and browser-only fallback prototypes.
+- Unit tests covering the implemented workflows.
 
 Run verification:
 
 ```bash
 cd /Users/sonic/MemoReef
-python3 -m unittest discover -s tests
-rm -rf /tmp/memoreef-vault
-python3 -m memoreef.cli import examples/bookmarks.html --vault /tmp/memoreef-vault
-find /tmp/memoreef-vault/MemoReef/Drops -type f | sort
+python3.11 -m unittest discover -s tests -v
+python3.11 -m memoreef.cli tag-reviewed --help
+rm -rf /tmp/memoreef-pilot
+python3.11 -m memoreef.cli pilot --bookmarks examples/bookmarks.html --vault /tmp/memoreef-pilot --review-limit 3
+python3.11 -m memoreef.cli tag-reviewed --vault /tmp/memoreef-pilot --dry-run
 ```
 
 ## MVP acceptance criteria
@@ -67,19 +74,25 @@ Given a browser bookmark HTML export, MemoReef should:
 
 ### CLI
 
-MVP commands:
+Current core commands:
 
 ```bash
 memoreef import bookmarks.html --vault ~/Obsidian/Main
-memoreef import bookmarks.html --vault ~/Obsidian/Main --limit 20
+memoreef import-links links.txt --vault ~/Obsidian/Main
+memoreef import-csv links.csv --vault ~/Obsidian/Main
+memoreef pilot --bookmarks bookmarks.html --vault ~/Obsidian/Main
+python3.11 -m memoreef.cli serve --vault ~/Obsidian/Main
+python3.11 -m memoreef.cli phone --vault ~/Obsidian/Main
+python3.11 -m memoreef.cli tag-reviewed --vault ~/Obsidian/Main --dry-run
 ```
 
-Next commands:
+Useful follow-on commands:
 
 ```bash
-memoreef inspect bookmarks.html
-memoreef dedupe --vault ~/Obsidian/Main
-memoreef enrich --vault ~/Obsidian/Main --limit 20
+python3.11 -m memoreef.cli refresh-metadata --vault ~/Obsidian/Main --limit 50
+python3.11 -m memoreef.cli search-library --vault ~/Obsidian/Main --query "agent workflow"
+python3.11 -m memoreef.cli brief --vault ~/Obsidian/Main --pearl-only
+python3.11 -m memoreef.cli suggest-gardens --vault ~/Obsidian/Main
 ```
 
 ### Docs

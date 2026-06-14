@@ -49,7 +49,7 @@ python3.11 -m memoreef.cli serve --vault /tmp/memoreef-pilot
 open http://127.0.0.1:8765/
 ```
 
-By default this binds only to `127.0.0.1`, loads up to 50 Drift Drops, and autosaves each Keep/Pearl/Sink decision directly to Markdown frontmatter in the vault. No account, external network, hosted service, API key, database, or sync layer is required. Treat it as a local filesystem bridge: only run it for vaults you intend MemoReef to edit, and keep the default localhost bind unless you deliberately need otherwise.
+By default this binds only to `127.0.0.1`, loads up to 50 Drift Drops, and autosaves each Keep/Pearl/Sink decision directly to Markdown frontmatter in the vault. The Review Mode **Tag kept/Pearls** button then saves pending decisions and appends local agent-suggested tags to kept/Pearl Drops through the same filesystem bridge. No account, external network, hosted service, API key, database, or sync layer is required. Treat it as a local filesystem bridge: only run it for vaults you intend MemoReef to edit, and keep the default localhost bind unless you deliberately need otherwise.
 
 For phone triage on a trusted LAN or Tailscale network, start the same local app on the computer that has the vault:
 
@@ -114,7 +114,7 @@ Implemented:
 Not implemented yet:
 
 - Full article extraction/summarization.
-- Automatic AI-generated tags or summaries.
+- LLM-generated summaries and deep semantic tagging.
 - Browser extension.
 - Obsidian plugin.
 - Hosted sync or multi-device account layer.

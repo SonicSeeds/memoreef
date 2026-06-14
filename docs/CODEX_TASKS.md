@@ -666,3 +666,32 @@ Create a premium visual baseline for MemoReef before pilot testing without chang
 - Generated pilot/demo app pages still include dashboard, pilot, tour, library, review, reports, briefs, and Drop detail pages.
 - Pilot flow still creates `app/pilot.html`, `app/tour.html`, local reports, review sessions, and pilot feedback guidance.
 - Existing tests still pass.
+
+## Task 27 — Local reviewed-Drop tagging
+
+### Goal
+Turn the Review Mode “agents finish” promise into a real local workflow for adding useful tags to Drops the user already kept or marked as Pearls.
+
+### Requirements
+
+- Add `python3 -m memoreef.cli tag-reviewed --vault <vault>`.
+- Support `--dry-run` and `--limit`.
+- Scan only reviewed useful Drops: `status: reef`, `status: deep`, or `pearl: true`.
+- Skip Drift and Discarded Drops.
+- Preserve existing tags and append deterministic lowercase/hyphen tag suggestions.
+- Use local heuristics from title, URL/hostname, folder path, projects, shoals, page metadata, and note body.
+- Write `agent_tagged_at` and `agent_tag_count` when tags are applied.
+- Add a local server endpoint `POST /api/tag-reviewed`.
+- Wire Review Mode’s button to save pending decisions, then call the endpoint in local-server mode.
+- Keep static/browser-only mode honest: it must not pretend it can write local tags without the local server.
+- Do not call external APIs, LLMs, hosted services, or add dependencies.
+
+### Acceptance criteria
+
+- CLI dry run reports planned tag additions without modifying Markdown.
+- CLI apply modifies kept/Pearl Drops and leaves Drift/Sink Drops untouched.
+- Local server endpoint updates reviewed Drops through the same tagger.
+- Review Mode button reports real scanned/eligible/updated/tags-added counts in local-server mode.
+- Existing tests still pass.
+
+Status: implemented in `54201a4 Add local reviewed drop tagging workflow`.
