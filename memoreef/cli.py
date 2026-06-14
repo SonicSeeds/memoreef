@@ -12,6 +12,19 @@ import urllib.error
 import urllib.request
 from urllib.parse import urljoin, urlsplit
 
+
+def write_optional_qr_png(url: str, output: Path) -> tuple[Path | None, str | None]:
+    """Write a QR PNG when the optional qrcode package is installed."""
+    try:
+        import qrcode  # type: ignore[import-not-found]
+    except ImportError as error:
+        return None, f"QR PNG skipped: optional Python package 'qrcode' is not installed ({error})."
+    output.parent.mkdir(parents=True, exist_ok=True)
+    image = qrcode.make(url)
+    with output.open("wb") as file:
+        image.save(file)
+    return output, None
+
 from . import __version__
 from .bookmarks import (
     Bookmark,
@@ -3757,6 +3770,14 @@ def build_parser() -> argparse.ArgumentParser:
     serve_cmd.add_argument("--port", type=int, default=8765, help="Bind port. Default: 8765")
     serve_cmd.add_argument("--limit", type=int, default=50, help="Maximum Drift Drops to load into Review Mode. Default: 50")
 
+    phone_cmd = sub.add_parser("phone", help="Serve Review Mode for this computer's vault and print phone/QR access details.")
+    phone_cmd.add_argument("--vault", type=Path, required=True, help="Path to this computer's Obsidian vault/root folder.")
+    phone_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    phone_cmd.add_argument("--port", type=int, default=8765, help="Bind port. Default: 8765")
+    phone_cmd.add_argument("--limit", type=int, default=50, help="Maximum Drift Drops to load into Review Mode. Default: 50")
+    phone_cmd.add_argument("--qr", type=Path, default=None, help="Optional QR PNG output path. Defaults to <vault>/MemoReef/phone-triage-qr.png when qrcode is installed.")
+    phone_cmd.add_argument("--no-qr", action="store_true", help="Do not try to generate a QR PNG.")
+
     demo_cmd = sub.add_parser("demo", help="Create a complete local MemoReef demo vault.")
     demo_cmd.add_argument("--output", type=Path, required=True, help="Directory where the demo vault should be created.")
     demo_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the demo vault. Default: MemoReef")
@@ -4097,6 +4118,40 @@ def main(argv: list[str] | None = None) -> int:
 
         host = "0.0.0.0" if args.lan else args.host
         serve(args.vault, args.root, host, args.port, args.limit)
+        return 0
+
+    if args.command == "phone":
+        import importlib
+
+        server_module = importlib.import_module("memoreef.server")
+        host = "0.0.0.0"
+        urls = server_module.review_mode_urls(host, args.port)
+        phone_urls = [url for url in urls if not url.startswith("http://localhost") and "0.0.0.0" not in url]
+        primary_url = phone_urls[0] if phone_urls else urls[0]
+        vault_root = args.vault.expanduser().resolve() / args.root
+        url_file = vault_root / "phone-triage-url.txt"
+        url_file.parent.mkdir(parents=True, exist_ok=True)
+        url_file.write_text(primary_url + "\n", encoding="utf-8")
+
+        print("MemoReef phone triage for this computer")
+        print(f"- vault: {args.vault.expanduser().resolve()}")
+        print("- use only on a trusted LAN/Tailscale network")
+        print("- keep this command running while reviewing on the phone")
+        print("Phone URLs:")
+        for url in urls:
+            print(f"- {url}")
+        print(f"Saved phone URL: {url_file}")
+
+        if not args.no_qr:
+            qr_path = args.qr or (vault_root / "phone-triage-qr.png")
+            qr_output, qr_warning = write_optional_qr_png(primary_url, qr_path)
+            if qr_output:
+                print(f"Saved phone QR: {qr_output}")
+            if qr_warning:
+                print(f"- {qr_warning}")
+                print("- Open the saved URL on your phone, or install the optional qrcode package to generate a QR PNG.")
+
+        server_module.serve(args.vault, args.root, host, args.port, args.limit)
         return 0
 
     if args.command == "demo":

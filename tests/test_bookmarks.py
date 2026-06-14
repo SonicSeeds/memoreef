@@ -1093,6 +1093,35 @@ class BookmarkImportTests(unittest.TestCase):
         self.assertEqual(result, 0)
         mocked_serve.assert_called_once_with(Path(tmp), "MemoReef", "0.0.0.0", 9999, 3)
 
+    def test_phone_command_prints_user_owned_phone_urls_and_writes_url_file(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            with patch("memoreef.server.local_ipv4_addresses", return_value=["192.168.1.23"]), patch("memoreef.server.serve") as mocked_serve:
+                with redirect_stdout(stdout):
+                    result = main(["phone", "--vault", str(vault_path), "--port", "9999", "--limit", "3", "--no-qr"])
+
+            url_file = vault_path.resolve() / "MemoReef" / "phone-triage-url.txt"
+            output = stdout.getvalue()
+            url_file_exists = url_file.exists()
+            url_file_content = url_file.read_text(encoding="utf-8").strip()
+
+        self.assertEqual(result, 0)
+        self.assertTrue(url_file_exists)
+        self.assertEqual(url_file_content, "http://192.168.1.23:9999/")
+        self.assertIn("MemoReef phone triage for this computer", output)
+        self.assertIn("http://192.168.1.23:9999/", output)
+        mocked_serve.assert_called_once_with(vault_path, "MemoReef", "0.0.0.0", 9999, 3)
+
+    def test_phone_command_writes_qr_when_qr_helper_succeeds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            with patch("memoreef.server.local_ipv4_addresses", return_value=["100.64.0.5"]), patch("memoreef.server.serve"), patch("memoreef.cli.write_optional_qr_png", return_value=(Path(tmp) / "qr.png", None)) as mocked_qr:
+                result = main(["phone", "--vault", str(vault_path), "--port", "9999"])
+
+        self.assertEqual(result, 0)
+        mocked_qr.assert_called_once_with("http://100.64.0.5:9999/", vault_path.resolve() / "MemoReef" / "phone-triage-qr.png")
+
     def write_plan_decisions(self, path: Path, vault_path: Path, items: list[tuple[Path, str]]):
         decisions = []
         for drop_path, decision in items:
