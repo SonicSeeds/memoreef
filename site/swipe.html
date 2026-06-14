@@ -159,6 +159,7 @@
       line-height: 1.4;
       box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
     }
+    .sample-notice[hidden] { display: none; }
     .sample-notice b { color: #ffe29b; }
 
     .summary {
@@ -411,6 +412,33 @@
     .actions {
       display: grid;
       gap: 10px;
+    }
+
+    .local-status {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 8px 11px;
+      border: 1px solid rgba(103,245,211,.24);
+      border-radius: 999px;
+      background: rgba(103,245,211,.08);
+      color: #dffff7;
+      font-size: 12px;
+      line-height: 1.3;
+      text-align: center;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .local-status[hidden] { display: none; }
+    .local-status::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: var(--reef);
+      box-shadow: 0 0 14px var(--reef);
     }
 
     .primary-actions {
@@ -749,6 +777,7 @@
     </section>
 
     <section class="actions" aria-label="Review actions">
+      <div class="local-status" id="localStatus" hidden>Real review session loaded.</div>
       <div class="primary-actions">
         <button class="action-btn sink-btn" id="sinkBtn" type="button" aria-label="Sink this drop">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg><span>Sink</span>
@@ -871,8 +900,30 @@
       sheetActions: document.getElementById('sheetActions'),
       reviewSessionInput: document.getElementById('reviewSessionInput'),
       exportDecisionsButton: document.getElementById('exportDecisionsButton'),
-      sampleNotice: document.querySelector('.sample-notice')
+      sampleNotice: document.querySelector('.sample-notice'),
+      localStatus: document.getElementById('localStatus')
     };
+
+    function showNotice(html) {
+      if (!els.sampleNotice) return;
+      els.sampleNotice.hidden = false;
+      els.sampleNotice.innerHTML = html;
+    }
+
+    function hideNotice() {
+      if (els.sampleNotice) els.sampleNotice.hidden = true;
+    }
+
+    function setLocalStatus(message) {
+      if (!els.localStatus) return;
+      if (!message) {
+        els.localStatus.hidden = true;
+        els.localStatus.textContent = '';
+        return;
+      }
+      els.localStatus.hidden = false;
+      els.localStatus.textContent = message;
+    }
 
     function renderStats() {
       els.reviewed.textContent = state.reviewed;
@@ -1088,9 +1139,11 @@
       state.history = [];
       els.history.innerHTML = '';
       els.done.classList.remove('show');
-      if (els.sampleNotice) {
-        els.sampleNotice.innerHTML = options.notice || `<b>Real review session loaded.</b> ${drops.length} unreviewed Drops visible. ${decisions.length} already sorted in this browser.`;
-      }
+      hideNotice();
+      const statusMessage = localApiMode
+        ? `${drops.length} Drift Drops loaded · autosaves to vault`
+        : `${drops.length} Drops loaded · export decisions JSON when done`;
+      setLocalStatus(statusMessage);
       renderCard();
     }
 
@@ -1112,15 +1165,11 @@
         const response = await fetch('/api/review-session', { cache: 'no-store' });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-        applyReviewSessionData(data, {
-          decisions: [],
-          notice: `<b>Connected to local MemoReef vault.</b> ${data.drops.length} Drift Drops loaded. Decisions save directly to this vault.`
-        });
-        showToast(`Connected to local MemoReef vault. Loaded ${drops.length} Drops.`);
+        applyReviewSessionData(data, { decisions: [] });
+        setLocalStatus(`${drops.length} Drift Drops loaded · autosaves to vault`);
       } catch (error) {
-        if (els.sampleNotice) {
-          els.sampleNotice.innerHTML = `<b>Local MemoReef server error.</b> ${escapeHtml(error.message)}. Static JSON import/export is still available.`;
-        }
+        showNotice(`<b>Local MemoReef server error.</b> ${escapeHtml(error.message)}. Static JSON import/export is still available.`);
+        setLocalStatus('Local vault connection failed');
         showToast(`Could not load local review session: ${error.message}`);
       }
     }
@@ -1156,6 +1205,7 @@
         }
         savedDecisionCount += pending.length;
         els.exportDecisionsButton.textContent = 'Saved to vault';
+        setLocalStatus(`${savedDecisionCount} decisions saved · autosaves to vault`);
         if (!options.quiet) showToast(`Saved ${data.updated} decisions to the local MemoReef vault.`);
       } catch (error) {
         showToast(`Could not save decisions: ${error.message}`);
@@ -1209,9 +1259,8 @@
       state.isDeciding = false;
       els.history.innerHTML = '';
       els.done.classList.remove('show');
-      if (els.sampleNotice) {
-        els.sampleNotice.innerHTML = '<b>Sample data shown.</b> Load a review-session JSON from your MemoReef vault to review real bookmarks.';
-      }
+      showNotice('<b>Sample data shown.</b> Load a review-session JSON from your MemoReef vault to review real bookmarks.');
+      setLocalStatus('Sample mode · decisions stay in this browser until exported');
       renderCard();
       showToast('Prototype restarted. Same ocean, fewer consequences.');
     }
@@ -1230,9 +1279,8 @@
         els.exportDecisionsButton.parentElement.style.gridTemplateColumns = '1fr';
       }
       els.exportDecisionsButton.textContent = 'Autosaves to vault';
-      if (els.sampleNotice) {
-        els.sampleNotice.innerHTML = '<b>Connected to local MemoReef vault.</b> Loading Drift Drops from this vault...';
-      }
+      hideNotice();
+      setLocalStatus('Loading Drift Drops from local vault...');
       loadLocalReviewSession();
     }
 
