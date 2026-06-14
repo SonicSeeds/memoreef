@@ -224,6 +224,8 @@
       transform-origin: 50% 80%;
       transition: transform .22s ease, opacity .22s ease, border-color .22s ease;
       will-change: transform;
+      --card-pad-left: 18px;
+      --card-pad-right: 26px;
     }
     .drop-card.dragging {
       cursor: grabbing;
@@ -261,7 +263,7 @@
     .drop-card.show-pearl .decision-badge.pearl { opacity: 1; }
 
     .card-top {
-      padding: 22px 22px 0;
+      padding: 22px var(--card-pad-right) 0 var(--card-pad-left);
       position: relative;
       z-index: 2;
     }
@@ -306,9 +308,9 @@
       position: relative;
       z-index: 2;
       display: grid;
-      align-content: start;
+      align-content: center;
       gap: 14px;
-      padding: 10px 22px 0;
+      padding: 10px var(--card-pad-right) 0 var(--card-pad-left);
     }
     .card-body h2 {
       margin: 0;
@@ -354,7 +356,7 @@
     .card-bottom {
       position: relative;
       z-index: 2;
-      padding: 0 22px 22px;
+      padding: 0 var(--card-pad-right) 22px var(--card-pad-left);
     }
     .url {
       display: inline-flex;
