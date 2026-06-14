@@ -2492,6 +2492,125 @@ class BookmarkImportTests(unittest.TestCase):
         self.assertIn("Task 18", tasks)
         self.assertIn("apply-garden-suggestions", tasks)
 
+    def test_hub_map_creates_index_hub_notes_and_drop_connections(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("AR art installation", "https://studio.example/ar-art", tags=["art", "augmented-reality"], projects=["Augmented Reality"], status="reef"),
+                Bookmark("Gallery AR research", "https://gallery.example/ar", tags=["art", "augmented-reality"], projects=["Augmented Reality"], status="deep"),
+                Bookmark("Discarded AR noise", "https://noise.example/ar", tags=["art", "augmented-reality"], status="discarded"),
+            ], vault_path, allow_duplicates=True)
+
+            with redirect_stdout(stdout):
+                result = main(["hub-map", "--vault", str(vault_path), "--min-drops", "2"])
+
+            maps_dir = vault_path / "MemoReef" / "Maps"
+            index = maps_dir / "Emerging Hubs.md"
+            hub = maps_dir / "Hub - Augmented Reality.md"
+            first_drop = written[0].read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertTrue(index.exists())
+            self.assertTrue(hub.exists())
+            self.assertIn("[[MemoReef/Maps/Hub - Augmented Reality|Augmented Reality]]", index.read_text(encoding="utf-8"))
+            self.assertIn("[[MemoReef/Drops/ar-art-installation|AR art installation]]", hub.read_text(encoding="utf-8"))
+            self.assertIn("## MemoReef Connections", first_drop)
+            self.assertIn("[[MemoReef/Maps/Hub - Art|Art]]", first_drop)
+            self.assertIn("[[MemoReef/Maps/Hub - Augmented Reality|Augmented Reality]]", first_drop)
+            self.assertNotIn("MemoReef Connections", written[2].read_text(encoding="utf-8"))
+            self.assertIn("Created hub map:", stdout.getvalue())
+
+    def test_hub_map_dry_run_does_not_modify_files(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("Agent one", "https://example.com/one", tags=["ai-agents"], status="reef"),
+                Bookmark("Agent two", "https://example.com/two", tags=["ai-agents"], status="reef"),
+            ], vault_path, allow_duplicates=True)
+            before = {path: path.read_text(encoding="utf-8") for path in written}
+
+            with redirect_stdout(stdout):
+                result = main(["hub-map", "--vault", str(vault_path), "--dry-run"])
+
+            self.assertEqual(result, 0)
+            self.assertFalse((vault_path / "MemoReef" / "Maps").exists())
+            self.assertEqual({path: path.read_text(encoding="utf-8") for path in written}, before)
+            output = stdout.getvalue()
+            self.assertIn("Dry run hub map:", output)
+            self.assertIn("AI Agents", output)
+            self.assertIn("files that would change", output)
+
+    def test_hub_map_is_idempotent_and_replaces_generated_sections(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("Design systems one", "https://design.example/one", tags=["design-systems"], status="reef"),
+                Bookmark("Design systems two", "https://design.example/two", tags=["design-systems"], status="reef"),
+            ], vault_path, allow_duplicates=True)
+
+            with redirect_stdout(io.StringIO()):
+                first = main(["hub-map", "--vault", str(vault_path)])
+            after_first = {path: path.read_text(encoding="utf-8") for path in written}
+            with redirect_stdout(io.StringIO()):
+                second = main(["hub-map", "--vault", str(vault_path)])
+            after_second = {path: path.read_text(encoding="utf-8") for path in written}
+
+            self.assertEqual(first, 0)
+            self.assertEqual(second, 0)
+            self.assertEqual(after_second, after_first)
+            for text in after_second.values():
+                self.assertEqual(text.count("<!-- memoreef-connections:start -->"), 1)
+                self.assertEqual(text.count("[[MemoReef/Maps/Hub - Design Systems|Design Systems]]"), 1)
+
+    def test_hub_map_filters_noise_labels(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([
+                Bookmark("Spatial art one", "https://example.com/one?utm_source=news", folders=["Bookmarks Bar", "2024"], tags=["art", "utm_source", "Lesezeichenleiste", "Action Triage", "Google"], status="reef"),
+                Bookmark("Spatial art two", "https://example.com/two?utm_medium=email", folders=["Bookmarks Bar", "2024"], tags=["art", "12345", "Neuer Ordner", "Agent Brief", "Tool"], status="reef"),
+            ], vault_path, allow_duplicates=True)
+
+            with redirect_stdout(io.StringIO()):
+                result = main(["hub-map", "--vault", str(vault_path), "--min-drops", "2"])
+
+            maps_dir = vault_path / "MemoReef" / "Maps"
+            hub_names = {path.name for path in maps_dir.glob("Hub - *.md")}
+            index = (maps_dir / "Emerging Hubs.md").read_text(encoding="utf-8")
+            self.assertEqual(result, 0)
+            self.assertIn("Hub - Art.md", hub_names)
+            self.assertNotIn("Hub - Bookmarks Bar.md", hub_names)
+            self.assertNotIn("Hub - 2024.md", hub_names)
+            self.assertNotIn("Hub - Utm Source.md", hub_names)
+            self.assertNotIn("Bookmarks Bar", index)
+            self.assertNotIn("Utm Source", index)
+            self.assertNotIn("Lesezeichenleiste", index)
+            self.assertNotIn("Neuer Ordner", index)
+            self.assertNotIn("Action Triage", index)
+            self.assertNotIn("Agent Brief", index)
+            self.assertNotIn("Google", index)
+            self.assertNotIn("Tool", index)
+
+    def test_app_dashboard_detects_latest_hub_map(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([
+                Bookmark("Search archive one", "https://example.com/one", tags=["local-search"], status="reef"),
+                Bookmark("Search archive two", "https://example.com/two", tags=["local-search"], status="reef"),
+            ], vault_path, allow_duplicates=True)
+
+            with redirect_stdout(io.StringIO()):
+                hub_result = main(["hub-map", "--vault", str(vault_path)])
+            with redirect_stdout(io.StringIO()):
+                app_result = main(["app", "--vault", str(vault_path)])
+
+            html = (vault_path / "MemoReef" / "app" / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(hub_result, 0)
+            self.assertEqual(app_result, 0)
+            self.assertIn("Hub map", html)
+            self.assertIn("MemoReef/Maps/Emerging Hubs.md", html)
+            self.assertIn("hub-map", html)
+
 
 if __name__ == "__main__":
     unittest.main()

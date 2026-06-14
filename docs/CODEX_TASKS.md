@@ -695,3 +695,50 @@ Turn the Review Mode “agents finish” promise into a real local workflow for 
 - Existing tests still pass.
 
 Status: implemented in `54201a4 Add local reviewed drop tagging workflow`.
+
+## Task 28 — Obsidian hub map and graph links
+
+### Goal
+
+Turn reviewed/tagged Drops into visible Obsidian graph structure, not just frontmatter metadata. Tags help filtering; `[[links]]` create the clusters and larger hub nodes users expect in graph view.
+
+### Product lesson
+
+Real pilot testing showed that `tag-reviewed` successfully added tags, but the vault still felt flat because each Drop remained graph-isolated. The next layer must generate explicit map notes and Drop-to-hub links so users can see what connects and where hubs emerge.
+
+### Requirements
+
+- Add `python3 -m memoreef.cli hub-map --vault <vault>`.
+- Support `--dry-run`, `--min-drops`, `--max-hubs`, and optional `--output-dir`.
+- Read local Markdown Drops only.
+- Use reviewed useful Drops by default: `status: reef`, `status: deep`, or `pearl: true`.
+- Build deterministic hub labels from existing tags, projects, shoals, hostname, and refreshed metadata.
+- Filter obvious noise labels such as browser folder names, numeric folders, tracking parameters, and generic words.
+- Generate `<vault>/MemoReef/Maps/Emerging Hubs.md`.
+- Generate one hub note per selected hub under `<vault>/MemoReef/Maps/Hub - <Name>.md`.
+- Add or update a clearly marked generated section in linked Drops:
+
+```markdown
+<!-- memoreef-connections:start -->
+## MemoReef Connections
+
+- Hubs: [[MemoReef/Maps/Hub - Art|Art]], [[MemoReef/Maps/Hub - Augmented Reality|Augmented Reality]]
+
+<!-- memoreef-connections:end -->
+```
+
+- Preserve all existing frontmatter and user-written body text.
+- Re-running the command must update only the generated hub/map sections, not duplicate links.
+- Keep the command local-only: no network calls, no LLM calls, no external dependencies.
+- Update the generated static app/dashboard to detect and link the latest hub map.
+
+### Acceptance criteria
+
+- `hub-map --dry-run` reports candidate hubs, links, and files that would change without modifying Markdown.
+- `hub-map` creates an index map note plus hub notes with real `[[links]]` to Drops.
+- Reviewed/tagged Drops receive a generated `MemoReef Connections` section linking to relevant hub notes.
+- Obvious folder/noise labels are excluded from hubs by default.
+- Re-running `hub-map` is idempotent.
+- Existing tests still pass.
+
+Status: implemented in this Task 28 changeset.

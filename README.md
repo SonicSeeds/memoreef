@@ -107,6 +107,7 @@ Implemented:
 - Export and apply local Review Mode decisions.
 - Serve local Review Mode with direct vault autosave for decisions.
 - Generate agent finish plans, deterministic proposal drafts, and local agent tags for kept/Pearl Drops.
+- Generate Obsidian hub map notes and Drop-to-hub `[[links]]` so reviewed Drops form visible graph clusters.
 - Create duplicate, dead-link, metadata, garden suggestion, and library search reports.
 - Generate a refined static local app with dashboard, pilot, tour, library, review, reports, briefs, and Drop detail pages.
 - Provide a browser-only Review Mode prototype with sample data until a real review-session JSON is loaded, a non-functional mobile app mockup, and the live cinematic landing page at [memoreef.de](https://memoreef.de/).
@@ -252,6 +253,17 @@ python3.11 -m memoreef.cli apply-review-decisions --vault /tmp/memoreef-pilot --
 python3.11 -m memoreef.cli apply-review-decisions --vault /tmp/memoreef-pilot --decisions /path/to/memoreef-review-decisions.json
 python3.11 -m memoreef.cli app --vault /tmp/memoreef-pilot
 ```
+
+After review, create graph-visible hub notes and reopen the app:
+
+```bash
+python3.11 -m memoreef.cli hub-map --vault /tmp/memoreef-pilot --dry-run
+python3.11 -m memoreef.cli hub-map --vault /tmp/memoreef-pilot
+python3.11 -m memoreef.cli app --vault /tmp/memoreef-pilot
+open /tmp/memoreef-pilot/MemoReef/Maps/Emerging\ Hubs.md
+```
+
+`hub-map` is local-only. It reads reviewed useful Drops, creates `MemoReef/Maps/Emerging Hubs.md` plus per-hub notes, and writes a generated `MemoReef Connections` section with Obsidian `[[links]]` into linked Drops. Re-running it updates the generated sections instead of duplicating links.
 
 After review, create a small project brief and reopen the app:
 

@@ -2387,6 +2387,347 @@ def tag_reviewed_drops(vault: Path, root: str = "MemoReef", dry_run: bool = Fals
     }
 
 
+HUB_CONNECTIONS_START = "<!-- memoreef-connections:start -->"
+HUB_CONNECTIONS_END = "<!-- memoreef-connections:end -->"
+
+HUB_NOISE_LABELS = TAG_STOPWORDS | {
+    "all", "archive", "article", "articles", "bar", "bookmark-bar", "bookmarks-bar",
+    "browser", "click", "collection", "default", "folder", "folders", "home", "inbox",
+    "item", "items", "later", "link", "links", "misc", "mobile", "newsletter", "old",
+    "other", "personal", "private", "saved", "stuff", "tab", "tabs", "todo", "uncategorized",
+    "unfiled", "unsorted", "utm", "utm-campaign", "utm-content", "utm-medium", "utm-source",
+    "work", "www",
+    # Common browser/bookmark-folder sediment from real imports.
+    "lesezeichenleiste", "bookmarks", "bookmark", "bookmarks-menu", "favorites", "favourites",
+    "neuer-ordner", "new-folder", "zuvieletabsoffen", "too-many-tabs-open",
+    # Workflow/action labels are useful metadata, but bad graph hubs.
+    "action", "action-triage", "agent-brief", "brief", "brief-status", "drift-suggested",
+    "docs-google", "google", "google-docs", "google-drive", "drive-google",
+    "create", "generator", "generators", "tool", "tools", "youtube-watch",
+}
+
+HOST_NOISE_PARTS = {
+    "app", "blog", "cdn", "co", "com", "dev", "docs", "edu", "gov", "io", "net", "news",
+    "org", "uk", "www",
+}
+
+
+def strip_generated_hub_connections(content: str) -> str:
+    pattern = re.compile(
+        rf"\n*{re.escape(HUB_CONNECTIONS_START)}.*?{re.escape(HUB_CONNECTIONS_END)}\n*",
+        re.DOTALL,
+    )
+    return pattern.sub("\n", content).rstrip() + "\n"
+
+
+def hub_label_slug(label: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", label.casefold()).strip("-")
+
+
+def hub_label_from_raw(value: str) -> str:
+    acronyms = {"ai", "ar", "vr", "xr", "ui", "ux", "api", "llm"}
+    words = []
+    for part in re.split(r"[^A-Za-z0-9]+", value.strip()):
+        if not part:
+            continue
+        if part.casefold() in acronyms:
+            words.append(part.upper())
+        elif part.isupper() and len(part) <= 4:
+            words.append(part)
+        else:
+            words.append(part.capitalize())
+    return " ".join(words).strip()
+
+
+def hub_label_is_noise(label: str) -> bool:
+    slug = hub_label_slug(label)
+    compact = slug.replace("-", "")
+    if not slug or len(compact) < 3:
+        return True
+    if compact.isdigit() or re.fullmatch(r"\d{2,}", compact):
+        return True
+    if slug in HUB_NOISE_LABELS or compact in HUB_NOISE_LABELS:
+        return True
+    if slug.startswith("utm-"):
+        return True
+    parts = [part for part in slug.split("-") if part]
+    if parts and all(part in HUB_NOISE_LABELS or part in HOST_NOISE_PARTS for part in parts):
+        return True
+    return False
+
+
+def add_hub_label(scores: dict[str, dict[str, object]], raw_label: str, drop: dict[str, object], weight: int) -> None:
+    label = hub_label_from_raw(raw_label)
+    if hub_label_is_noise(label):
+        return
+    slug = hub_label_slug(label)
+    bucket = scores.setdefault(slug, {"label": label, "score": 0, "drops": {}})
+    bucket["score"] = int(bucket["score"]) + weight
+    drops = bucket["drops"]
+    if isinstance(drops, dict):
+        drops[str(drop.get("path") or "")] = drop
+
+
+def add_hub_tokens(scores: dict[str, dict[str, object]], text: str, drop: dict[str, object], weight: int) -> None:
+    for token in tag_tokens_from_text(text):
+        label = hub_label_from_raw(token)
+        add_hub_label(scores, label, drop, weight)
+
+
+def reviewed_hub_drop(frontmatter: dict[str, object]) -> bool:
+    return reviewed_drop_for_tagging(frontmatter)
+
+
+def hub_drop_item(path: Path, vault: Path) -> dict[str, object]:
+    relative_path = path.resolve().relative_to(vault.resolve()).as_posix()
+    content = path.read_text(encoding="utf-8", errors="replace")
+    frontmatter, body = parse_markdown_frontmatter(content)
+    url = str(frontmatter.get("url") or "")
+    canonical = str(frontmatter.get("canonical_url") or "")
+    hostname = str(frontmatter.get("hostname") or "") or (urlsplit(canonical or url).hostname or "")
+    return {
+        "path": relative_path,
+        "file": path,
+        "title": str(frontmatter.get("title") or path.stem),
+        "url": url,
+        "status": str(frontmatter.get("status") or "drift"),
+        "pearl": bool(frontmatter.get("pearl", False)),
+        "tags": garden_list(frontmatter.get("tags")),
+        "projects": garden_list(frontmatter.get("projects")),
+        "shoals": garden_list(frontmatter.get("shoals")),
+        "hostname": hostname.lower(),
+        "page_title": str(frontmatter.get("page_title") or ""),
+        "page_description": str(frontmatter.get("page_description") or ""),
+        "metadata_refreshed_at": str(frontmatter.get("metadata_refreshed_at") or ""),
+        "frontmatter": frontmatter,
+        "body": body,
+    }
+
+
+def load_reviewed_hub_drops(vault: Path, root: str = "MemoReef") -> list[dict[str, object]]:
+    vault_path = vault.expanduser().resolve()
+    drops_dir = vault_path / root / "Drops"
+    if not drops_dir.exists():
+        return []
+    drops: list[dict[str, object]] = []
+    for path in sorted(drops_dir.rglob("*.md")):
+        content = path.read_text(encoding="utf-8", errors="replace")
+        frontmatter, _body = parse_markdown_frontmatter(content)
+        if reviewed_hub_drop(frontmatter):
+            drops.append(hub_drop_item(path, vault_path))
+    return drops
+
+
+def hub_scores_for_drops(drops: list[dict[str, object]]) -> dict[str, dict[str, object]]:
+    scores: dict[str, dict[str, object]] = {}
+    for drop in drops:
+        for label in garden_list(drop.get("projects")):
+            add_hub_label(scores, label, drop, 6)
+        for label in garden_list(drop.get("shoals")):
+            add_hub_label(scores, label, drop, 5)
+        for label in garden_list(drop.get("tags")):
+            add_hub_label(scores, label, drop, 4)
+
+        hostname = str(drop.get("hostname") or "")
+        for part in hostname.split("."):
+            if part and part not in HOST_NOISE_PARTS:
+                add_hub_label(scores, part, drop, 1)
+
+        if str(drop.get("metadata_refreshed_at") or "") or str(drop.get("page_title") or drop.get("page_description") or ""):
+            add_hub_tokens(scores, str(drop.get("page_title") or ""), drop, 2)
+            add_hub_tokens(scores, str(drop.get("page_description") or ""), drop, 1)
+    return scores
+
+
+def selected_hubs(drops: list[dict[str, object]], min_drops: int, max_hubs: int) -> list[dict[str, object]]:
+    scores = hub_scores_for_drops(drops)
+    hubs: list[dict[str, object]] = []
+    for data in scores.values():
+        raw_drops = data.get("drops", {})
+        if not isinstance(raw_drops, dict):
+            continue
+        hub_drops = sorted(raw_drops.values(), key=lambda drop: str(drop.get("path") or ""))
+        if len(hub_drops) < min_drops:
+            continue
+        label = str(data.get("label") or "")
+        hubs.append(
+            {
+                "label": label,
+                "slug": hub_label_slug(label),
+                "score": int(data.get("score") or 0),
+                "drops": hub_drops,
+            }
+        )
+    return sorted(hubs, key=lambda hub: (-len(hub["drops"]), -int(hub["score"]), str(hub["label"])))[:max_hubs]
+
+
+def obsidian_note_target(path: Path, vault: Path) -> str:
+    relative = path.resolve().relative_to(vault.resolve()).with_suffix("").as_posix()
+    return relative
+
+
+def obsidian_link(path: Path, vault: Path, alias: str) -> str:
+    return f"[[{obsidian_note_target(path, vault)}|{alias}]]"
+
+
+def hub_note_path(output_dir: Path, label: str) -> Path:
+    safe_name = re.sub(r"[\\\\/:*?\"<>|]+", "-", label).strip() or "Untitled"
+    return output_dir / f"Hub - {safe_name}.md"
+
+
+def render_hub_index(vault: Path, root: str, output_dir: Path, hubs: list[dict[str, object]]) -> str:
+    lines = [
+        "# Emerging Hubs",
+        "",
+        "<!-- memoreef-hub-map:generated -->",
+        "",
+        f"- Source: `{root}/Drops`",
+        f"- Hubs: {len(hubs)}",
+        "",
+        "## Hubs",
+        "",
+    ]
+    if not hubs:
+        lines.append("No hubs met the current threshold.")
+    for hub in hubs:
+        label = str(hub["label"])
+        note = hub_note_path(output_dir, label)
+        lines.append(f"- {obsidian_link(note, vault, label)} ({len(hub['drops'])} Drops)")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_hub_note(vault: Path, root: str, label: str, drops: list[dict[str, object]]) -> str:
+    lines = [
+        f"# Hub - {label}",
+        "",
+        "<!-- memoreef-hub:generated -->",
+        "",
+        f"- Source: `{root}/Drops`",
+        f"- Drop count: {len(drops)}",
+        "",
+        "## Linked Drops",
+        "",
+    ]
+    for drop in drops:
+        path = vault / str(drop.get("path") or "")
+        title = str(drop.get("title") or path.stem)
+        lines.append(f"- {obsidian_link(path, vault, title)}")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def hub_connections_section(vault: Path, output_dir: Path, hubs: list[dict[str, object]]) -> str:
+    links = []
+    for hub in hubs:
+        label = str(hub["label"])
+        links.append(obsidian_link(hub_note_path(output_dir, label), vault, label))
+    return "\n".join(
+        [
+            HUB_CONNECTIONS_START,
+            "## MemoReef Connections",
+            "",
+            f"- Hubs: {', '.join(links)}",
+            "",
+            HUB_CONNECTIONS_END,
+            "",
+        ]
+    )
+
+
+def update_drop_hub_connections(content: str, vault: Path, output_dir: Path, hubs: list[dict[str, object]]) -> str:
+    base = strip_generated_hub_connections(content)
+    if not hubs:
+        return base
+    return base.rstrip() + "\n\n" + hub_connections_section(vault, output_dir, hubs)
+
+
+def create_hub_map(
+    vault: Path,
+    root: str = "MemoReef",
+    dry_run: bool = False,
+    min_drops: int = 2,
+    max_hubs: int = 100,
+    output_dir: Path | None = None,
+) -> dict[str, object]:
+    vault_path = vault.expanduser().resolve()
+    min_drops = max(1, min_drops)
+    max_hubs = max(1, max_hubs)
+    if output_dir is None:
+        maps_dir = vault_path / root / "Maps"
+    elif output_dir.is_absolute():
+        maps_dir = output_dir.expanduser().resolve()
+    else:
+        maps_dir = (vault_path / output_dir).expanduser().resolve()
+    try:
+        maps_dir.relative_to(vault_path)
+    except ValueError as error:
+        raise ValueError("--output-dir must be inside the vault so Obsidian links stay vault-relative") from error
+    drops = load_reviewed_hub_drops(vault_path, root)
+    hubs = selected_hubs(drops, min_drops, max_hubs)
+    hubs_by_drop: dict[str, list[dict[str, object]]] = {}
+    for hub in hubs:
+        for drop in hub["drops"]:
+            hubs_by_drop.setdefault(str(drop.get("path") or ""), []).append(hub)
+    for drop_hubs in hubs_by_drop.values():
+        drop_hubs.sort(key=lambda hub: str(hub["label"]))
+
+    planned_files: list[str] = []
+    changed_files: list[Path] = []
+    index_path = maps_dir / "Emerging Hubs.md"
+    index_text = render_hub_index(vault_path, root, maps_dir, hubs)
+    if not index_path.exists() or index_path.read_text(encoding="utf-8", errors="replace") != index_text:
+        planned_files.append(str(index_path))
+        changed_files.append(index_path)
+
+    hub_notes: list[Path] = []
+    for hub in hubs:
+        label = str(hub["label"])
+        note_path = hub_note_path(maps_dir, label)
+        hub_notes.append(note_path)
+        note_text = render_hub_note(vault_path, root, label, hub["drops"])
+        if not note_path.exists() or note_path.read_text(encoding="utf-8", errors="replace") != note_text:
+            planned_files.append(str(note_path))
+            changed_files.append(note_path)
+
+    drop_updates: list[str] = []
+    for drop in drops:
+        file_path = drop.get("file")
+        if not isinstance(file_path, Path):
+            continue
+        content = file_path.read_text(encoding="utf-8", errors="replace")
+        updated = update_drop_hub_connections(content, vault_path, maps_dir, hubs_by_drop.get(str(drop.get("path") or ""), []))
+        if updated != content:
+            drop_updates.append(str(drop.get("path") or ""))
+            planned_files.append(str(file_path))
+            changed_files.append(file_path)
+
+    if not dry_run:
+        maps_dir.mkdir(parents=True, exist_ok=True)
+        index_path.write_text(index_text, encoding="utf-8")
+        for hub in hubs:
+            label = str(hub["label"])
+            hub_note_path(maps_dir, label).write_text(render_hub_note(vault_path, root, label, hub["drops"]), encoding="utf-8")
+        for drop in drops:
+            file_path = drop.get("file")
+            if not isinstance(file_path, Path):
+                continue
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+            updated = update_drop_hub_connections(content, vault_path, maps_dir, hubs_by_drop.get(str(drop.get("path") or ""), []))
+            if updated != content:
+                file_path.write_text(updated, encoding="utf-8")
+
+    return {
+        "vault": vault_path,
+        "output_dir": maps_dir,
+        "index": index_path,
+        "reviewed_drops": len(drops),
+        "hubs": hubs,
+        "hub_notes": hub_notes,
+        "drop_updates": drop_updates,
+        "files_that_would_change": planned_files,
+        "changed_files": changed_files,
+    }
+
+
 def garden_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -2785,6 +3126,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
 
     latest_search_results = latest_matching_file(root_path / "search", ["*-search-results.json"])
     latest_project_brief = latest_matching_file(root_path / "briefs", ["*-project-brief.md"])
+    latest_hub_map = latest_matching_file(root_path / "Maps", ["Emerging Hubs.md"])
     has_metadata = vault_has_metadata(vault_path, root)
 
     return {
@@ -2807,6 +3149,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
 
         "latest_search_results": latest_search_results,
         "latest_project_brief": latest_project_brief,
+        "latest_hub_map": latest_hub_map,
         "next_action": recommended_next_action(
             total,
             drift,
@@ -2876,6 +3219,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
 
     latest_search_results = relative_or_none(state.get("latest_search_results"), vault)
     latest_project_brief = relative_or_none(state.get("latest_project_brief"), vault)
+    latest_hub_map = relative_or_none(state.get("latest_hub_map"), vault)
     next_action = html_escape(str(state.get("next_action", "Continue.")))
     vault_text = html_escape(str(vault))
 
@@ -2945,6 +3289,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
 
           <dt>Library search</dt><dd>{html_escape(latest_search_results)}</dd>
           <dt>Project brief</dt><dd>{html_escape(latest_project_brief)}</dd>
+          <dt>Hub map</dt><dd>{html_escape(latest_hub_map)}</dd>
         </dl>
       </div>
       <div class=\"card workflow\">
@@ -2959,6 +3304,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
 
           <li>Run <code>search-library</code> to search the local Library, then open <code>library.html</code>.</li>
           <li>Run <code>brief --project "AI Agents"</code> to export selected Drops into an agent-ready Markdown project brief.</li>
+          <li>Run <code>hub-map</code> to create Obsidian map notes and Drop-to-hub graph links.</li>
           <li>Open <code>briefs.html</code> and <code>reports.html</code> to inspect generated handoff Markdown and local report JSON.</li>
           <li>Run <code>export-review-session</code> with optional filtered review queues like <code>--project</code>, <code>--shoal</code>, or <code>--pearl-only</code>, then open <code>site/swipe.html</code> for Review Mode.</li>
           <li>Export decisions from Review Mode, then run <code>apply-review-decisions</code>.</li>
@@ -3407,6 +3753,7 @@ def render_pilot_page(vault: Path, root: str = "MemoReef") -> str:
     latest_review_session = state.get("latest_review_session")
     latest_duplicate_report = state.get("latest_duplicate_report")
     latest_project_brief = state.get("latest_project_brief")
+    latest_hub_map = state.get("latest_hub_map")
     review_mode = repo_root() / "site" / "swipe.html"
 
     detected = [
@@ -3569,6 +3916,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
     agent_proposals_payload = read_json_object(state.get("latest_agent_proposals"))
     search_payload = read_json_object(state.get("latest_search_results"))
     latest_project_brief = state.get("latest_project_brief")
+    latest_hub_map = state.get("latest_hub_map")
 
     mess_signals = [
         f"{counts.get('total', 0)} total Drops in local Markdown.",
@@ -3666,6 +4014,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
             linked_file("Latest garden suggestions JSON", state.get("latest_garden_suggestions"), app_dir),
             linked_file("Latest search results JSON", state.get("latest_search_results"), app_dir),
             linked_file("Latest project brief Markdown", state.get("latest_project_brief"), app_dir),
+            linked_file("Latest hub map Markdown", latest_hub_map, app_dir),
             linked_file("Latest agent finish plan JSON", state.get("latest_agent_plan"), app_dir),
             linked_file("Latest agent proposals JSON", state.get("latest_agent_proposals"), app_dir),
             linked_file("Latest review decisions JSON", state.get("latest_review_decisions"), app_dir),
@@ -3897,6 +4246,14 @@ def build_parser() -> argparse.ArgumentParser:
     tag_reviewed_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
     tag_reviewed_cmd.add_argument("--dry-run", action="store_true", help="Preview tags without modifying Markdown files.")
     tag_reviewed_cmd.add_argument("--limit", type=int, default=None, help="Tag only the first N Drops scanned.")
+
+    hub_map_cmd = sub.add_parser("hub-map", help="Create Obsidian hub map notes and Drop graph links.")
+    hub_map_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    hub_map_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    hub_map_cmd.add_argument("--dry-run", action="store_true", help="Preview hub notes and Drop links without modifying Markdown files.")
+    hub_map_cmd.add_argument("--min-drops", type=int, default=2, help="Minimum reviewed Drops required for a hub. Default: 2")
+    hub_map_cmd.add_argument("--max-hubs", type=int, default=100, help="Maximum hubs to generate. Default: 100")
+    hub_map_cmd.add_argument("--output-dir", type=Path, default=None, help="Output directory for map notes. Defaults to <vault>/MemoReef/Maps")
 
     gardens_cmd = sub.add_parser("suggest-gardens", help="Create local project and shoal suggestion report.")
     gardens_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -4238,6 +4595,49 @@ def main(argv: list[str] | None = None) -> int:
         if isinstance(warnings, list):
             for warning in warnings:
                 print(f"  - {warning}")
+        return 0
+
+    if args.command == "hub-map":
+        try:
+            result = create_hub_map(
+                args.vault,
+                args.root,
+                args.dry_run,
+                args.min_drops,
+                args.max_hubs,
+                args.output_dir,
+            )
+        except ValueError as error:
+            print(str(error))
+            return 1
+        hubs = result.get("hubs", [])
+        drop_updates = result.get("drop_updates", [])
+        files = result.get("files_that_would_change", [])
+        if args.dry_run:
+            print("Dry run hub map:")
+            print(f"- files that would change: {len(files) if isinstance(files, list) else 0}")
+        else:
+            print("Created hub map:")
+            changed_files = result.get("changed_files", [])
+            print(f"- files changed: {len(changed_files) if isinstance(changed_files, list) else 0}")
+        print(f"- reviewed Drops scanned: {result['reviewed_drops']}")
+        print(f"- selected hubs: {len(hubs) if isinstance(hubs, list) else 0}")
+        print(f"- Drop connection updates: {len(drop_updates) if isinstance(drop_updates, list) else 0}")
+        print(f"- index: {result['index']}")
+        if isinstance(hubs, list) and hubs:
+            print("- candidate hubs:")
+            for hub in hubs[:10]:
+                if not isinstance(hub, dict):
+                    continue
+                print(f"  - {hub.get('label')}: {len(hub.get('drops', []))} Drops")
+        if isinstance(drop_updates, list) and drop_updates:
+            print("- linked Drops:")
+            for path in drop_updates[:20]:
+                print(f"  - {path}")
+        if args.dry_run and isinstance(files, list) and files:
+            print("- files:")
+            for path in files[:20]:
+                print(f"  - {path}")
         return 0
 
     if args.command == "suggest-gardens":
