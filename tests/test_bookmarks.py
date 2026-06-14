@@ -4,12 +4,15 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 import urllib.error
+import urllib.request
 from unittest.mock import patch
 
 from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, parse_markdown_frontmatter, update_markdown_frontmatter, write_bookmarks_to_vault
 from memoreef.cli import main
+from memoreef.server import create_server
 
 
 class FakeHTTPHeaders:
@@ -999,6 +1002,62 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("shoals:", content)
             self.assertIn("## Summary", content)
             self.assertIn("## Agent Brief", content)
+
+    def test_local_server_review_session_and_decision_api(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault(
+                [
+                    Bookmark("Drift Source", "https://drift.example", status="drift"),
+                    Bookmark("Reef Source", "https://reef.example", status="reef"),
+                ],
+                vault_path,
+                allow_duplicates=True,
+            )
+            try:
+                server = create_server(vault_path, host="127.0.0.1", port=0, limit=50)
+            except PermissionError as error:
+                self.skipTest(f"localhost socket binding unavailable: {error}")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+            try:
+                with urllib.request.urlopen(f"{base_url}/api/review-session", timeout=5) as response:
+                    session_status = response.status
+                    session = json.loads(response.read().decode("utf-8"))
+
+                self.assertEqual(session_status, 200)
+                self.assertEqual([drop["title"] for drop in session["drops"]], ["Drift Source"])
+                self.assertEqual(session["filters"]["status"], ["drift"])
+                self.assertEqual(session["filters"]["limit"], 50)
+
+                relative = written[0].resolve().relative_to(vault_path.resolve()).as_posix()
+                payload = {
+                    "version": 1,
+                    "reviewed_at": "2026-06-14T12:00:00Z",
+                    "decisions": [{"id": relative, "path": relative, "decision": "pearl"}],
+                }
+                request = urllib.request.Request(
+                    f"{base_url}/api/review-decisions",
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    result_status = response.status
+                    result = json.loads(response.read().decode("utf-8"))
+
+                frontmatter, _body = parse_markdown_frontmatter(written[0].read_text(encoding="utf-8"))
+                self.assertEqual(result_status, 200)
+                self.assertEqual(result["updated"], 1)
+                self.assertEqual(result["skipped"], 0)
+                self.assertEqual(frontmatter["status"], "reef")
+                self.assertEqual(frontmatter["pearl"], True)
+                self.assertEqual(frontmatter["triaged_at"], "2026-06-14T12:00:00Z")
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
 
     def write_plan_decisions(self, path: Path, vault_path: Path, items: list[tuple[Path, str]]):
         decisions = []

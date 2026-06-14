@@ -1047,6 +1047,23 @@ def export_review_session(
     filters: dict[str, object] | None = None,
 ) -> tuple[Path, dict[str, object]]:
     vault_path = vault.expanduser().resolve()
+    filters = filters or default_review_filters()
+    payload = build_review_session_payload(vault_path, root, filters)
+
+    if output is None:
+        output = vault_path / root / "review-sessions" / f"{timestamp_for_filename()}-review-session.json"
+    output = output.expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return output, payload
+
+
+def build_review_session_payload(
+    vault: Path,
+    root: str = "MemoReef",
+    filters: dict[str, object] | None = None,
+) -> dict[str, object]:
+    vault_path = vault.expanduser().resolve()
     drops_dir = vault_path / root / "Drops"
     filters = filters or default_review_filters()
     drops = []
@@ -1059,11 +1076,6 @@ def export_review_session(
     limit = filters.get("limit")
     if isinstance(limit, int) and limit >= 0:
         drops = drops[:limit]
-
-    if output is None:
-        output = vault_path / root / "review-sessions" / f"{timestamp_for_filename()}-review-session.json"
-    output = output.expanduser().resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
 
     drift_count = sum(1 for drop in drops if drop.get("status") == "drift")
     payload = {
@@ -1079,8 +1091,7 @@ def export_review_session(
         "items": drops,
         "drops": drops,
     }
-    output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return output, payload
+    return payload
 
 
 def load_drop_items(vault: Path, root: str = "MemoReef") -> list[dict[str, object]]:
@@ -1109,9 +1120,18 @@ def apply_review_decisions(
     root: str = "MemoReef",
     dry_run: bool = False,
 ) -> tuple[int, int, list[str]]:
+    payload = json.loads(decisions.expanduser().read_text(encoding="utf-8"))
+    return apply_review_decision_payload(vault, payload, root, dry_run)
+
+
+def apply_review_decision_payload(
+    vault: Path,
+    payload: dict[str, object],
+    root: str = "MemoReef",
+    dry_run: bool = False,
+) -> tuple[int, int, list[str]]:
     vault_path = vault.expanduser().resolve()
     drops_dir = (vault_path / root / "Drops").resolve()
-    payload = json.loads(decisions.expanduser().read_text(encoding="utf-8"))
     reviewed_at = payload.get("reviewed_at") or utc_now_iso()
     decision_items = payload.get("decisions")
 
@@ -3684,6 +3704,13 @@ def build_parser() -> argparse.ArgumentParser:
     app_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     app_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
 
+    serve_cmd = sub.add_parser("serve", help="Serve local Review Mode and write decisions directly to the vault.")
+    serve_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    serve_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    serve_cmd.add_argument("--host", default="127.0.0.1", help="Bind host. Default: 127.0.0.1")
+    serve_cmd.add_argument("--port", type=int, default=8765, help="Bind port. Default: 8765")
+    serve_cmd.add_argument("--limit", type=int, default=50, help="Maximum Drift Drops to load into Review Mode. Default: 50")
+
     demo_cmd = sub.add_parser("demo", help="Create a complete local MemoReef demo vault.")
     demo_cmd.add_argument("--output", type=Path, required=True, help="Directory where the demo vault should be created.")
     demo_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the demo vault. Default: MemoReef")
@@ -4017,6 +4044,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "app":
         output = generate_app_dashboard(args.vault, args.root)
         print(f"Generated MemoReef app dashboard: {output}")
+        return 0
+
+    if args.command == "serve":
+        from .server import serve
+
+        serve(args.vault, args.root, args.host, args.port, args.limit)
         return 0
 
     if args.command == "demo":
