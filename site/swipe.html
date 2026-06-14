@@ -357,11 +357,32 @@
       padding: 0 22px 22px;
     }
     .url {
-      display: block;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      max-width: 100%;
+      padding: 9px 11px;
+      border: 1px solid rgba(103,245,211,.2);
+      border-radius: 999px;
+      background: rgba(103,245,211,.07);
       overflow-wrap: anywhere;
-      color: var(--dim);
+      color: #c9fff4;
       font-size: 12px;
       text-decoration: none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.045);
+    }
+    .url::before {
+      content: "Open source ↗";
+      flex: 0 0 auto;
+      color: var(--reef);
+      font-weight: 850;
+    }
+    .url:hover,
+    .url:focus-visible {
+      border-color: rgba(103,245,211,.48);
+      background: rgba(103,245,211,.13);
+      color: var(--ink);
+      outline: none;
     }
 
     .actions {
@@ -686,7 +707,7 @@
           </div>
 
           <div class="card-bottom">
-            <a class="url" id="cardUrl" href="https://example.com/local-agents">example.com/local-agents</a>
+            <a class="url" id="cardUrl" href="https://example.com/local-agents" target="_blank" rel="noopener noreferrer">example.com/local-agents</a>
           </div>
         </article>
       </div>
@@ -1048,6 +1069,7 @@
 
     function pointerDown(event) {
       if (!drops[state.index]) return;
+      if (event.target.closest('a, button, input, label, select, textarea')) return;
       drag = {
         pointerId: event.pointerId,
         startX: event.clientX,
