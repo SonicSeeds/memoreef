@@ -126,6 +126,8 @@ MemoReef is being built with focused Codex tasks that keep changes small, review
 
 See [docs/GRANT_BRIEF.md](docs/GRANT_BRIEF.md) for the grant-oriented project narrative.
 
+For common questions about local-first storage, Obsidian support, agent use, and roadmap scope, see [docs/FAQ.md](docs/FAQ.md).
+
 ## Screenshots
 
 ![MemoReef full landing page from surface to octopus reef](docs/screenshots/landing-page-full-text-pearl.png)
