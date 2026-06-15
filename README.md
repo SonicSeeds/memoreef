@@ -128,7 +128,7 @@ See [docs/GRANT_BRIEF.md](docs/GRANT_BRIEF.md) for the grant-oriented project na
 
 ## Screenshots
 
-![MemoReef live landing page Octopus/Pearls section](docs/screenshots/landing-page.png)
+![MemoReef full landing page from surface to octopus reef](docs/screenshots/landing-page-full.png)
 
 | Review Mode local app: autosaves to vault | Mobile app mockup: visual only |
 | --- | --- |
