@@ -4,6 +4,8 @@
 
 MemoReef imports browser bookmarks, plain URL lists, and simple CSV link exports into an Obsidian-compatible Markdown vault and turns saved links into an agent-readable source library for future projects.
 
+Want the Obsidian-specific walkthrough? See [Use MemoReef with Obsidian](https://memoreef.de/obsidian.html).
+
 ## Install and run locally
 
 MemoReef is a local Python app. It does not need a server, account, database, or API key.
