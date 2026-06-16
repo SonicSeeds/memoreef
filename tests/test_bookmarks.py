@@ -93,6 +93,14 @@ class BookmarkImportTests(unittest.TestCase):
 
         self.assertIn('triaged_at: "2026-06-11T12:00:00Z"', content)
 
+    def test_title_with_internal_quotes_writes_valid_frontmatter(self):
+        content = bookmark_to_markdown(Bookmark('Example "quoted" title', "https://example.com"))
+
+        frontmatter, _body = parse_markdown_frontmatter(content)
+
+        self.assertIn('title: "Example \\"quoted\\" title"', content)
+        self.assertEqual(frontmatter["title"], 'Example "quoted" title')
+
     def test_canonicalize_url_strips_tracking_params(self):
         self.assertEqual(
             canonicalize_url("HTTPS://Example.COM/CaseSensitive/Path?keep=1&utm_source=news&fbclid=abc&GCLID=xyz"),
@@ -1072,6 +1080,157 @@ class BookmarkImportTests(unittest.TestCase):
                 server.shutdown()
                 thread.join(timeout=5)
                 server.server_close()
+
+    def test_local_server_drop_endpoint_writes_url_and_title(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            try:
+                server = create_server(vault_path, host="127.0.0.1", port=0, limit=50)
+            except PermissionError as error:
+                self.skipTest(f"localhost socket binding unavailable: {error}")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/drop",
+                    data=json.dumps({"url": " https://example.com/page ", "title": " Page title "}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    status_code = response.status
+                    payload = json.loads(response.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+            written = [Path(path) for path in payload["written"]]
+            content = written[0].read_text(encoding="utf-8")
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["ok"], True)
+        self.assertEqual(len(written), 1)
+        self.assertTrue(written[0].is_absolute())
+        self.assertIn('title: "Page title"', content)
+        self.assertIn('url: "https://example.com/page"', content)
+        self.assertIn("# Page title", content)
+
+    def test_local_server_drop_endpoint_writes_and_truncates_selection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            selection = "First selected line\n" + ("x" * 4100)
+            try:
+                server = create_server(vault_path, host="127.0.0.1", port=0, limit=50)
+            except PermissionError as error:
+                self.skipTest(f"localhost socket binding unavailable: {error}")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/drop",
+                    data=json.dumps({"url": "https://example.com/selection", "title": "", "selection": selection}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+            written = Path(payload["written"][0])
+            content = written.read_text(encoding="utf-8")
+            frontmatter, _body = parse_markdown_frontmatter(content)
+
+        self.assertEqual(frontmatter["title"], "https://example.com/selection")
+        self.assertIn("## Clipped selection", content)
+        self.assertIn("> First selected line", content)
+        self.assertIn("> " + ("x" * 3980), content)
+        self.assertNotIn("x" * 4001, content)
+
+    def test_local_server_drop_endpoint_rejects_invalid_json_and_missing_url(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            try:
+                server = create_server(vault_path, host="127.0.0.1", port=0, limit=50)
+            except PermissionError as error:
+                self.skipTest(f"localhost socket binding unavailable: {error}")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                invalid_request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/drop",
+                    data=b"{",
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as invalid_error:
+                    urllib.request.urlopen(invalid_request, timeout=5)
+
+                missing_url_request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/drop",
+                    data=json.dumps({"title": "No URL"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as missing_error:
+                    urllib.request.urlopen(missing_url_request, timeout=5)
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(invalid_error.exception.code, 400)
+        self.assertEqual(missing_error.exception.code, 400)
+        self.assertFalse((vault_path / "MemoReef" / "Drops").exists())
+
+    def test_local_server_api_options_returns_cors_headers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            try:
+                server = create_server(vault_path, host="127.0.0.1", port=0, limit=50)
+            except PermissionError as error:
+                self.skipTest(f"localhost socket binding unavailable: {error}")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(f"http://127.0.0.1:{server.server_port}/api/drop", method="OPTIONS")
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    status_code = response.status
+                    headers = response.headers
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(status_code, 204)
+        self.assertEqual(headers["Access-Control-Allow-Origin"], "*")
+        self.assertEqual(headers["Access-Control-Allow-Methods"], "GET, POST, OPTIONS")
+        self.assertEqual(headers["Access-Control-Allow-Headers"], "Content-Type")
+
+    def test_local_server_options_rejects_non_bookmarklet_api_cors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            try:
+                server = create_server(vault_path, host="127.0.0.1", port=0, limit=50)
+            except PermissionError as error:
+                self.skipTest(f"localhost socket binding unavailable: {error}")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(f"http://127.0.0.1:{server.server_port}/api/review-decisions", method="OPTIONS")
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(request, timeout=5)
+                headers = error.exception.headers
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(error.exception.code, 404)
+        self.assertIsNone(headers.get("Access-Control-Allow-Origin"))
 
     def test_review_mode_urls_include_localhost_and_lan_addresses(self):
         self.assertTrue(is_loopback_bind("127.0.0.1"))

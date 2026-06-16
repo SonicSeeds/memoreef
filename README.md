@@ -226,6 +226,24 @@ open http://127.0.0.1:8765/
 
 The local app opens Review Mode, loads Drift Drops from the vault, and autosaves decisions directly back to the Markdown files as you sort.
 
+## Clip the current browser tab
+
+Start the local MemoReef server against the vault you want to write to:
+
+```bash
+memoreef serve --vault /path/to/vault
+```
+
+Then create a browser bookmark named `Drop to Reef` and paste this bookmarklet as the bookmark URL:
+
+```text
+javascript:(function(){const d={url:window.location.href,title:document.title,selection:String(window.getSelection())};fetch('http://127.0.0.1:8765/api/drop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(r=>{if(!r.ok)throw new Error();return r.json();}).then(()=>alert('💧 Dropped to Reef!')).catch(()=>alert('❌ MemoReef local server is not running on http://127.0.0.1:8765.'));})();
+```
+
+Click `Drop to Reef` on any page to save the current tab URL and title as a new Markdown Drop in the connected vault. If text is highlighted on the page, MemoReef clips that selection into the Drop under `## Clipped selection`.
+
+This is a localhost-only bridge to your own running `memoreef serve` process, not a browser extension or hosted sync service.
+
 Phone/LAN/Tailscale mode uses the same real Review Mode and the same local Markdown writes. Each user runs this on their own computer against their own vault:
 
 ```bash

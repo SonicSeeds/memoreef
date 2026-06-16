@@ -24,6 +24,7 @@ class Bookmark:
     projects: list[str] = field(default_factory=list)
     shoals: list[str] = field(default_factory=list)
     triaged_at: str | None = None
+    clipped_selection: str | None = None
 
 
 class BrowserBookmarkParser(HTMLParser):
@@ -360,6 +361,15 @@ def bookmark_to_markdown(bookmark: Bookmark) -> str:
         "",
         f"Source: [{bookmark.url}]({bookmark.url})",
         "",
+    ])
+    if bookmark.clipped_selection:
+        lines.extend([
+            "## Clipped selection",
+            "",
+            *[f"> {line}" if line else ">" for line in bookmark.clipped_selection.splitlines()],
+            "",
+        ])
+    lines.extend([
         "## Summary",
         "",
         "_Not enriched yet._",

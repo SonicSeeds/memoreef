@@ -7,6 +7,7 @@ from pathlib import Path
 import socket
 from urllib.parse import parse_qs, urlparse
 
+from .bookmarks import Bookmark, write_bookmarks_to_vault
 from .cli import apply_review_decision_payload, build_review_session_payload, default_review_filters, tag_reviewed_drops
 
 
@@ -30,6 +31,7 @@ class MemoReefHTTPServer(ThreadingHTTPServer):
 
 class MemoReefRequestHandler(BaseHTTPRequestHandler):
     server: MemoReefHTTPServer
+    cors_api_paths = {"/api/drop"}
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -57,6 +59,16 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
             return
         self.send_error_json(404, "Not found")
 
+    def do_OPTIONS(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path in self.cors_api_paths:
+            self.send_response(204)
+            self.send_cors_headers()
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
+        self.send_error_json(404, "Not found")
+
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/review-decisions":
@@ -64,6 +76,9 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/tag-reviewed":
             self.handle_tag_reviewed()
+            return
+        if parsed.path == "/api/drop":
+            self.handle_drop()
             return
         self.send_error_json(404, "Not found")
 
@@ -86,27 +101,52 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
         self.send_json(payload)
 
     def handle_review_decisions(self) -> None:
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            self.send_error_json(400, "Invalid Content-Length")
-            return
-        if length <= 0:
-            self.send_error_json(400, "Missing JSON body")
-            return
-
-        try:
-            payload = json.loads(self.rfile.read(length).decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            self.send_error_json(400, f"Invalid JSON: {error}")
-            return
-        if not isinstance(payload, dict):
-            self.send_error_json(400, "JSON body must be an object")
+        payload = self.read_json_object_body()
+        if payload is None:
             return
 
         updated, skipped, warnings = apply_review_decision_payload(self.server.vault, payload, self.server.root)
         status = 200 if skipped == 0 else 207
         self.send_json({"ok": skipped == 0, "updated": updated, "skipped": skipped, "warnings": warnings}, status=status)
+
+    def handle_drop(self) -> None:
+        payload = self.read_json_object_body()
+        if payload is None:
+            return
+
+        url = str(payload.get("url") or "").strip()
+        if not url:
+            self.send_error_json(400, "url is required")
+            return
+        if not (url.startswith("http://") or url.startswith("https://")):
+            self.send_error_json(400, "url must start with http:// or https://")
+            return
+
+        title = str(payload.get("title") or "").strip() or url
+        selection = str(payload.get("selection") or "").strip()[:4000]
+        bookmark = Bookmark(title=title, url=url, clipped_selection=selection or None)
+        written = write_bookmarks_to_vault([bookmark], self.server.vault, self.server.root, allow_duplicates=True)
+        self.send_json({"ok": True, "written": [str(path) for path in written]})
+
+    def read_json_object_body(self) -> dict[str, object] | None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self.send_error_json(400, "Invalid Content-Length")
+            return None
+        if length <= 0:
+            self.send_error_json(400, "Missing JSON body")
+            return None
+
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            self.send_error_json(400, f"Invalid JSON: {error}")
+            return None
+        if not isinstance(payload, dict):
+            self.send_error_json(400, "JSON body must be an object")
+            return None
+        return payload
 
     def send_static_file(self, path: Path, content_type: str) -> None:
         try:
@@ -133,11 +173,18 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        if urlparse(self.path).path in self.cors_api_paths:
+            self.send_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
     def send_error_json(self, status: int, message: str) -> None:
         self.send_json({"ok": False, "error": message}, status=status)
+
+    def send_cors_headers(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     @staticmethod
     def content_type_for_path(path: str) -> str:
