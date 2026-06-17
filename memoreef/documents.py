@@ -24,18 +24,18 @@ class DocumentImportResult:
     warning: str | None = None
 
 
-def parse_documents(paths: list[Path], ocr: bool = False) -> tuple[list[Bookmark], list[str]]:
+def parse_documents(paths: list[Path], ocr: bool = False, ocr_lang: str | None = None) -> tuple[list[Bookmark], list[str]]:
     bookmarks: list[Bookmark] = []
     warnings: list[str] = []
     for path in paths:
-        result = parse_document(path, ocr=ocr)
+        result = parse_document(path, ocr=ocr, ocr_lang=ocr_lang)
         bookmarks.append(result.bookmark)
         if result.warning:
             warnings.append(result.warning)
     return bookmarks, warnings
 
 
-def parse_document(path: Path, ocr: bool = False) -> DocumentImportResult:
+def parse_document(path: Path, ocr: bool = False, ocr_lang: str | None = None) -> DocumentImportResult:
     source = path.expanduser().resolve()
     suffix = source.suffix.lower()
     if suffix not in SUPPORTED_DOCUMENT_SUFFIXES:
@@ -50,12 +50,12 @@ def parse_document(path: Path, ocr: bool = False) -> DocumentImportResult:
     elif suffix == ".pdf":
         text = extract_pdf_text(source)
         if not text.strip() and ocr:
-            text, warning = extract_pdf_ocr_text(source)
+            text, warning = extract_pdf_ocr_text(source, lang=ocr_lang)
         elif not text.strip():
             warning = f"{source.name}: no extractable PDF text found; run import-docs --ocr after installing tesseract and pdftoppm/poppler for scanned/image PDFs."
     elif suffix in IMAGE_DOCUMENT_SUFFIXES:
         if ocr:
-            text, warning = extract_image_ocr_text(source)
+            text, warning = extract_image_ocr_text(source, lang=ocr_lang)
         else:
             text = ""
             warning = f"{source.name}: image files need OCR; rerun with --ocr after installing tesseract."
@@ -125,13 +125,16 @@ def extract_pdf_text(path: Path) -> str:
     return normalize_document_text("\n".join(part for part in text_parts if part.strip()))
 
 
-def extract_image_ocr_text(path: Path) -> tuple[str, str | None]:
+def extract_image_ocr_text(path: Path, lang: str | None = None) -> tuple[str, str | None]:
     tesseract = shutil.which("tesseract")
     if not tesseract:
         return "", f"{path.name}: OCR requested but tesseract is not installed or not on PATH."
     try:
+        command = [tesseract, str(path), "stdout"]
+        if lang:
+            command.extend(["-l", lang])
         completed = subprocess.run(
-            [tesseract, str(path), "stdout"],
+            command,
             check=False,
             capture_output=True,
             text=True,
@@ -150,7 +153,7 @@ def extract_image_ocr_text(path: Path) -> tuple[str, str | None]:
     return text, None
 
 
-def extract_pdf_ocr_text(path: Path) -> tuple[str, str | None]:
+def extract_pdf_ocr_text(path: Path, lang: str | None = None) -> tuple[str, str | None]:
     pdftoppm = shutil.which("pdftoppm")
     if not pdftoppm:
         return "", f"{path.name}: OCR requested for PDF, but pdftoppm/poppler is not installed or not on PATH."
@@ -174,7 +177,7 @@ def extract_pdf_ocr_text(path: Path) -> tuple[str, str | None]:
         parts: list[str] = []
         warnings: list[str] = []
         for index, page in enumerate(pages, start=1):
-            text, warning = extract_image_ocr_text(page)
+            text, warning = extract_image_ocr_text(page, lang=lang)
             if text:
                 parts.append(f"### Page {index}\n\n{text}")
             if warning:

@@ -39,7 +39,7 @@ MemoReef writes the extracted text into a `## Document text` section and keeps s
 
 ## What about scanned PDFs, images, or graphics inside PDFs?
 
-Text-based PDFs can be imported directly. Scanned/image PDFs can use `import-docs --ocr` when local OCR tools are installed (`tesseract`; scanned PDFs also need `pdftoppm`/Poppler). Graphics-heavy documents still need a later figure-aware vision layer before diagrams and charts can be described reliably.
+Text-based PDFs can be imported directly. Scanned/image PDFs can use `import-docs --ocr` when local OCR tools are installed (`tesseract`; scanned PDFs also need `pdftoppm`/Poppler). For German or mixed-language documents, pass `--ocr-lang deu+eng`. Graphics-heavy documents still need a later figure-aware vision layer before diagrams and charts can be described reliably.
 
 ## What is not implemented yet?
 

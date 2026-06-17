@@ -409,8 +409,12 @@ endstream endobj
         with tempfile.TemporaryDirectory() as tmp:
             bin_dir = Path(tmp) / "bin"
             bin_dir.mkdir()
+            args_file = Path(tmp) / "tesseract-args.txt"
             fake_tesseract = bin_dir / "tesseract"
-            fake_tesseract.write_text("#!/bin/sh\nprintf 'OCR source text\\nFrom diagram'\n", encoding="utf-8")
+            fake_tesseract.write_text(
+                f"#!/bin/sh\nprintf '%s\\n' \"$@\" > {args_file}\nprintf 'OCR source text\\nFrom diagram'\n",
+                encoding="utf-8",
+            )
             fake_tesseract.chmod(0o755)
             image_path = Path(tmp) / "diagram.png"
             vault_path = Path(tmp) / "vault"
@@ -420,18 +424,21 @@ endstream endobj
             os.environ["PATH"] = f"{bin_dir}{os.pathsep}{old_path}"
             try:
                 with redirect_stdout(stdout):
-                    result = main(["import-docs", "--ocr", str(image_path), "--vault", str(vault_path)])
+                    result = main(["import-docs", "--ocr", "--ocr-lang", "deu+eng", str(image_path), "--vault", str(vault_path)])
             finally:
                 os.environ["PATH"] = old_path
 
             content = next((vault_path / "MemoReef" / "Drops").glob("*.md")).read_text(encoding="utf-8")
             frontmatter, _body = parse_markdown_frontmatter(content)
+            tesseract_args = args_file.read_text(encoding="utf-8")
 
         self.assertEqual(result, 0)
         self.assertEqual(frontmatter["document_type"], "png")
         self.assertIn('  - "ocr"', content)
         self.assertIn("OCR source text", content)
         self.assertIn("From diagram", content)
+        self.assertIn("-l", tesseract_args)
+        self.assertIn("deu+eng", tesseract_args)
 
     def test_import_docs_ocr_pdf_warns_without_renderer(self):
         stdout = io.StringIO()

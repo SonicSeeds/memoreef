@@ -85,9 +85,10 @@ memoreef import-links /path/to/links.txt --vault /tmp/memoreef-vault
 memoreef import-csv /path/to/links.csv --vault /tmp/memoreef-vault
 memoreef import-docs /path/to/research.pdf /path/to/brief.docx --vault /tmp/memoreef-vault
 memoreef import-docs --ocr /path/to/scanned.pdf /path/to/diagram.png --vault /tmp/memoreef-vault
+memoreef import-docs --ocr --ocr-lang deu+eng /path/to/german-scan.pdf --vault /tmp/memoreef-vault
 ```
 
-`import-docs` turns PDFs, DOCX files, text files, Markdown files, and image files into local Markdown Drops with source-file metadata and a `## Document text` section. It is useful for NotebookLM-style source collection when you want the durable output to stay in your own Markdown/Obsidian memory instead of a hosted notebook. Text-based PDFs work directly. Scanned/image PDFs and image files need `--ocr` plus local OCR tools (`tesseract`; scanned PDFs also need `pdftoppm`/Poppler).
+`import-docs` turns PDFs, DOCX files, text files, Markdown files, and image files into local Markdown Drops with source-file metadata and a `## Document text` section. It is useful for NotebookLM-style source collection when you want the durable output to stay in your own Markdown/Obsidian memory instead of a hosted notebook. Text-based PDFs work directly. Scanned/image PDFs and image files need `--ocr` plus local OCR tools (`tesseract`; scanned PDFs also need `pdftoppm`/Poppler). Use `--ocr-lang` for non-English documents, for example `deu+eng`.
 
 ## Product shape
 
