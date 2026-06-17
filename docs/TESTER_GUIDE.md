@@ -54,6 +54,12 @@ python -m pip install -e .
 
 If `python3.11` is not available, install Python 3.11+ first, then repeat the venv step.
 
+```bash
+python scripts/smoke_tester_readiness.py
+```
+
+It creates a temporary sample vault, imports example bookmarks, imports a URL list and a local Markdown document, exports a review session, regenerates the local app, checks key output files, then deletes the temporary vault. If this passes, the basic tester path is alive. A small green light. Not a religion.
+
 ## 2. Run the sample pilot first
 
 This checks that the install works before you use your own data.
@@ -181,7 +187,7 @@ Current limits:
 - No Obsidian plugin yet.
 - No full article extraction yet.
 - No LLM summaries yet.
-- OCR extracts text from scanned/image files, but it does not intelligently explain charts, diagrams, or figures.
+- OCR extracts text from scanned/image files. Optional vision hooks can add visual/numeric artifacts, including calibrated vertical-bar digitized estimates, but broad chart/diagram understanding is still limited.
 - Use a small test vault first before importing a large personal archive.
 
 ## Privacy note
