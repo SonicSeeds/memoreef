@@ -71,6 +71,8 @@ By default this binds only to `127.0.0.1`, loads up to 50 Drift Drops, and autos
 
 The local app also includes **Import Dock**: a drag-and-drop/upload area for PDFs, DOCX, TXT, Markdown, and image files. It writes uploaded files directly into the selected vault as Markdown Drops. Enable OCR in Import Dock for scanned PDFs or images when local OCR tools are installed.
 
+![MemoReef local Review Mode with Import Dock](docs/screenshots/import-dock-local-ui.png)
+
 For phone triage on a trusted LAN or Tailscale network, start the same local app on the computer that has the vault:
 
 ```bash
