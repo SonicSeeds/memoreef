@@ -16,7 +16,7 @@ AI tools are strongest when they can work from grounded, user-owned context. But
 
 MemoReef turns saved sources into local Markdown Drops. A Drop is a small, readable note representing a saved source. It includes core fields such as title, URL, type, status, agent readiness, pearl state, folders, tags, import source, and other frontmatter designed to work well in Obsidian and with future agent workflows.
 
-The current CLI imports Netscape-style browser bookmark HTML, plain text URL lists, and CSV files with title, URL, source, and tags. It writes one Markdown file per source into an Obsidian-compatible vault structure. It also includes import inspection, URL canonicalization and dedupe behavior, import logs, and triage-ready frontmatter. These are early building blocks, but they establish the durable storage model and testing discipline needed for later enrichment and retrieval features.
+The current CLI imports Netscape-style browser bookmark HTML, plain text URL lists, CSV files with title, URL, source, and tags, plus local PDFs, DOCX files, text files, and Markdown documents through `import-docs`. It writes one Markdown file per source into an Obsidian-compatible vault structure. It also includes import inspection, URL canonicalization and dedupe behavior, import logs, document-text frontmatter, and triage-ready fields. These are early building blocks, but they establish the durable storage model and testing discipline needed for later enrichment, OCR, and retrieval features.
 
 ## Why Local-First And Markdown-Native Matters
 

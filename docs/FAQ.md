@@ -14,7 +14,7 @@ Not primarily. MemoReef is a source library for saved links, bookmarks, notes, a
 
 ## What are Drops, Drift, Reef, and Pearls?
 
-- **Drops** are saved links or imported bookmarks.
+- **Drops** are saved links, highlighted passages, imported bookmarks, or local documents.
 - **Drift** is the unsorted inbox for new Drops.
 - **Reef** is the reviewed source library.
 - **Pearls** are high-value sources worth citing, revisiting, or handing to agents.
@@ -25,11 +25,25 @@ Yes. MemoReef stores sources as structured Markdown with metadata, tags, status,
 
 ## What works today?
 
-MemoReef can import browser bookmark exports, URL lists, and CSV files; generate Markdown Drops; run a local Review Mode app; autosave Keep/Pearl/Sink decisions; create reports; generate hub maps; and build a static local app view.
+MemoReef can import browser bookmark exports, URL lists, CSV files, PDFs, DOCX files, text files, and Markdown files; clip highlighted web text through a localhost bookmarklet; generate Markdown Drops; run a local Review Mode app; autosave Keep/Pearl/Sink decisions; create reports; generate hub maps; and build a static local app view.
+
+## Can MemoReef import PDFs and DOCX files?
+
+Yes. Use `import-docs` to turn local PDFs, DOCX files, text files, and Markdown files into source-memory Drops:
+
+```bash
+memoreef import-docs /path/to/research.pdf /path/to/brief.docx --vault /tmp/memoreef-vault
+```
+
+MemoReef writes the extracted text into a `## Document text` section and keeps source-file metadata in frontmatter. This is meant for NotebookLM-style source collection with Markdown/Obsidian output.
+
+## What about scanned PDFs, images, or graphics inside PDFs?
+
+Text-based PDFs can be imported today. Scanned/image PDFs and graphics-heavy documents need an OCR or visual-analysis step before their image content can become searchable Markdown. MemoReef currently warns when no extractable PDF text is found; OCR for image-heavy documents is a roadmap feature.
 
 ## What is not implemented yet?
 
-Full article extraction, LLM summarization, deep semantic tagging, a browser extension, an Obsidian plugin, and hosted multi-device sync are not part of the current MVP.
+OCR for scanned PDFs/images, full article extraction, LLM summarization, deep semantic tagging, a browser extension, an Obsidian plugin, Notion/API connectors, and hosted multi-device sync are not part of the current MVP.
 
 ## Is the mobile app real?
 
@@ -48,6 +62,10 @@ For a guided local pilot:
 ```bash
 memoreef pilot --bookmarks /path/to/bookmarks.html --vault /tmp/memoreef-pilot --review-limit 25
 ```
+
+## Can I use Notion or other apps as sources?
+
+Not directly through an API yet. The practical path today is export-first: export from Notion or another app to Markdown, CSV, text, or PDF, then import those files into MemoReef. Direct app connectors should come after the local Markdown import path is stable.
 
 ## Does MemoReef send my bookmarks to an external service?
 
