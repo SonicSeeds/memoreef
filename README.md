@@ -118,6 +118,18 @@ memoreef import-docs --ocr --ocr-lang deu+eng /path/to/german-scan.pdf --vault /
 
 `import-docs` turns PDFs, DOCX files, text files, Markdown files, and image files into local Markdown Drops with source-file metadata and a `## Document text` section. It is useful for NotebookLM-style source collection when you want the durable output to stay in your own Markdown/Obsidian memory instead of a hosted notebook. Text-based PDFs work directly. Scanned/image PDFs and image files need `--ocr` plus local OCR tools (`tesseract`; scanned PDFs also need `pdftoppm`/Poppler). Use `--ocr-lang` for non-English documents, for example `deu+eng`.
 
+For research papers, MemoReef also adds a `## Visual artifacts` section when it sees figure/table captions or table-like text in extracted PDF content. Optional page-image analysis is available through `--vision-command`, which renders the first PDF pages with Poppler and passes each page image to your own local or cloud vision command. This is off by default, so MemoReef stays local-first and does not require a vision model.
+
+Example optional vision hook:
+
+```bash
+memoreef import-docs paper.pdf --vault /tmp/memoreef-vault \
+  --vision-command 'your-vision-cli --image {image} --prompt "{prompt}"' \
+  --vision-page-limit 3
+```
+
+The command template supports `{image}`, `{page}`, and `{prompt}` placeholders.
+
 ## Product shape
 
 MemoReef is a private source memory layer, not a generic bookmark manager:
@@ -138,6 +150,7 @@ Implemented:
 - Import plain text URL lists.
 - Import CSV files with title, URL, source provenance, and tags.
 - Import local PDF, DOCX, text, Markdown, and OCR-assisted image/scanned-PDF files into source-memory Drops.
+- Extract PDF figure/table captions, table-like text, and optional vision-command page descriptions into Visual artifacts sections.
 - Preserve folder path as Markdown frontmatter.
 - Write one Markdown file per bookmark.
 - Store files in an Obsidian-ready folder structure.

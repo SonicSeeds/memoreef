@@ -13,6 +13,19 @@ import urllib.request
 from urllib.parse import urljoin, urlsplit
 
 
+MAX_VISION_PAGE_LIMIT = 25
+
+
+def bounded_vision_page_limit(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be an integer") from error
+    if parsed < 1 or parsed > MAX_VISION_PAGE_LIMIT:
+        raise argparse.ArgumentTypeError(f"must be between 1 and {MAX_VISION_PAGE_LIMIT}")
+    return parsed
+
+
 def write_optional_qr_png(url: str, output: Path) -> tuple[Path | None, str | None]:
     """Write a QR PNG when the optional qrcode package is installed."""
     try:
@@ -4143,6 +4156,8 @@ def build_parser() -> argparse.ArgumentParser:
     import_docs_cmd.add_argument("documents", type=Path, nargs="+", help="Document files to import (.pdf, .docx, .txt, .md, images).")
     import_docs_cmd.add_argument("--ocr", action="store_true", help="Use local OCR for image files and scanned PDFs when tesseract/pdftoppm are installed.")
     import_docs_cmd.add_argument("--ocr-lang", default=None, help="Optional Tesseract language code, e.g. eng, deu, or deu+eng.")
+    import_docs_cmd.add_argument("--vision-command", default=None, help="Optional command template for PDF page image analysis. Supports {image}, {page}, and {prompt} placeholders.")
+    import_docs_cmd.add_argument("--vision-page-limit", type=bounded_vision_page_limit, default=3, help="Maximum PDF pages to render for --vision-command, 1-25. Default: 3.")
     add_vault_import_options(import_docs_cmd)
 
     inspect_cmd = sub.add_parser("inspect", help="Inspect a browser bookmark HTML export without writing files.")
@@ -4331,7 +4346,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "import-docs":
         try:
-            bookmarks, warnings = parse_documents(args.documents, ocr=args.ocr, ocr_lang=args.ocr_lang)
+            bookmarks, warnings = parse_documents(
+                args.documents,
+                ocr=args.ocr,
+                ocr_lang=args.ocr_lang,
+                vision_command=args.vision_command,
+                vision_page_limit=args.vision_page_limit,
+            )
         except (FileNotFoundError, ValueError) as error:
             print(str(error))
             return 1

@@ -1,8 +1,9 @@
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 import threading
 import unittest
@@ -12,6 +13,7 @@ from unittest.mock import patch
 
 from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, parse_markdown_frontmatter, update_markdown_frontmatter, write_bookmarks_to_vault
 from memoreef.cli import main
+from memoreef.documents import pdf_rendered_page_number
 from memoreef.server import create_server, is_loopback_bind, review_mode_urls
 
 
@@ -374,6 +376,126 @@ endstream endobj
         self.assertEqual(frontmatter["document_type"], "pdf")
         self.assertIn("PDF source memory", content)
         self.assertIn("Markdown vault output", content)
+
+    def test_import_docs_extracts_pdf_visual_captions_and_table_candidates(self):
+        stdout = io.StringIO()
+        pdf_bytes = b"""%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /Contents 4 0 R >> endobj
+4 0 obj << /Length 230 >> stream
+BT /F1 12 Tf 72 720 Td (Figure 2 shows model accuracy by dataset.) Tj 0 -18 Td (Table 1 Baseline results.) Tj 0 -18 Td (Model A 91.2 88.5 77.1) Tj 0 -18 Td (Model B 92.4 87.9 79.3) Tj ET
+endstream endobj
+%%EOF
+"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "Vision Paper.pdf"
+            vault_path = Path(tmp) / "vault"
+            pdf_path.write_bytes(pdf_bytes)
+
+            with redirect_stdout(stdout):
+                result = main(["import-docs", str(pdf_path), "--vault", str(vault_path)])
+
+            content = next((vault_path / "MemoReef" / "Drops").glob("*.md")).read_text(encoding="utf-8")
+            frontmatter, _body = parse_markdown_frontmatter(content)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(frontmatter["has_document_visual_analysis"], True)
+        self.assertIn("## Visual artifacts", content)
+        self.assertIn("### Captions and table references", content)
+        self.assertIn("Figure 2 shows model accuracy by dataset.", content)
+        self.assertIn("Table 1 Baseline results.", content)
+        self.assertIn("### Text table candidates", content)
+        self.assertIn("Model A 91.2 88.5 77.1", content)
+        self.assertIn("Model B 92.4 87.9 79.3", content)
+
+    def test_import_docs_uses_optional_pdf_vision_command(self):
+        stdout = io.StringIO()
+        pdf_bytes = b"""%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /Contents 4 0 R >> endobj
+4 0 obj << /Length 54 >> stream
+BT /F1 12 Tf 72 720 Td (Figure 1 shows training loss.) Tj ET
+endstream endobj
+%%EOF
+"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bin_dir = Path(tmp) / "bin"
+            bin_dir.mkdir()
+            fake_pdftoppm = bin_dir / "pdftoppm"
+            fake_pdftoppm.write_text(
+                f"#!{sys.executable}\n"
+                "import pathlib, sys\n"
+                "prefix = pathlib.Path(sys.argv[-1])\n"
+                "prefix.with_name(prefix.name + '-1.png').write_bytes(b'fake png')\n",
+                encoding="utf-8",
+            )
+            fake_pdftoppm.chmod(0o755)
+            fake_vision = bin_dir / "fake-vision"
+            fake_vision.write_text(
+                f"#!{sys.executable}\n"
+                "import sys\n"
+                "print(f'Page {sys.argv[2]}: line chart with decreasing loss and a comparison table.')\n",
+                encoding="utf-8",
+            )
+            fake_vision.chmod(0o755)
+            pdf_path = Path(tmp) / "Vision Hook.pdf"
+            vault_path = Path(tmp) / "vault"
+            pdf_path.write_bytes(pdf_bytes)
+
+            old_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = f"{bin_dir}{os.pathsep}{old_path}"
+            try:
+                with redirect_stdout(stdout):
+                    result = main([
+                        "import-docs",
+                        "--vision-command",
+                        f"{fake_vision} {{image}} {{page}}",
+                        "--vision-page-limit",
+                        "1",
+                        str(pdf_path),
+                        "--vault",
+                        str(vault_path),
+                    ])
+            finally:
+                os.environ["PATH"] = old_path
+
+            content = next((vault_path / "MemoReef" / "Drops").glob("*.md")).read_text(encoding="utf-8")
+            frontmatter, _body = parse_markdown_frontmatter(content)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(frontmatter["has_document_visual_analysis"], True)
+        self.assertIn("### Vision page descriptions", content)
+        self.assertIn("#### Page 1", content)
+        self.assertIn("line chart with decreasing loss", content)
+
+    def test_import_docs_rejects_invalid_vision_page_limit(self):
+        stderr = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "paper.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4\n%%EOF\n")
+            with redirect_stderr(stderr), self.assertRaises(SystemExit) as error:
+                main([
+                    "import-docs",
+                    "--vision-command",
+                    "fake {image}",
+                    "--vision-page-limit",
+                    "0",
+                    str(pdf_path),
+                    "--vault",
+                    str(Path(tmp) / "vault"),
+                ])
+
+        self.assertEqual(error.exception.code, 2)
+        self.assertIn("must be between 1 and 25", stderr.getvalue())
+
+    def test_pdf_rendered_page_number_sorts_numeric_suffixes(self):
+        pages = [Path("page-10.png"), Path("page-2.png"), Path("page-1.png")]
+
+        self.assertEqual([page.name for page in sorted(pages, key=pdf_rendered_page_number)], ["page-1.png", "page-2.png", "page-10.png"])
 
     def test_import_docs_rejects_unsupported_files(self):
         stdout = io.StringIO()

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -24,18 +25,39 @@ class DocumentImportResult:
     warning: str | None = None
 
 
-def parse_documents(paths: list[Path], ocr: bool = False, ocr_lang: str | None = None) -> tuple[list[Bookmark], list[str]]:
+PDF_VISION_MAX_PAGES = 25
+
+
+PDF_VISUAL_PROMPT = (
+    "Describe graphs, figures, diagrams, charts, axes, legends, captions, and tables on this PDF page. "
+    "Focus on research-paper evidence."
+)
+
+
+def parse_documents(
+    paths: list[Path],
+    ocr: bool = False,
+    ocr_lang: str | None = None,
+    vision_command: str | None = None,
+    vision_page_limit: int = 3,
+) -> tuple[list[Bookmark], list[str]]:
     bookmarks: list[Bookmark] = []
     warnings: list[str] = []
     for path in paths:
-        result = parse_document(path, ocr=ocr, ocr_lang=ocr_lang)
+        result = parse_document(path, ocr=ocr, ocr_lang=ocr_lang, vision_command=vision_command, vision_page_limit=vision_page_limit)
         bookmarks.append(result.bookmark)
         if result.warning:
             warnings.append(result.warning)
     return bookmarks, warnings
 
 
-def parse_document(path: Path, ocr: bool = False, ocr_lang: str | None = None) -> DocumentImportResult:
+def parse_document(
+    path: Path,
+    ocr: bool = False,
+    ocr_lang: str | None = None,
+    vision_command: str | None = None,
+    vision_page_limit: int = 3,
+) -> DocumentImportResult:
     source = path.expanduser().resolve()
     suffix = source.suffix.lower()
     if suffix not in SUPPORTED_DOCUMENT_SUFFIXES:
@@ -45,6 +67,8 @@ def parse_document(path: Path, ocr: bool = False, ocr_lang: str | None = None) -
         raise FileNotFoundError(f"Document not found: {source}")
 
     warning: str | None = None
+    visual_analysis: str | None = None
+    visual_warnings: list[str] = []
     if suffix == ".docx":
         text = extract_docx_text(source)
     elif suffix == ".pdf":
@@ -53,6 +77,7 @@ def parse_document(path: Path, ocr: bool = False, ocr_lang: str | None = None) -
             text, warning = extract_pdf_ocr_text(source, lang=ocr_lang)
         elif not text.strip():
             warning = f"{source.name}: no extractable PDF text found; run import-docs --ocr after installing tesseract and pdftoppm/poppler for scanned/image PDFs."
+        visual_analysis, visual_warnings = extract_pdf_visual_analysis(source, text, vision_command=vision_command, page_limit=vision_page_limit)
     elif suffix in IMAGE_DOCUMENT_SUFFIXES:
         if ocr:
             text, warning = extract_image_ocr_text(source, lang=ocr_lang)
@@ -63,6 +88,8 @@ def parse_document(path: Path, ocr: bool = False, ocr_lang: str | None = None) -
         text = source.read_text(encoding="utf-8", errors="replace")
 
     text = normalize_document_text(text)
+    if visual_warnings:
+        warning = "; ".join([part for part in [warning, *visual_warnings] if part])
     title = source.stem.replace("_", " ").replace("-", " ").strip() or source.name
     tags = ["document", suffix.lstrip(".")]
     if ocr and suffix in IMAGE_DOCUMENT_SUFFIXES | {".pdf"}:
@@ -73,6 +100,7 @@ def parse_document(path: Path, ocr: bool = False, ocr_lang: str | None = None) -
         source="document-import",
         tags=tags,
         document_text=text,
+        document_visual_analysis=visual_analysis,
         document_type=suffix.lstrip("."),
         original_file=str(source),
     )
@@ -186,6 +214,147 @@ def extract_pdf_ocr_text(path: Path, lang: str | None = None) -> tuple[str, str 
         if combined:
             return combined, "; ".join(warnings) if warnings else None
         return "", f"{path.name}: OCR found no text." + (f" {'; '.join(warnings)}" if warnings else "")
+
+
+def extract_pdf_visual_analysis(
+    path: Path,
+    text: str,
+    vision_command: str | None = None,
+    page_limit: int = 3,
+) -> tuple[str | None, list[str]]:
+    """Return optional visual notes for a research PDF without making vision mandatory."""
+    sections: list[str] = []
+    warnings: list[str] = []
+
+    captions = extract_pdf_visual_captions(text)
+    if captions:
+        sections.append("### Captions and table references\n\n" + "\n".join(f"- {caption}" for caption in captions))
+
+    tables = extract_text_table_snippets(text)
+    if tables:
+        sections.append("### Text table candidates\n\n" + "\n\n".join(f"```text\n{table}\n```" for table in tables))
+
+    if vision_command:
+        descriptions, vision_warnings = describe_pdf_pages_with_vision_command(path, vision_command, page_limit=max(1, page_limit))
+        warnings.extend(vision_warnings)
+        if descriptions:
+            sections.append("### Vision page descriptions\n\n" + "\n\n".join(descriptions))
+
+    if not sections:
+        return None, warnings
+    return "\n\n".join(sections), warnings
+
+
+def extract_pdf_visual_captions(text: str) -> list[str]:
+    captions: list[str] = []
+    seen: set[str] = set()
+    pattern = re.compile(r"^(fig(?:ure)?\.?\s*\d+[a-z]?\b.*|table\s*\d+[a-z]?\b.*)$", re.IGNORECASE)
+    for line in text.splitlines():
+        candidate = line.strip()
+        if not candidate or len(candidate) > 500:
+            continue
+        if not pattern.match(candidate):
+            continue
+        normalized = re.sub(r"\s+", " ", candidate)
+        key = normalized.lower()
+        if key not in seen:
+            captions.append(normalized)
+            seen.add(key)
+    return captions[:25]
+
+
+def extract_text_table_snippets(text: str) -> list[str]:
+    snippets: list[str] = []
+    current: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if looks_like_table_row(stripped):
+            current.append(stripped)
+            continue
+        if len(current) >= 2:
+            snippets.append("\n".join(current[:8]))
+        current = []
+    if len(current) >= 2:
+        snippets.append("\n".join(current[:8]))
+    return snippets[:5]
+
+
+def looks_like_table_row(line: str) -> bool:
+    if not line or len(line) > 300:
+        return False
+    if "|" in line and line.count("|") >= 2:
+        return True
+    numeric_cells = re.findall(r"(?:^|\s)(?:-?\d+(?:\.\d+)?%?)(?=\s|$)", line)
+    return len(numeric_cells) >= 3
+
+
+def describe_pdf_pages_with_vision_command(path: Path, vision_command: str, page_limit: int = 3) -> tuple[list[str], list[str]]:
+    page_limit = min(max(1, page_limit), PDF_VISION_MAX_PAGES)
+    pdftoppm = shutil.which("pdftoppm")
+    if not pdftoppm:
+        return [], [f"{path.name}: --vision-command requested, but pdftoppm/poppler is not installed or not on PATH."]
+    descriptions: list[str] = []
+    warnings: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        prefix = Path(tmp) / "page"
+        render = subprocess.run(
+            [pdftoppm, "-png", "-r", "150", "-f", "1", "-l", str(page_limit), str(path), str(prefix)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if render.returncode != 0:
+            message = render.stderr.strip() or "unknown pdftoppm error"
+            return [], [f"{path.name}: PDF page rendering for vision failed: {message}"]
+        pages = sorted(Path(tmp).glob("page-*.png"), key=pdf_rendered_page_number)
+        if not pages:
+            return [], [f"{path.name}: PDF page rendering for vision produced no images."]
+        for page in pages:
+            page_number = pdf_rendered_page_number(page)
+            description, warning = run_vision_command(vision_command, page, page_number)
+            if description:
+                descriptions.append(f"#### Page {page_number}\n\n{description}")
+            if warning:
+                warnings.append(warning)
+    return descriptions, warnings
+
+
+def pdf_rendered_page_number(path: Path) -> int:
+    match = re.search(r"-(\d+)\.png$", path.name)
+    if match:
+        return int(match.group(1))
+    return 0
+
+
+def replace_vision_placeholders(argument: str, values: dict[str, str]) -> str:
+    for placeholder, value in values.items():
+        argument = argument.replace(placeholder, value)
+    return argument
+
+
+def run_vision_command(command_template: str, image: Path, page: int) -> tuple[str | None, str | None]:
+    values = {"{image}": str(image), "{page}": str(page), "{prompt}": PDF_VISUAL_PROMPT}
+    try:
+        command = shlex.split(command_template)
+    except ValueError as error:
+        return None, f"vision command template is invalid: {error}"
+    command = [replace_vision_placeholders(argument, values) for argument in command]
+    if not command:
+        return None, "vision command template produced an empty command."
+    try:
+        completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=180)
+    except OSError as error:
+        return None, f"vision command failed to start for page {page}: {error}"
+    except subprocess.TimeoutExpired:
+        return None, f"vision command timed out for page {page}."
+    if completed.returncode != 0:
+        message = completed.stderr.strip() or "unknown vision command error"
+        return None, f"vision command failed for page {page}: {message}"
+    description = normalize_document_text(completed.stdout)
+    if not description:
+        return None, f"vision command returned no description for page {page}."
+    return description, None
 
 
 def extract_pdf_literal_strings(chunk: bytes) -> list[str]:

@@ -27,6 +27,7 @@ class Bookmark:
     clipped_selection: str | None = None
     clip_type: str | None = None
     document_text: str | None = None
+    document_visual_analysis: str | None = None
     document_type: str | None = None
     original_file: str | None = None
 
@@ -343,6 +344,8 @@ def bookmark_to_markdown(bookmark: Bookmark) -> str:
         lines.append(f"clip_type: {yaml_quote(bookmark.clip_type or 'highlight')}")
     if bookmark.document_text is not None:
         lines.append("has_document_text: true")
+    if bookmark.document_visual_analysis:
+        lines.append("has_document_visual_analysis: true")
     if bookmark.document_type:
         lines.append(f"document_type: {yaml_quote(bookmark.document_type)}")
     if bookmark.original_file:
@@ -391,6 +394,13 @@ def bookmark_to_markdown(bookmark: Bookmark) -> str:
             lines.extend([bookmark.document_text.strip(), ""])
         else:
             lines.extend(["_No extractable text found._", ""])
+    if bookmark.document_visual_analysis:
+        lines.extend([
+            "## Visual artifacts",
+            "",
+            bookmark.document_visual_analysis.strip(),
+            "",
+        ])
     lines.extend([
         "## Summary",
         "",
