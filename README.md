@@ -84,9 +84,10 @@ memoreef import /path/to/bookmarks.html --vault /tmp/memoreef-vault
 memoreef import-links /path/to/links.txt --vault /tmp/memoreef-vault
 memoreef import-csv /path/to/links.csv --vault /tmp/memoreef-vault
 memoreef import-docs /path/to/research.pdf /path/to/brief.docx --vault /tmp/memoreef-vault
+memoreef import-docs --ocr /path/to/scanned.pdf /path/to/diagram.png --vault /tmp/memoreef-vault
 ```
 
-`import-docs` turns PDFs, DOCX files, text files, and Markdown files into local Markdown Drops with source-file metadata and a `## Document text` section. It is useful for NotebookLM-style source collection when you want the durable output to stay in your own Markdown/Obsidian memory instead of a hosted notebook. Scanned/image PDFs need OCR first.
+`import-docs` turns PDFs, DOCX files, text files, Markdown files, and image files into local Markdown Drops with source-file metadata and a `## Document text` section. It is useful for NotebookLM-style source collection when you want the durable output to stay in your own Markdown/Obsidian memory instead of a hosted notebook. Text-based PDFs work directly. Scanned/image PDFs and image files need `--ocr` plus local OCR tools (`tesseract`; scanned PDFs also need `pdftoppm`/Poppler).
 
 ## Product shape
 
@@ -107,7 +108,7 @@ Implemented:
 - Parse Netscape-style browser bookmark HTML exports.
 - Import plain text URL lists.
 - Import CSV files with title, URL, source provenance, and tags.
-- Import local PDF, DOCX, text, and Markdown files into source-memory Drops.
+- Import local PDF, DOCX, text, Markdown, and OCR-assisted image/scanned-PDF files into source-memory Drops.
 - Preserve folder path as Markdown frontmatter.
 - Write one Markdown file per bookmark.
 - Store files in an Obsidian-ready folder structure.

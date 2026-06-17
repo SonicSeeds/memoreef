@@ -4139,8 +4139,9 @@ def build_parser() -> argparse.ArgumentParser:
     import_csv_cmd.add_argument("csv", type=Path, help="CSV file with title,url,source,tags columns.")
     add_vault_import_options(import_csv_cmd)
 
-    import_docs_cmd = sub.add_parser("import-docs", help="Import PDF, DOCX, text, or Markdown documents into local Markdown Drops.")
-    import_docs_cmd.add_argument("documents", type=Path, nargs="+", help="Document files to import (.pdf, .docx, .txt, .md).")
+    import_docs_cmd = sub.add_parser("import-docs", help="Import PDF, DOCX, text, image, or Markdown documents into local Markdown Drops.")
+    import_docs_cmd.add_argument("documents", type=Path, nargs="+", help="Document files to import (.pdf, .docx, .txt, .md, images).")
+    import_docs_cmd.add_argument("--ocr", action="store_true", help="Use local OCR for image files and scanned PDFs when tesseract/pdftoppm are installed.")
     add_vault_import_options(import_docs_cmd)
 
     inspect_cmd = sub.add_parser("inspect", help="Inspect a browser bookmark HTML export without writing files.")
@@ -4329,7 +4330,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "import-docs":
         try:
-            bookmarks, warnings = parse_documents(args.documents)
+            bookmarks, warnings = parse_documents(args.documents, ocr=args.ocr)
         except (FileNotFoundError, ValueError) as error:
             print(str(error))
             return 1

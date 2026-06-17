@@ -25,7 +25,7 @@ Yes. MemoReef stores sources as structured Markdown with metadata, tags, status,
 
 ## What works today?
 
-MemoReef can import browser bookmark exports, URL lists, CSV files, PDFs, DOCX files, text files, and Markdown files; clip highlighted web text through a localhost bookmarklet; generate Markdown Drops; run a local Review Mode app; autosave Keep/Pearl/Sink decisions; create reports; generate hub maps; and build a static local app view.
+MemoReef can import browser bookmark exports, URL lists, CSV files, PDFs, DOCX files, text files, Markdown files, and OCR-assisted image/scanned-PDF files; clip highlighted web text through a localhost bookmarklet; generate Markdown Drops; run a local Review Mode app; autosave Keep/Pearl/Sink decisions; create reports; generate hub maps; and build a static local app view.
 
 ## Can MemoReef import PDFs and DOCX files?
 
@@ -35,15 +35,15 @@ Yes. Use `import-docs` to turn local PDFs, DOCX files, text files, and Markdown 
 memoreef import-docs /path/to/research.pdf /path/to/brief.docx --vault /tmp/memoreef-vault
 ```
 
-MemoReef writes the extracted text into a `## Document text` section and keeps source-file metadata in frontmatter. This is meant for NotebookLM-style source collection with Markdown/Obsidian output.
+MemoReef writes the extracted text into a `## Document text` section and keeps source-file metadata in frontmatter. This is meant for NotebookLM-style source collection with Markdown/Obsidian output. Image files and scanned PDFs can be imported with `--ocr` when local OCR tools are installed.
 
 ## What about scanned PDFs, images, or graphics inside PDFs?
 
-Text-based PDFs can be imported today. Scanned/image PDFs and graphics-heavy documents need an OCR or visual-analysis step before their image content can become searchable Markdown. MemoReef currently warns when no extractable PDF text is found; OCR for image-heavy documents is a roadmap feature.
+Text-based PDFs can be imported directly. Scanned/image PDFs can use `import-docs --ocr` when local OCR tools are installed (`tesseract`; scanned PDFs also need `pdftoppm`/Poppler). Graphics-heavy documents still need a later figure-aware vision layer before diagrams and charts can be described reliably.
 
 ## What is not implemented yet?
 
-OCR for scanned PDFs/images, full article extraction, LLM summarization, deep semantic tagging, a browser extension, an Obsidian plugin, Notion/API connectors, and hosted multi-device sync are not part of the current MVP.
+Figure-aware visual understanding for diagrams/charts, full article extraction, LLM summarization, deep semantic tagging, a browser extension, an Obsidian plugin, Notion/API connectors, and hosted multi-device sync are not part of the current MVP.
 
 ## Is the mobile app real?
 

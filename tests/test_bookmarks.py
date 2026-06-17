@@ -386,6 +386,80 @@ endstream endobj
         self.assertEqual(result, 1)
         self.assertIn("Unsupported document type", stdout.getvalue())
 
+    def test_import_docs_warns_for_image_without_ocr(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            image_path = Path(tmp) / "diagram.png"
+            vault_path = Path(tmp) / "vault"
+            image_path.write_bytes(b"not really an image")
+
+            with redirect_stdout(stdout):
+                result = main(["import-docs", str(image_path), "--vault", str(vault_path)])
+
+            content = next((vault_path / "MemoReef" / "Drops").glob("*.md")).read_text(encoding="utf-8")
+            frontmatter, _body = parse_markdown_frontmatter(content)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(frontmatter["document_type"], "png")
+        self.assertIn("_No extractable text found._", content)
+        self.assertIn("image files need OCR", stdout.getvalue())
+
+    def test_import_docs_ocr_image_with_local_tesseract(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            bin_dir = Path(tmp) / "bin"
+            bin_dir.mkdir()
+            fake_tesseract = bin_dir / "tesseract"
+            fake_tesseract.write_text("#!/bin/sh\nprintf 'OCR source text\\nFrom diagram'\n", encoding="utf-8")
+            fake_tesseract.chmod(0o755)
+            image_path = Path(tmp) / "diagram.png"
+            vault_path = Path(tmp) / "vault"
+            image_path.write_bytes(b"not really an image")
+
+            old_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = f"{bin_dir}{os.pathsep}{old_path}"
+            try:
+                with redirect_stdout(stdout):
+                    result = main(["import-docs", "--ocr", str(image_path), "--vault", str(vault_path)])
+            finally:
+                os.environ["PATH"] = old_path
+
+            content = next((vault_path / "MemoReef" / "Drops").glob("*.md")).read_text(encoding="utf-8")
+            frontmatter, _body = parse_markdown_frontmatter(content)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(frontmatter["document_type"], "png")
+        self.assertIn('  - "ocr"', content)
+        self.assertIn("OCR source text", content)
+        self.assertIn("From diagram", content)
+
+    def test_import_docs_ocr_pdf_warns_without_renderer(self):
+        stdout = io.StringIO()
+        pdf_bytes = b"%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            bin_dir = Path(tmp) / "bin"
+            bin_dir.mkdir()
+            fake_tesseract = bin_dir / "tesseract"
+            fake_tesseract.write_text("#!/bin/sh\nprintf 'OCR text'\n", encoding="utf-8")
+            fake_tesseract.chmod(0o755)
+            pdf_path = Path(tmp) / "scan.pdf"
+            vault_path = Path(tmp) / "vault"
+            pdf_path.write_bytes(pdf_bytes)
+
+            old_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = str(bin_dir)
+            try:
+                with redirect_stdout(stdout):
+                    result = main(["import-docs", "--ocr", str(pdf_path), "--vault", str(vault_path)])
+            finally:
+                os.environ["PATH"] = old_path
+
+            content = next((vault_path / "MemoReef" / "Drops").glob("*.md")).read_text(encoding="utf-8")
+
+        self.assertEqual(result, 0)
+        self.assertIn("_No extractable text found._", content)
+        self.assertIn("pdftoppm", stdout.getvalue())
+
     def test_inspect_command_prints_summary(self):
         bookmarks_path = Path(__file__).parent.parent / "examples" / "bookmarks.html"
         stdout = io.StringIO()

@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import shutil
+import subprocess
+import tempfile
 import zlib
 import zipfile
 import xml.etree.ElementTree as ET
@@ -10,7 +13,9 @@ import xml.etree.ElementTree as ET
 from .bookmarks import Bookmark
 
 
-SUPPORTED_DOCUMENT_SUFFIXES = {".pdf", ".docx", ".txt", ".md", ".markdown"}
+TEXT_DOCUMENT_SUFFIXES = {".txt", ".md", ".markdown"}
+IMAGE_DOCUMENT_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp"}
+SUPPORTED_DOCUMENT_SUFFIXES = {".pdf", ".docx", *TEXT_DOCUMENT_SUFFIXES, *IMAGE_DOCUMENT_SUFFIXES}
 
 
 @dataclass
@@ -19,18 +24,18 @@ class DocumentImportResult:
     warning: str | None = None
 
 
-def parse_documents(paths: list[Path]) -> tuple[list[Bookmark], list[str]]:
+def parse_documents(paths: list[Path], ocr: bool = False) -> tuple[list[Bookmark], list[str]]:
     bookmarks: list[Bookmark] = []
     warnings: list[str] = []
     for path in paths:
-        result = parse_document(path)
+        result = parse_document(path, ocr=ocr)
         bookmarks.append(result.bookmark)
         if result.warning:
             warnings.append(result.warning)
     return bookmarks, warnings
 
 
-def parse_document(path: Path) -> DocumentImportResult:
+def parse_document(path: Path, ocr: bool = False) -> DocumentImportResult:
     source = path.expanduser().resolve()
     suffix = source.suffix.lower()
     if suffix not in SUPPORTED_DOCUMENT_SUFFIXES:
@@ -44,18 +49,29 @@ def parse_document(path: Path) -> DocumentImportResult:
         text = extract_docx_text(source)
     elif suffix == ".pdf":
         text = extract_pdf_text(source)
-        if not text.strip():
-            warning = f"{source.name}: no extractable PDF text found; scanned/image PDFs need OCR before MemoReef can store their text."
+        if not text.strip() and ocr:
+            text, warning = extract_pdf_ocr_text(source)
+        elif not text.strip():
+            warning = f"{source.name}: no extractable PDF text found; run import-docs --ocr after installing tesseract and pdftoppm/poppler for scanned/image PDFs."
+    elif suffix in IMAGE_DOCUMENT_SUFFIXES:
+        if ocr:
+            text, warning = extract_image_ocr_text(source)
+        else:
+            text = ""
+            warning = f"{source.name}: image files need OCR; rerun with --ocr after installing tesseract."
     else:
         text = source.read_text(encoding="utf-8", errors="replace")
 
     text = normalize_document_text(text)
     title = source.stem.replace("_", " ").replace("-", " ").strip() or source.name
+    tags = ["document", suffix.lstrip(".")]
+    if ocr and suffix in IMAGE_DOCUMENT_SUFFIXES | {".pdf"}:
+        tags.append("ocr")
     bookmark = Bookmark(
         title=title,
         url=source.as_uri(),
         source="document-import",
-        tags=["document", suffix.lstrip(".")],
+        tags=tags,
         document_text=text,
         document_type=suffix.lstrip("."),
         original_file=str(source),
@@ -107,6 +123,66 @@ def extract_pdf_text(path: Path) -> str:
         text_parts.extend(extract_pdf_literal_strings(chunk))
         text_parts.extend(extract_pdf_hex_strings(chunk))
     return normalize_document_text("\n".join(part for part in text_parts if part.strip()))
+
+
+def extract_image_ocr_text(path: Path) -> tuple[str, str | None]:
+    tesseract = shutil.which("tesseract")
+    if not tesseract:
+        return "", f"{path.name}: OCR requested but tesseract is not installed or not on PATH."
+    try:
+        completed = subprocess.run(
+            [tesseract, str(path), "stdout"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except OSError as error:
+        return "", f"{path.name}: OCR failed to start: {error}"
+    except subprocess.TimeoutExpired:
+        return "", f"{path.name}: OCR timed out."
+    if completed.returncode != 0:
+        message = completed.stderr.strip() or "unknown tesseract error"
+        return "", f"{path.name}: OCR failed: {message}"
+    text = normalize_document_text(completed.stdout)
+    if not text:
+        return "", f"{path.name}: OCR completed but found no text."
+    return text, None
+
+
+def extract_pdf_ocr_text(path: Path) -> tuple[str, str | None]:
+    pdftoppm = shutil.which("pdftoppm")
+    if not pdftoppm:
+        return "", f"{path.name}: OCR requested for PDF, but pdftoppm/poppler is not installed or not on PATH."
+    if not shutil.which("tesseract"):
+        return "", f"{path.name}: OCR requested but tesseract is not installed or not on PATH."
+    with tempfile.TemporaryDirectory() as tmp:
+        prefix = Path(tmp) / "page"
+        render = subprocess.run(
+            [pdftoppm, "-png", "-r", "200", str(path), str(prefix)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if render.returncode != 0:
+            message = render.stderr.strip() or "unknown pdftoppm error"
+            return "", f"{path.name}: PDF page rendering failed: {message}"
+        pages = sorted(Path(tmp).glob("page-*.png"))
+        if not pages:
+            return "", f"{path.name}: PDF page rendering produced no images."
+        parts: list[str] = []
+        warnings: list[str] = []
+        for index, page in enumerate(pages, start=1):
+            text, warning = extract_image_ocr_text(page)
+            if text:
+                parts.append(f"### Page {index}\n\n{text}")
+            if warning:
+                warnings.append(f"page {index}: {warning}")
+        combined = normalize_document_text("\n\n".join(parts))
+        if combined:
+            return combined, "; ".join(warnings) if warnings else None
+        return "", f"{path.name}: OCR found no text." + (f" {'; '.join(warnings)}" if warnings else "")
 
 
 def extract_pdf_literal_strings(chunk: bytes) -> list[str]:
