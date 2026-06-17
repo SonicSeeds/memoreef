@@ -8,6 +8,8 @@ It is not trying to be another bookmark manager. MemoReef is for people with mes
 
 Want the Obsidian-specific walkthrough? See [Use MemoReef with Obsidian](https://memoreef.de/obsidian.html).
 
+Testing MemoReef for the first time? Use the [Tester Guide](docs/TESTER_GUIDE.md).
+
 ## Install and run locally
 
 MemoReef is a local Python app. It does not need a server, account, database, or API key.
