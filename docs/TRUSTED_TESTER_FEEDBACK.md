@@ -2,6 +2,8 @@
 
 MemoReef is ready for technical or curious early testers, not broad public claims yet. The goal is to prove that a real person can install it, import real sources, review them, and tell us what breaks.
 
+If you are inviting someone to test MemoReef, use [Trusted Tester Invite](TRUSTED_TESTER_INVITE.md).
+
 ## Before testing
 
 Use non-sensitive sources first. MemoReef is local-first, but GitHub issues are public unless you keep details vague.
