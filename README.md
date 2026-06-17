@@ -10,6 +10,12 @@ Want the Obsidian-specific walkthrough? See [Use MemoReef with Obsidian](https:/
 
 Testing MemoReef for the first time? Use the [Tester Guide](docs/TESTER_GUIDE.md).
 
+## Demo video
+
+Watch the 69-second user-ready prototype demo: [docs/videos/memoreef-demo-hyperframes-v1.mp4](docs/videos/memoreef-demo-hyperframes-v1.mp4)
+
+It shows the local install path, real-source imports, Import Dock, Review Mode, and Markdown output.
+
 ## Install and run locally
 
 MemoReef is a local Python app. It does not need a server, account, database, or API key.
