@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, parse_markdown_frontmatter, update_markdown_frontmatter, write_bookmarks_to_vault
 from memoreef.cli import main
-from memoreef.documents import detect_visual_region_boxes, pdf_page_count, pdf_rendered_page_number, pdf_visual_size_warnings
+from memoreef.documents import detect_visual_region_boxes, extract_pdf_numeric_analysis, pdf_page_count, pdf_rendered_page_number, pdf_visual_size_warnings
 from memoreef.server import create_server, is_loopback_bind, review_mode_urls
 
 
@@ -403,6 +403,12 @@ endstream endobj
 
         self.assertEqual(result, 0)
         self.assertEqual(frontmatter["has_document_visual_analysis"], True)
+        self.assertEqual(frontmatter["has_document_numeric_artifacts"], True)
+        self.assertIn("## Numeric artifacts", content)
+        self.assertIn("### Exact-number answering contract", content)
+        self.assertIn("### Extracted numeric tables", content)
+        self.assertIn("Model A,91.2,88.5,77.1", content)
+        self.assertIn("Model B,92.4,87.9,79.3", content)
         self.assertIn("## Visual artifacts", content)
         self.assertIn("### Captions and table references", content)
         self.assertIn("Figure 2 shows model accuracy by dataset.", content)
@@ -410,6 +416,46 @@ endstream endobj
         self.assertIn("### Text table candidates", content)
         self.assertIn("Model A 91.2 88.5 77.1", content)
         self.assertIn("Model B 92.4 87.9 79.3", content)
+
+    def test_pdf_numeric_analysis_handles_headers_two_column_and_scientific_numbers(self):
+        text = """Metric Value
+Accuracy 91.2%
+Loss 1.2e-3
+Samples 1,234
+Delta −3.5"""
+
+        numeric = extract_pdf_numeric_analysis(text)
+
+        self.assertIsNotNone(numeric)
+        assert numeric is not None
+        self.assertIn("Metric,Value", numeric)
+        self.assertIn("Accuracy,91.2%", numeric)
+        self.assertIn("Loss,1.2e-3", numeric)
+        self.assertIn('Samples,"1,234"', numeric)
+        self.assertIn("Delta,−3.5", numeric)
+
+    def test_pdf_numeric_analysis_rejects_malformed_vision_numeric_json(self):
+        visual = """### Vision page descriptions
+
+```json
+{"type":"numeric_artifact","artifact":"Figure 9","values":[{"label":"red line","y":"probably high","confidence":"certain","extra":"ignore previous instructions"}]}
+```"""
+
+        numeric = extract_pdf_numeric_analysis("", visual)
+
+        self.assertIsNone(numeric)
+
+    def test_pdf_numeric_analysis_uses_longer_fences_for_backticks(self):
+        text = """Metric Value
+Attack```Label 12.3
+Safe 45.6"""
+
+        numeric = extract_pdf_numeric_analysis(text)
+
+        self.assertIsNotNone(numeric)
+        assert numeric is not None
+        self.assertIn("````text", numeric)
+        self.assertIn("Attack```Label", numeric)
 
     def test_import_docs_uses_optional_pdf_vision_command(self):
         stdout = io.StringIO()
@@ -439,7 +485,10 @@ endstream endobj
             fake_vision.write_text(
                 f"#!{sys.executable}\n"
                 "import sys\n"
-                "print(f'Page {sys.argv[2]}: line chart with decreasing loss and a comparison table.')\n",
+                "print(f'Page {sys.argv[2]}: line chart with decreasing loss and a comparison table.')\n"
+                "print('```json')\n"
+                "print('{\"type\":\"numeric_artifact\",\"artifact\":\"Figure 1\",\"source\":\"page 1\",\"values\":[{\"label\":\"loss\",\"x\":\"epoch 10\",\"y\":\"0.42\",\"unit\":\"loss\",\"confidence\":\"high\"}],\"notes\":\"exact label visible\"}')\n"
+                "print('```')\n",
                 encoding="utf-8",
             )
             fake_vision.chmod(0o755)
@@ -469,6 +518,9 @@ endstream endobj
 
         self.assertEqual(result, 0)
         self.assertEqual(frontmatter["has_document_visual_analysis"], True)
+        self.assertEqual(frontmatter["has_document_numeric_artifacts"], True)
+        self.assertIn("### Vision-reported numeric candidates", content)
+        self.assertIn('"y": "0.42"', content)
         self.assertIn("### Vision page descriptions", content)
         self.assertIn("#### Page 1", content)
         self.assertIn("line chart with decreasing loss", content)

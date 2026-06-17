@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import csv
+import io
+import json
 import re
 import shlex
 import shutil
@@ -31,8 +34,11 @@ PDF_LARGE_FILE_WARNING_BYTES = 50 * 1024 * 1024
 
 
 PDF_VISUAL_PROMPT = (
-    "Describe graphs, figures, diagrams, charts, axes, legends, captions, and tables on this PDF page. "
-    "Focus on research-paper evidence."
+    "Describe graphs, figures, diagrams, charts, axes, legends, captions, and tables on this PDF crop/page. "
+    "Focus on research-paper evidence. For exact numeric values, do not estimate: only report values from printed numeric labels, table cells, data labels, axis tick labels, or explicitly tick-aligned marks. "
+    "If exact values are readable, include a fenced ```json block with this schema: "
+    "{\"type\":\"numeric_artifact\",\"artifact\":\"Figure/Table identifier if visible\",\"source\":\"page/crop\",\"values\":[{\"label\":\"series/row\",\"x\":\"axis/category if visible\",\"y\":\"exact value\",\"unit\":\"unit if visible\",\"confidence\":\"high|medium|low\"}],\"notes\":\"uncertainty\"}. "
+    "If exact values are not readable, say that exact values were not extracted."
 )
 
 
@@ -70,6 +76,7 @@ def parse_document(
 
     warning: str | None = None
     visual_analysis: str | None = None
+    numeric_analysis: str | None = None
     visual_warnings: list[str] = []
     if suffix == ".docx":
         text = extract_docx_text(source)
@@ -90,6 +97,8 @@ def parse_document(
         text = source.read_text(encoding="utf-8", errors="replace")
 
     text = normalize_document_text(text)
+    if suffix == ".pdf":
+        numeric_analysis = extract_pdf_numeric_analysis(text, visual_analysis)
     if visual_warnings:
         warning = "; ".join([part for part in [warning, *visual_warnings] if part])
     title = source.stem.replace("_", " ").replace("-", " ").strip() or source.name
@@ -103,6 +112,7 @@ def parse_document(
         tags=tags,
         document_text=text,
         document_visual_analysis=visual_analysis,
+        document_numeric_analysis=numeric_analysis,
         document_type=suffix.lstrip("."),
         original_file=str(source),
     )
@@ -238,7 +248,7 @@ def extract_pdf_visual_analysis(
 
     tables = extract_text_table_snippets(text)
     if tables:
-        sections.append("### Text table candidates\n\n" + "\n\n".join(f"```text\n{table}\n```" for table in tables))
+        sections.append("### Text table candidates\n\n" + "\n\n".join(fenced_code("text", table) for table in tables))
 
     if vision_command:
         descriptions, vision_warnings = describe_pdf_pages_with_vision_command(path, vision_command, page_limit=max(1, page_limit))
@@ -249,6 +259,177 @@ def extract_pdf_visual_analysis(
     if not sections:
         return None, warnings
     return "\n\n".join(sections), warnings
+
+
+def extract_pdf_numeric_analysis(text: str, visual_analysis: str | None = None) -> str | None:
+    sections: list[str] = []
+    table_artifacts = extract_numeric_table_artifacts(text)
+    vision_artifacts = extract_vision_numeric_json_artifacts(visual_analysis or "")
+
+    if not table_artifacts and not vision_artifacts:
+        return None
+
+    sections.append(
+        "### Exact-number answering contract\n\n"
+        "Agents may answer exact numeric questions only from quoted source table text or validated structured values in this section. "
+        "CSV tables here are machine-extracted candidates from PDF text and include their source snippet; preserve row/column context and do not invent missing headers. "
+        "Vision-reported values are accepted only when they pass the numeric-artifact schema and include confidence. "
+        "If a value is only described in visual prose, treat it as a trend/meaning summary, not exact evidence. "
+        "If the requested exact value is absent here, say that the exact value was not extracted."
+    )
+    if table_artifacts:
+        sections.append("### Extracted numeric tables\n\n" + "\n\n".join(table_artifacts))
+    if vision_artifacts:
+        sections.append("### Vision-reported numeric candidates\n\n" + "\n\n".join(vision_artifacts))
+    return "\n\n".join(sections)
+
+
+def extract_numeric_table_artifacts(text: str) -> list[str]:
+    artifacts: list[str] = []
+    for index, snippet in enumerate(extract_text_table_snippets(text), start=1):
+        rows = parse_numeric_table_rows(snippet)
+        if not rows:
+            continue
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerows(rows)
+        csv_text = output.getvalue().strip()
+        artifacts.append(
+            f"#### Table candidate {index}\n\n"
+            "Source snippet:\n\n"
+            f"{fenced_code('text', snippet)}\n\n"
+            "Machine-extracted CSV:\n\n"
+            f"{fenced_code('csv', csv_text)}"
+        )
+    return artifacts[:10]
+
+
+def fenced_code(language: str, content: str) -> str:
+    longest = max((len(match.group(0)) for match in re.finditer(r"`+", content)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return f"{fence}{language}\n{content}\n{fence}"
+
+
+def parse_numeric_table_rows(snippet: str) -> list[list[str]]:
+    rows: list[list[str]] = []
+    for line in snippet.splitlines():
+        cells = split_table_line(line)
+        if len(cells) < 2:
+            continue
+        rows.append(cells)
+    if len(rows) < 2:
+        return []
+    max_width = max(len(row) for row in rows)
+    normalized = [row + [""] * (max_width - len(row)) for row in rows]
+    numeric_cells = sum(1 for row in normalized for cell in row if contains_number(cell))
+    if numeric_cells < 2:
+        return []
+    return normalized
+
+
+def split_table_line(line: str) -> list[str]:
+    stripped = line.strip().strip("|")
+    if "|" in stripped:
+        return [cell.strip() for cell in stripped.split("|") if cell.strip()]
+    if "\t" in stripped:
+        return [cell.strip() for cell in stripped.split("\t") if cell.strip()]
+    parts = [cell.strip() for cell in re.split(r"\s{2,}", stripped) if cell.strip()]
+    if len(parts) >= 2:
+        return parts
+    tokens = stripped.split()
+    numeric_token_count = len([token for token in tokens if contains_number(token)])
+    if numeric_token_count == 0 and looks_like_header_tokens(tokens, stripped):
+        return tokens
+    if numeric_token_count >= 1:
+        first_number = next((index for index, token in enumerate(tokens) if contains_number(token)), 0)
+        if first_number > 0:
+            return [" ".join(tokens[:first_number]), *tokens[first_number:]]
+        if numeric_token_count >= 2:
+            return tokens
+    return []
+
+
+def looks_like_header_tokens(tokens: list[str], line: str) -> bool:
+    if not 2 <= len(tokens) <= 8:
+        return False
+    if line.endswith(('.', ':', ';')):
+        return False
+    return any(re.search(r"[A-Za-z]", token) for token in tokens) and all(len(token) <= 40 for token in tokens)
+
+
+NUMERIC_TOKEN_PATTERN = re.compile(
+    r"(?:[+\-−]?\d{1,3}(?:,\d{3})+(?:\.\d+)?|[+\-−]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+\-]?\d+)?|\([0-9]+(?:\.[0-9]+)?\))%?"
+)
+
+
+def contains_number(value: str) -> bool:
+    return bool(NUMERIC_TOKEN_PATTERN.search(value))
+
+
+def extract_vision_numeric_json_artifacts(markdown: str) -> list[str]:
+    artifacts: list[str] = []
+    for raw_json in re.findall(r"```json\s*(.*?)\s*```", markdown, flags=re.S | re.I):
+        try:
+            parsed = json.loads(raw_json)
+        except json.JSONDecodeError:
+            continue
+        normalized = normalize_numeric_artifact_json(parsed)
+        if normalized is None:
+            continue
+        artifacts.append(fenced_code("json", json.dumps(normalized, indent=2, ensure_ascii=False, sort_keys=True)))
+    return artifacts[:10]
+
+
+def normalize_numeric_artifact_json(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    if value.get("type") != "numeric_artifact":
+        return None
+    raw_values = value.get("values")
+    if not isinstance(raw_values, list):
+        return None
+    normalized_values: list[dict[str, str]] = []
+    for raw_item in raw_values[:50]:
+        item = normalize_numeric_value_item(raw_item)
+        if item is not None:
+            normalized_values.append(item)
+    if not normalized_values:
+        return None
+    return {
+        "type": "numeric_artifact",
+        "artifact": safe_short_string(value.get("artifact"), fallback="unknown"),
+        "source": safe_short_string(value.get("source"), fallback="unknown"),
+        "values": normalized_values,
+        "notes": safe_short_string(value.get("notes"), fallback=""),
+    }
+
+
+def normalize_numeric_value_item(value: object) -> dict[str, str] | None:
+    if not isinstance(value, dict):
+        return None
+    y = safe_short_string(value.get("y"), fallback="")
+    if not y or not contains_number(y):
+        return None
+    confidence = safe_short_string(value.get("confidence"), fallback="low").lower()
+    if confidence not in {"high", "medium", "low"}:
+        return None
+    return {
+        "label": safe_short_string(value.get("label"), fallback="unknown"),
+        "x": safe_short_string(value.get("x"), fallback=""),
+        "y": y,
+        "unit": safe_short_string(value.get("unit"), fallback=""),
+        "confidence": confidence,
+    }
+
+
+def safe_short_string(value: object, fallback: str, max_len: int = 200) -> str:
+    if value is None:
+        return fallback
+    text = str(value).replace("\x00", "").strip()
+    text = re.sub(r"\s+", " ", text)
+    if len(text) > max_len:
+        text = text[:max_len].rstrip() + "…"
+    return text
 
 
 def extract_pdf_visual_captions(text: str) -> list[str]:
@@ -272,17 +453,31 @@ def extract_pdf_visual_captions(text: str) -> list[str]:
 def extract_text_table_snippets(text: str) -> list[str]:
     snippets: list[str] = []
     current: list[str] = []
+    previous_nonempty = ""
     for line in text.splitlines():
         stripped = line.strip()
         if looks_like_table_row(stripped):
+            if not current and previous_nonempty and looks_like_table_header(previous_nonempty):
+                current.append(previous_nonempty)
             current.append(stripped)
+            previous_nonempty = stripped
             continue
         if len(current) >= 2:
             snippets.append("\n".join(current[:8]))
         current = []
+        if stripped:
+            previous_nonempty = stripped
     if len(current) >= 2:
         snippets.append("\n".join(current[:8]))
     return snippets[:5]
+
+
+def looks_like_table_header(line: str) -> bool:
+    if not line or len(line) > 300:
+        return False
+    if looks_like_table_row(line):
+        return False
+    return len(split_table_line(line)) >= 2
 
 
 def looks_like_table_row(line: str) -> bool:
@@ -290,8 +485,14 @@ def looks_like_table_row(line: str) -> bool:
         return False
     if "|" in line and line.count("|") >= 2:
         return True
-    numeric_cells = re.findall(r"(?:^|\s)(?:-?\d+(?:\.\d+)?%?)(?=\s|$)", line)
-    return len(numeric_cells) >= 3
+    numeric_cells = re.findall(NUMERIC_TOKEN_PATTERN, line)
+    if len(numeric_cells) >= 2:
+        return True
+    if len(numeric_cells) == 1:
+        tokens = line.split()
+        first_number = next((index for index, token in enumerate(tokens) if contains_number(token)), -1)
+        return first_number > 0 and len(tokens) >= 2
+    return False
 
 
 def describe_pdf_pages_with_vision_command(path: Path, vision_command: str, page_limit: int = 10) -> tuple[list[str], list[str]]:

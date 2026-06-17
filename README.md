@@ -121,7 +121,9 @@ memoreef import-docs --ocr --ocr-lang deu+eng /path/to/german-scan.pdf --vault /
 
 `import-docs` turns PDFs, DOCX files, text files, Markdown files, and image files into local Markdown Drops with source-file metadata and a `## Document text` section. It is useful for NotebookLM-style source collection when you want the durable output to stay in your own Markdown/Obsidian memory instead of a hosted notebook. Text-based PDFs work directly. Scanned/image PDFs and image files need `--ocr` plus local OCR tools (`tesseract`; scanned PDFs also need `pdftoppm`/Poppler). Use `--ocr-lang` for non-English documents, for example `deu+eng`.
 
-For research papers, MemoReef also adds a `## Visual artifacts` section when it sees figure/table captions or table-like text in extracted PDF content. Optional page-image analysis is available through `--vision-command`, which renders the first PDF pages with Poppler, detects large visual regions such as charts/diagrams/tables, crops those regions, and passes each crop to your own local or cloud vision command. If no crop is detected on a page, MemoReef falls back to sending the full rendered page. This is off by default, so MemoReef stays local-first and does not require a vision model.
+For research papers, MemoReef also adds a `## Numeric artifacts` section when it can extract table-like numeric rows or when a vision backend returns validated structured numeric data. This section is deliberately separate from visual prose: agents should answer exact-number questions only from quoted source table text or validated numeric artifacts. Machine-extracted CSV tables are candidates and include their source snippet, so agents must preserve context and avoid inventing missing headers. If a chart is only summarized visually and no exact value is present in `## Numeric artifacts`, the correct answer is that the exact value was not extracted.
+
+MemoReef also adds a `## Visual artifacts` section when it sees figure/table captions or table-like text in extracted PDF content. Optional page-image analysis is available through `--vision-command`, which renders the first PDF pages with Poppler, detects large visual regions such as charts/diagrams/tables, crops those regions, and passes each crop to your own local or cloud vision command. If no crop is detected on a page, MemoReef falls back to sending the full rendered page. This is off by default, so MemoReef stays local-first and does not require a vision model.
 
 MemoReef warns when a PDF is large or when the file has more pages than the selected visual-analysis batch. By default it analyzes the first 10 pages; `--vision-page-limit` accepts 1–25.
 
@@ -155,6 +157,7 @@ Implemented:
 - Import plain text URL lists.
 - Import CSV files with title, URL, source provenance, and tags.
 - Import local PDF, DOCX, text, Markdown, and OCR-assisted image/scanned-PDF files into source-memory Drops.
+- Extract PDF numeric table rows into Numeric artifacts for exact-number answers.
 - Extract PDF figure/table captions, table-like text, optional visual-region crops, and optional vision-command descriptions into Visual artifacts sections.
 - Preserve folder path as Markdown frontmatter.
 - Write one Markdown file per bookmark.
