@@ -455,12 +455,13 @@ open {rel["pilot"]}
 open {rel["tour"]}
 ```
 
-Then open the dashboard, local library, review launcher, reports, briefs, pilot checklist, and example Drop detail pages:
+Then open the dashboard, local library, Pearl Dive, review launcher, reports, briefs, pilot checklist, and example Drop detail pages:
 
 ```bash
 open {rel["dashboard"]}
 open {root}/app/pilot.html
 open {root}/app/library.html
+open {root}/app/dive.html
 open {root}/app/review.html
 open {root}/app/reports.html
 open {root}/app/briefs.html
@@ -480,8 +481,9 @@ These pages are static files. There is no backend, account, network call, or AI 
 - A duplicate report: `{rel["duplicate_report"]}`.
 - Garden suggestions: `{rel["garden_suggestions"]}`.
 - A search result: `{rel["search_results"]}`.
+- A Pearl Dive report: `{rel["dive_report"]}`.
 - A project brief for agent handoff: `{rel["project_brief"]}`.
-- Static app pages for dashboard, tour, library search, Review Mode instructions, reports, briefs, and one generated detail page per Drop.
+- Static app pages for dashboard, tour, library search, Pearl Dive, Review Mode instructions, reports, briefs, and one generated detail page per Drop.
 - A pilot checklist page and Markdown checklist: `{rel["pilot"]}`, `{root}/PILOT_README.md`.
 - A demo review-decisions file and agent finish artifacts: `{rel["decisions"]}`, `{rel["agent_plan"]}`, `{rel["agent_proposals"]}`.
 
@@ -528,6 +530,13 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
         root,
         root_path / "search" / "demo-search-results.json",
         filters=default_review_filters(limit=10),
+    )
+    dive_report, dive_payload = pearl_dive(
+        vault,
+        "agent workflow markdown search",
+        root,
+        root_path / "answers" / "demo-pearl-dive-report.md",
+        filters=default_review_filters(limit=5),
     )
     project_brief, brief_payload = create_project_brief(
         vault,
@@ -579,6 +588,7 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
         "duplicate_report": duplicate_report,
         "garden_suggestions": garden_suggestions,
         "search_results": search_results,
+        "dive_report": dive_report,
         "project_brief": project_brief,
         "decisions": decisions,
         "agent_plan": agent_plan,
@@ -586,6 +596,9 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
     }
     readme = vault / root / "DEMO_README.md"
     readme.write_text(demo_readme_text(vault, root, artifacts), encoding="utf-8")
+
+    dive_summary = dive_payload.get("summary", {})
+    dive_pearls = dive_summary.get("retrieved_pearls", 0) if isinstance(dive_summary, dict) else 0
 
     return {
         "vault": vault,
@@ -595,6 +608,7 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
         "duplicate_groups": duplicate_payload["summary"]["exact_url_groups"],
         "garden_suggestions": garden_payload["summary"]["suggestions"],
         "search_matches": search_payload["summary"]["matches"],
+        "dive_pearls": dive_pearls,
         "brief_sources": brief_payload["summary"]["sources"],
         "agent_proposals": proposals_payload["summary"]["proposed"],
         "dashboard": dashboard,
@@ -3243,6 +3257,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
     latest_garden_suggestions = latest_matching_file(root_path / "reports", ["*-garden-suggestions.json"])
 
     latest_search_results = latest_matching_file(root_path / "search", ["*-search-results.json"])
+    latest_dive_report = latest_matching_file(root_path / "answers", ["*-dive-report.md"])
     latest_project_brief = latest_matching_file(root_path / "briefs", ["*-project-brief.md"])
     latest_hub_map = latest_matching_file(root_path / "Maps", ["Emerging Hubs.md"])
     has_metadata = vault_has_metadata(vault_path, root)
@@ -3266,6 +3281,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
         "latest_garden_suggestions": latest_garden_suggestions,
 
         "latest_search_results": latest_search_results,
+        "latest_dive_report": latest_dive_report,
         "latest_project_brief": latest_project_brief,
         "latest_hub_map": latest_hub_map,
         "next_action": recommended_next_action(
@@ -3336,6 +3352,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
     latest_garden_suggestions = relative_or_none(state.get("latest_garden_suggestions"), vault)
 
     latest_search_results = relative_or_none(state.get("latest_search_results"), vault)
+    latest_dive_report = relative_or_none(state.get("latest_dive_report"), vault)
     latest_project_brief = relative_or_none(state.get("latest_project_brief"), vault)
     latest_hub_map = relative_or_none(state.get("latest_hub_map"), vault)
     next_action = html_escape(str(state.get("next_action", "Continue.")))
@@ -3406,6 +3423,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <dt>Garden suggestions</dt><dd>{html_escape(latest_garden_suggestions)}</dd>
 
           <dt>Library search</dt><dd>{html_escape(latest_search_results)}</dd>
+          <dt>Pearl Dive</dt><dd>{html_escape(latest_dive_report)}</dd>
           <dt>Project brief</dt><dd>{html_escape(latest_project_brief)}</dd>
           <dt>Hub map</dt><dd>{html_escape(latest_hub_map)}</dd>
         </dl>
@@ -3421,6 +3439,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <li>Review the suggestions JSON, then run <code>apply-garden-suggestions --dry-run</code> before applying accepted labels.</li>
 
           <li>Run <code>search-library</code> to search the local Library, then open <code>library.html</code>.</li>
+          <li>Run <code>dive "question"</code> to send agents into the reef for cited Pearls and nuggets, then open <code>dive.html</code>.</li>
           <li>Run <code>brief --project "AI Agents"</code> to export selected Drops into an agent-ready Markdown project brief.</li>
           <li>Run <code>hub-map</code> to create Obsidian map notes and Drop-to-hub graph links.</li>
           <li>Open <code>briefs.html</code> and <code>reports.html</code> to inspect generated handoff Markdown and local report JSON.</li>
@@ -3434,6 +3453,10 @@ def render_app_dashboard(state: dict[str, object]) -> str:
       <div class=\"card\">
         <h2>Library/Search</h2>
         <p>Open <a href=\"library.html\">library.html</a> for local search guidance, the latest saved search results, and links to generated Drop detail pages.</p>
+      </div>
+      <div class=\"card\">
+        <h2>Pearl Dive</h2>
+        <p>Open <a href=\"dive.html\">dive.html</a> to retrieve cited nuggets from saved Drops and inspect the latest Dive Report.</p>
       </div>
       <div class=\"card\">
         <h2>Review Mode</h2>
@@ -3453,6 +3476,7 @@ APP_NAV_ITEMS = [
     ("pilot", "Pilot", "pilot.html"),
     ("tour", "Tour", "tour.html"),
     ("library", "Library", "library.html"),
+    ("dive", "Pearl Dive", "dive.html"),
     ("review", "Review", "review.html"),
     ("reports", "Reports", "reports.html"),
     ("briefs", "Briefs", "briefs.html"),
@@ -3537,6 +3561,83 @@ def latest_search_payload(vault: Path, root: str = "MemoReef") -> dict[str, obje
     except json.JSONDecodeError:
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def latest_dive_report_path(vault: Path, root: str = "MemoReef") -> Path | None:
+    return latest_matching_file(vault / root / "answers", ["*-dive-report.md"])
+
+
+def dive_report_summary(path: Path) -> dict[str, object]:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    title = "MemoReef Pearl Dive"
+    question = "unknown"
+    retrieved = 0
+    gaps: list[str] = []
+    in_gaps = False
+    for line in text.splitlines():
+        if line.startswith("# "):
+            title = line[2:].strip() or title
+        elif line.startswith("- Question:"):
+            question = line.split(":", 1)[1].strip() or question
+        elif line.startswith("### "):
+            retrieved += 1
+        elif line.strip() == "## Uncharted Gaps":
+            in_gaps = True
+        elif line.startswith("## ") and in_gaps:
+            in_gaps = False
+        elif in_gaps and line.startswith("- "):
+            gaps.append(line[2:].strip())
+    return {"title": title, "question": question, "retrieved": retrieved, "gaps": gaps, "text": text}
+
+
+def render_dive_page(vault: Path, root: str = "MemoReef") -> str:
+    vault_path = vault.expanduser().resolve()
+    root_path = vault_path / root
+    app_dir = root_path / "app"
+    report_path = latest_dive_report_path(vault_path, root)
+    report_card = "<p>No Dive Report detected yet.</p>"
+    if report_path is not None:
+        summary = dive_report_summary(report_path)
+        href = app_href(report_path, app_dir) or ""
+        gap_items = summary.get("gaps", [])
+        gaps_html = "<ul>" + "".join(f"<li>{html_escape(str(gap))}</li>" for gap in gap_items) + "</ul>" if isinstance(gap_items, list) and gap_items else "<p>No gaps listed.</p>"
+        report_card = f"""
+      <article class="card">
+        <h2>{html_escape(str(summary.get('title') or 'MemoReef Pearl Dive'))}</h2>
+        <p class="meta"><a href="{html_escape(href)}">{html_escape(report_path.resolve().relative_to(vault_path).as_posix())}</a></p>
+        <dl>
+          <dt>Question</dt><dd>{html_escape(str(summary.get('question') or 'unknown'))}</dd>
+          <dt>Retrieved Pearls</dt><dd>{html_escape(str(summary.get('retrieved') or 0))}</dd>
+        </dl>
+        <h2>Uncharted Gaps</h2>
+        {gaps_html}
+      </article>"""
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MemoReef Pearl Dive</title>
+  <style>{app_common_css()}</style>
+</head>
+<body>
+  <main>
+    {app_nav("dive")}
+    <h1>Pearl Dive</h1>
+    <section class="panel">
+      <p>Send your agents into the reef to retrieve cited Pearls and nuggets of wisdom from saved Drops.</p>
+      <p><code>python3 -m memoreef.cli dive "agent workflow" --vault {html_escape(str(vault_path))}</code></p>
+      <p>Useful filters: <code>--project</code>, <code>--shoal</code>, <code>--tag</code>, <code>--hostname</code>, <code>--pearl-only</code>, <code>--exclude-status</code>, and <code>--limit</code>.</p>
+      <p>Pearl Dive is local-only. It retrieves cited leads and names gaps; it does not pretend to synthesize truth from nowhere. Refresh this page after running a new dive.</p>
+    </section>
+    <section class="panel">
+      <h2>Latest Dive Report</h2>
+      {report_card}
+    </section>
+  </main>
+</body>
+</html>
+"""
 
 
 def render_library_page(vault: Path, root: str = "MemoReef") -> str:
@@ -4034,6 +4135,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
     agent_proposals_payload = read_json_object(state.get("latest_agent_proposals"))
     search_payload = read_json_object(state.get("latest_search_results"))
     latest_project_brief = state.get("latest_project_brief")
+    latest_dive_report = state.get("latest_dive_report")
     latest_hub_map = state.get("latest_hub_map")
 
     mess_signals = [
@@ -4113,6 +4215,8 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
         library_lines.append("No saved search result was detected yet; run search-library to create one.")
     if isinstance(latest_project_brief, Path):
         library_lines.append("A Markdown project brief is available from selected local Drops.")
+    if isinstance(latest_dive_report, Path):
+        library_lines.append("A Pearl Dive report is available with retrieved local-source nuggets and gaps.")
     detail_examples = [
         f'<a href="{html_escape(drop_detail_href(drop))}">{html_escape(str(drop.get("title") or "Untitled"))}</a>'
         for drop in drops[:5]
@@ -4131,6 +4235,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
             linked_file("Latest link check report JSON", state.get("latest_link_check_report"), app_dir),
             linked_file("Latest garden suggestions JSON", state.get("latest_garden_suggestions"), app_dir),
             linked_file("Latest search results JSON", state.get("latest_search_results"), app_dir),
+            linked_file("Latest Pearl Dive report Markdown", latest_dive_report, app_dir),
             linked_file("Latest project brief Markdown", state.get("latest_project_brief"), app_dir),
             linked_file("Latest hub map Markdown", latest_hub_map, app_dir),
             linked_file("Latest agent finish plan JSON", state.get("latest_agent_plan"), app_dir),
@@ -4226,6 +4331,7 @@ def generate_app_dashboard(vault: Path, root: str = "MemoReef") -> Path:
     path.write_text(render_app_dashboard(dashboard_state(vault_path, root)), encoding="utf-8")
     (app_dir / "pilot.html").write_text(render_pilot_page(vault_path, root), encoding="utf-8")
     (app_dir / "library.html").write_text(render_library_page(vault_path, root), encoding="utf-8")
+    (app_dir / "dive.html").write_text(render_dive_page(vault_path, root), encoding="utf-8")
     (app_dir / "review.html").write_text(render_review_page(vault_path, root), encoding="utf-8")
     (app_dir / "reports.html").write_text(render_reports_page(vault_path, root), encoding="utf-8")
     (app_dir / "briefs.html").write_text(render_briefs_page(vault_path, root), encoding="utf-8")
@@ -4944,6 +5050,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- exact duplicate groups: {summary['duplicate_groups']}")
         print(f"- garden suggestions: {summary['garden_suggestions']}")
         print(f"- search matches: {summary['search_matches']}")
+        print(f"- dive pearls: {summary['dive_pearls']}")
         print(f"- brief sources: {summary['brief_sources']}")
         print(f"- agent proposals: {summary['agent_proposals']}")
         print(f"- dashboard: {summary['dashboard']}")

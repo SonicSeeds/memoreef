@@ -108,6 +108,8 @@ def main() -> int:
 
         run(cli + ["app", "--vault", str(vault)], ROOT, "regenerate app dashboard")
         require_contains(root / "app" / "index.html", "MemoReef", "dashboard")
+        require_contains(root / "app" / "dive.html", "Pearl Dive", "Pearl Dive page")
+        require_contains(root / "app" / "dive.html", "Latest Dive Report", "Pearl Dive page latest report")
         require_contains(root / "app" / "review.html", "Review Mode", "review launcher")
         require_contains(root / "app" / "library.html", "Library", "library page")
 

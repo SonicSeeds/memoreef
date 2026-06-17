@@ -1311,6 +1311,8 @@ endstream endobj
             write_bookmarks_to_vault([Bookmark("Agent Workflow", "https://example.com")], vault_path)
             with redirect_stdout(io.StringIO()):
                 main(["search-library", "--vault", str(vault_path), "--query", "agent"])
+            with redirect_stdout(io.StringIO()):
+                main(["dive", "agent workflow", "--vault", str(vault_path)])
 
             with redirect_stdout(io.StringIO()):
                 result = main(["app", "--vault", str(vault_path)])
@@ -1318,16 +1320,24 @@ endstream endobj
             app_dir = vault_path / "MemoReef" / "app"
             index = (app_dir / "index.html").read_text(encoding="utf-8")
             library = (app_dir / "library.html").read_text(encoding="utf-8")
+            dive = (app_dir / "dive.html").read_text(encoding="utf-8")
             detail_pages = list((app_dir / "drops").glob("*.html"))
             self.assertEqual(result, 0)
             self.assertIn("Library/Search", index)
             self.assertIn("library.html", index)
+            self.assertIn("Pearl Dive", index)
+            self.assertIn("dive.html", index)
             self.assertIn("review.html", index)
             self.assertIn("reports.html", index)
             self.assertIn("briefs.html", index)
             self.assertIn("search-library", library)
             self.assertIn("Agent Workflow", library)
             self.assertIn("drops/", library)
+            self.assertIn("Pearl Dive", dive)
+            self.assertIn("Latest Dive Report", dive)
+            self.assertIn("Retrieved Pearls", dive)
+            self.assertIn("Uncharted Gaps", dive)
+            self.assertIn("agent workflow", dive)
             self.assertTrue(detail_pages)
             detail = detail_pages[0].read_text(encoding="utf-8")
             self.assertIn("Agent Workflow", detail)

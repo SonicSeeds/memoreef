@@ -169,7 +169,7 @@ Implemented:
 - Generate agent finish plans, deterministic proposal drafts, and local agent tags for kept/Pearl Drops.
 - Generate Obsidian hub map notes and Drop-to-hub `[[links]]` so reviewed Drops form visible graph clusters.
 - Create duplicate, dead-link, metadata, garden suggestion, and library search reports.
-- Generate a refined static local app with dashboard, pilot, tour, library, review, reports, briefs, and Drop detail pages.
+- Generate a refined static local app with dashboard, pilot, tour, library, Pearl Dive, review, reports, briefs, and Drop detail pages.
 - Provide a browser-only Review Mode prototype with sample data until a real review-session JSON is loaded, a non-functional mobile app mockup, and the live cinematic landing page at [memoreef.de](https://memoreef.de/).
 
 Not implemented yet:
@@ -422,7 +422,7 @@ open /tmp/memoreef-demo/MemoReef/app/tour.html
 open /tmp/memoreef-demo/MemoReef/app/index.html
 ```
 
-The demo command writes fictional sample Drops and generates local review, duplicate, garden, search, project brief, agent-plan, pilot checklist, product tour, Drop detail, review launcher, reports, briefs, and static app artifacts. Open `MemoReef/app/pilot.html` first for the guided checklist, then use the tour, dashboard, library, review, reports, briefs, and example Drop detail pages. It does not use a backend, network call, AI call, or secrets.
+The demo command writes fictional sample Drops and generates local review, duplicate, garden, search, Pearl Dive, project brief, agent-plan, pilot checklist, product tour, Drop detail, review launcher, reports, briefs, and static app artifacts. Open `MemoReef/app/pilot.html` first for the guided checklist, then use the tour, dashboard, library, Pearl Dive, review, reports, briefs, and example Drop detail pages. It does not use a backend, network call, AI call, or secrets.
 
 Review Mode can export `memoreef-review-decisions.json` from the browser. The CLI can apply those decisions back to Markdown frontmatter.
 
