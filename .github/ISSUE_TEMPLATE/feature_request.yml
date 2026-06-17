@@ -1,0 +1,44 @@
+---
+name: Feature request
+description: Suggest a MemoReef feature or improvement.
+title: "Feature: <short summary>"
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow gap
+      description: What were you trying to do with your sources?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should MemoReef do differently?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Install / onboarding
+        - Import / ingestion
+        - Review Mode
+        - Import Dock
+        - Bookmarklet clipping
+        - Pearl Dive / retrieval
+        - Markdown / Obsidian output
+        - Local app UI
+        - Agent handoff
+        - Other
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: context
+    attributes:
+      label: Extra context
+      description: Screenshots are helpful if they do not expose private source data.

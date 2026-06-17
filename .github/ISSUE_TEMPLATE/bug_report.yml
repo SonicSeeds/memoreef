@@ -1,0 +1,52 @@
+---
+name: Bug report
+description: Report a reproducible MemoReef bug.
+title: "Bug: <short summary>"
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: MemoReef version / commit
+      placeholder: "main at <commit>, or pip version"
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "OS, Python version, browser if relevant"
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command or action
+      description: Paste the exact command or UI action that triggered the problem.
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include error output if available. Redact private paths, URLs, and source contents if needed.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction steps
+      placeholder: |
+        1. Clone repo
+        2. Run ...
+        3. Open ...
+  - type: textarea
+    id: files
+    attributes:
+      label: Relevant generated files
+      description: Paths only are enough. Do not attach private vault contents unless safe.

@@ -14,7 +14,8 @@ Please try the full first-user path:
 4. Add one real document through Import Dock.
 5. Review a few Drops with Keep / Pearl / Sink.
 6. Check the generated Markdown files.
-7. Open an issue or send feedback about anything unclear.
+7. Run one Pearl Dive query.
+8. Open an issue or send feedback about anything unclear.
 
 A good test takes 10–20 minutes. Use non-sensitive sources first.
 
@@ -161,6 +162,22 @@ Each Drop should be a readable Markdown file with frontmatter. Document imports 
 
 If you use Obsidian, open `/tmp/memoreef-test-vault` as a vault and inspect the `MemoReef` folder.
 
+## 7. Run a Pearl Dive
+
+Ask one question against your local sources:
+
+```bash
+memoreef dive "your question here" --vault /tmp/memoreef-test-vault --limit 5
+memoreef app --vault /tmp/memoreef-test-vault
+open /tmp/memoreef-test-vault/MemoReef/app/dive.html
+```
+
+Expected result:
+
+- MemoReef writes a Dive Report under `MemoReef/answers/`.
+- The report lists Retrieved Pearls with source URLs and Drop paths.
+- If sources are weak or missing, the report names Uncharted Gaps instead of pretending.
+
 ## What feedback helps most
 
 Please report:
@@ -170,11 +187,12 @@ Please report:
 - Did the terms Drops / Drift / Pearl / Reef make sense?
 - Did Review Mode feel useful?
 - Did Import Dock behave as expected?
+- Did Pearl Dive retrieve useful Pearls or correctly name gaps?
 - Did the Markdown output feel usable in Obsidian or another editor?
 - What source type did you try: bookmarks, links, CSV, PDF, DOCX, image, scanned PDF?
 - Would you use this again for a real project?
 
-GitHub issues are ideal because they create visible project activity, but short direct feedback is also useful.
+GitHub issues are ideal because they create visible project activity, but short direct feedback is also useful. For the exact feedback shape, see [Trusted Tester Feedback](TRUSTED_TESTER_FEEDBACK.md).
 
 ## Known limits
 

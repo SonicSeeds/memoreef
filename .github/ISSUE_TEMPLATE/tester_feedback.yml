@@ -1,0 +1,70 @@
+---
+name: Trusted tester feedback
+description: Share first-run feedback from trying MemoReef with real sources.
+title: "Tester feedback: <short summary>"
+labels: [tester-feedback]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing MemoReef. Please use non-sensitive sources and describe what actually happened.
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, browser, and whether you used Obsidian.
+      placeholder: "macOS 15, Python 3.11, Chrome, Obsidian yes/no"
+    validations:
+      required: true
+  - type: checkboxes
+    id: tested
+    attributes:
+      label: What did you test?
+      options:
+        - label: Installed from README
+        - label: Ran `python scripts/smoke_tester_readiness.py`
+        - label: Ran sample pilot
+        - label: Imported browser bookmarks
+        - label: Imported URL list or CSV
+        - label: Imported a document through CLI or Import Dock
+        - label: Used Review Mode Keep / Pearl / Sink
+        - label: Used bookmarklet clipping
+        - label: Ran Pearl Dive
+        - label: Opened generated local app pages
+  - type: textarea
+    id: sources
+    attributes:
+      label: Source types tried
+      description: Keep this high level. Do not paste private URLs unless you want them public.
+      placeholder: "20 browser bookmarks, 1 PDF, 3 URLs..."
+  - type: textarea
+    id: stuck
+    attributes:
+      label: Where did you get stuck or hesitate?
+      description: Confusion is useful data.
+    validations:
+      required: true
+  - type: textarea
+    id: useful
+    attributes:
+      label: What felt useful?
+      description: Which part made you think MemoReef might be worth using again?
+  - type: textarea
+    id: missing
+    attributes:
+      label: What was missing or disappointing?
+  - type: dropdown
+    id: use_again
+    attributes:
+      label: Would you use MemoReef again for a real project?
+      options:
+        - "Yes"
+        - "Maybe"
+        - "No"
+        - "Not sure yet"
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else?
