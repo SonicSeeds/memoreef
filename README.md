@@ -12,7 +12,9 @@ Testing MemoReef for the first time? Use the [Tester Guide](docs/TESTER_GUIDE.md
 
 ## Demo video
 
-Watch the 69-second user-ready prototype demo: [docs/videos/memoreef-demo-hyperframes-v1.mp4](docs/videos/memoreef-demo-hyperframes-v1.mp4)
+[![MemoReef user-ready prototype demo](docs/videos/memoreef-demo-poster.jpg)](https://raw.githubusercontent.com/SonicSeeds/memoreef/main/docs/videos/memoreef-demo-hyperframes-v1.mp4)
+
+Watch/download the 69-second user-ready prototype demo: [MP4, 4.8 MB](https://raw.githubusercontent.com/SonicSeeds/memoreef/main/docs/videos/memoreef-demo-hyperframes-v1.mp4)
 
 It shows the local install path, real-source imports, Import Dock, Review Mode, and Markdown output.
 
