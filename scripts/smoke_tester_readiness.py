@@ -100,6 +100,12 @@ def main() -> int:
             raise SystemExit("FAILED: review session has no items")
         print(f"ok: review session contains {len(data['items'])} item(s)")
 
+        run(cli + ["dive", "research memory", "--vault", str(vault), "--limit", "3"], ROOT, "run Pearl Dive")
+        answers_dir = root / "answers"
+        dive_report = newest_file(answers_dir, "*-dive-report.md")
+        require_contains(dive_report, "## Retrieved Pearls", "Pearl Dive report")
+        require_contains(dive_report, "## Uncharted Gaps", "Pearl Dive gaps")
+
         run(cli + ["app", "--vault", str(vault)], ROOT, "regenerate app dashboard")
         require_contains(root / "app" / "index.html", "MemoReef", "dashboard")
         require_contains(root / "app" / "review.html", "Review Mode", "review launcher")

@@ -147,7 +147,7 @@ MemoReef is a private source memory layer, not a generic bookmark manager:
 - **Deep**: long-term archive state for saved sources.
 - **Pearls**: high-value sources worth citing or using in emerging projects.
 - **Shoals**: related source clusters.
-- **Dive**: local search and retrieval over saved Drops for human reading and agent handoff.
+- **Pearl Dive**: agents search the reef for cited Pearls and nuggets of wisdom from saved Drops.
 
 ## Current MVP
 
@@ -394,6 +394,15 @@ python3.11 -m memoreef.cli search-library --vault /tmp/memoreef-vault --query "a
 ```
 
 Library search is local-only and read-only. It searches Markdown Drops and writes JSON results under `MemoReef/search` unless `--output` is provided.
+
+Run a Pearl Dive to retrieve cited nuggets for a question:
+
+```bash
+python3.11 -m memoreef.cli dive "agent workflow" --vault /tmp/memoreef-vault
+python3.11 -m memoreef.cli dive "research" --vault /tmp/memoreef-vault --pearl-only --limit 5
+```
+
+Pearl Dive is local-only and read-only against Drops. It writes a Markdown Dive Report under `MemoReef/answers/*-dive-report.md` unless `--output` is provided, includes Retrieved Pearls with source URLs and Drop paths, and names Uncharted Gaps when the local reef cannot support an answer.
 
 Export selected Drops into a Markdown project brief:
 

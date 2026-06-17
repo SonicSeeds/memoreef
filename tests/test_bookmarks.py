@@ -1149,6 +1149,91 @@ endstream endobj
             self.assertEqual(len(outputs), 1)
             self.assertTrue(explicit.exists())
 
+    def dive_text(self, vault_path: Path, question: str = "agent workflow", *args: str):
+        stdout = io.StringIO()
+        output_path = vault_path.parent / "dive-report.md"
+        with redirect_stdout(stdout):
+            result = main(["dive", question, "--vault", str(vault_path), "--output", str(output_path), *args])
+        return result, stdout.getvalue(), output_path.read_text(encoding="utf-8")
+
+    def test_dive_report_retrieves_cited_local_pearls_and_nuggets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("Agent Workflow Pearl", "https://agent.example/workflow", projects=["AI Agents"], status="reef", pearl=True),
+                Bookmark("Other Source", "https://other.example", projects=["Other"], status="reef"),
+            ], vault_path, allow_duplicates=True)
+            self.append_drop_body(written[0], "Agent workflow handoff notes should cite local sources before making claims.")
+
+            result, output, text = self.dive_text(vault_path, "agent workflow", "--project", "AI Agents", "--pearl-only")
+
+            self.assertEqual(result, 0)
+            self.assertIn("Pearl Dive:", output)
+            self.assertIn("- retrieved pearls: 1", output)
+            self.assertIn("# MemoReef Pearl Dive", text)
+            self.assertIn("## Retrieved Pearls", text)
+            self.assertIn("Agent Workflow Pearl", text)
+            self.assertIn("https://agent.example/workflow", text)
+            self.assertIn("Drop path:", text)
+            self.assertIn("Nugget:", text)
+            self.assertIn("Agent Instructions", text)
+            self.assertNotIn("Other Source", text)
+
+    def test_dive_report_respects_filters_limit_and_exclude_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([
+                Bookmark("First Agent Workflow", "https://one.example", projects=["AI Agents"], status="reef", pearl=True),
+                Bookmark("Second Agent Workflow", "https://two.example", projects=["AI Agents"], status="reef", pearl=True),
+                Bookmark("Discarded Agent Workflow", "https://discarded.example", projects=["AI Agents"], status="discarded", pearl=True),
+            ], vault_path, allow_duplicates=True)
+
+            result, output, text = self.dive_text(
+                vault_path,
+                "agent workflow",
+                "--project",
+                "AI Agents",
+                "--exclude-status",
+                "discarded",
+                "--limit",
+                "1",
+            )
+
+            self.assertEqual(result, 0)
+            self.assertIn("- retrieved pearls: 1", output)
+            self.assertIn("Applied filters: project=AI Agents, exclude-status=discarded, limit=1", text)
+            self.assertIn("First Agent Workflow", text)
+            self.assertNotIn("Second Agent Workflow", text)
+            self.assertNotIn("Discarded Agent Workflow", text)
+
+    def test_dive_report_names_uncharted_gaps_when_no_matches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([Bookmark("Coral Gardening", "https://reef.example")], vault_path)
+
+            result, output, text = self.dive_text(vault_path, "quantum potatoes")
+
+            self.assertEqual(result, 0)
+            self.assertIn("- retrieved pearls: 0", output)
+            self.assertIn("No pearls were retrieved", text)
+            self.assertIn("## Uncharted Gaps", text)
+            self.assertIn("do not contain an answerable trail", text)
+
+    def test_dive_default_output_writes_answers_and_search_trace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([Bookmark("Agent Workflow", "https://example.com")], vault_path)
+
+            with redirect_stdout(io.StringIO()):
+                result = main(["dive", "agent workflow", "--vault", str(vault_path)])
+
+            reports = list((vault_path / "MemoReef" / "answers").glob("*-dive-report.md"))
+            searches = list((vault_path / "MemoReef" / "search").glob("*-pearl-dive-search.json"))
+            self.assertEqual(result, 0)
+            self.assertEqual(len(reports), 1)
+            self.assertEqual(len(searches), 1)
+            self.assertIn("MemoReef Pearl Dive", reports[0].read_text(encoding="utf-8"))
+
     def brief_text(self, vault_path: Path, *args: str):
         stdout = io.StringIO()
         output_path = vault_path.parent / "project-brief.md"

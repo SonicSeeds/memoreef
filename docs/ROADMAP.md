@@ -84,7 +84,7 @@ Next acceptance criteria:
 - Better duplicate/dead-link triage surfaced inside the app.
 - Optional Obsidian graph/hub pass after review.
 
-## Room 5 — Retrieval and Ask My Sources
+## Room 5 — Retrieval and Pearl Dive
 
 Purpose: MemoReef becomes useful after ingestion, not just tidy.
 
@@ -92,12 +92,13 @@ Current capabilities:
 
 - Local library page/search over generated app pages.
 - Brief generation from filtered Drops.
+- Pearl Dive CLI that retrieves cited local-source nuggets and writes Dive Reports.
 - Reports for duplicates, links, metadata, gardens/projects/shoals.
 
 Next acceptance criteria:
 
-- Local search CLI/app flow that returns cited source snippets.
-- `ask` command: answer from saved Drops only, cite source files/URLs, state gaps.
+- Pearl Dive app surface, not only CLI.
+- Agent-assisted answer synthesis from Dive Reports only, with source files/URLs cited.
 - No answer from unsourced memory unless explicitly labeled.
 - Clear distinction between quote, summary, estimate, and missing evidence.
 

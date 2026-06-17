@@ -917,6 +917,110 @@ def search_library(
     return output, payload
 
 
+def render_dive_report(vault: Path, root: str, question: str, filters: dict[str, object], items: list[dict[str, object]]) -> str:
+    created_at = utc_now_iso()
+    filter_summary = search_filter_summary(filters)
+    lines = [
+        "# MemoReef Pearl Dive",
+        "",
+        f"- Generated: {created_at}",
+        f"- Vault: `{vault}`",
+        f"- Source: `{root}/Drops`",
+        f"- Question: {question}",
+        f"- Applied filters: {filter_summary}",
+        "",
+        "## Dive Report",
+        "",
+    ]
+    if items:
+        lines.append(f"The dive retrieved {len(items)} local source match(es). Treat these as cited leads, not a synthesized final answer.")
+    else:
+        lines.append("No pearls were retrieved from the local reef for this question.")
+
+    lines.extend(["", "## Retrieved Pearls", ""])
+    if not items:
+        lines.append("No matching Drops found. Import more sources, broaden filters, or try a different question.")
+    for index, item in enumerate(items, start=1):
+        pearl = "yes" if bool(item.get("pearl", False)) else "no"
+        snippet = str(item.get("snippet") or "").strip() or "No matching snippet available."
+        lines.extend(
+            [
+                f"### {index}. {item.get('title') or 'Untitled'}",
+                "",
+                f"- URL: {item.get('url') or 'none'}",
+                f"- Drop path: `{item.get('path') or ''}`",
+                f"- Status: {item.get('status') or 'drift'}",
+                f"- Pearl: {pearl}",
+                f"- Matched fields: {brief_list(item.get('matched_fields'))}",
+                "",
+                "Nugget:",
+                "",
+                f"> {snippet}",
+                "",
+            ]
+        )
+
+    lines.extend(["## Uncharted Gaps", ""])
+    if not items:
+        lines.append("- The current local sources do not contain an answerable trail for this question.")
+    elif len(items) < 3:
+        lines.append("- Low source count; verify before treating this as a strong answer.")
+    if any(str(item.get("status") or "") == "discarded" for item in items):
+        lines.append("- One or more discarded sources matched; check whether filters should exclude them.")
+    if not any(line.startswith("- ") for line in lines[lines.index("## Uncharted Gaps") + 2 :]):
+        lines.append("- No obvious local-source gaps detected from this retrieval pass.")
+
+    lines.extend(
+        [
+            "",
+            "## Agent Instructions",
+            "",
+            "- Use only the retrieved local sources for factual claims.",
+            "- Cite Drop paths and source URLs when answering from this report.",
+            "- Do not invent claims, quotes, dates, or source coverage.",
+            "- If the retrieved pearls are insufficient, say so plainly.",
+        ]
+    )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def pearl_dive(
+    vault: Path,
+    question: str,
+    root: str = "MemoReef",
+    output: Path | None = None,
+    filters: dict[str, object] | None = None,
+) -> tuple[Path, dict[str, object]]:
+    vault_path = vault.expanduser().resolve()
+    filters = filters or default_review_filters(limit=8)
+    search_output, search_payload = search_library(
+        vault_path,
+        question,
+        root,
+        vault_path / root / "search" / f"{timestamp_for_filename()}-pearl-dive-search.json",
+        filters,
+    )
+    raw_items = search_payload.get("items", [])
+    items = [item for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
+    if output is None:
+        output = vault_path / root / "answers" / f"{timestamp_for_filename()}-{slug_for_filename(question)}-dive-report.md"
+    output = output.expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render_dive_report(vault_path, root, question, filters, items), encoding="utf-8")
+    payload = {
+        "created_at": utc_now_iso(),
+        "question": question,
+        "filters": filters,
+        "search_output": str(search_output),
+        "summary": {
+            "retrieved_pearls": len(items),
+            "limit": filters.get("limit"),
+        },
+        "items": items,
+    }
+    return output, payload
+
+
 def slug_for_filename(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
     return slug or "sources"
@@ -4193,6 +4297,21 @@ def build_parser() -> argparse.ArgumentParser:
     search_cmd.add_argument("--pearl-only", action="store_true", help="Search only Pearl Drops.")
     search_cmd.add_argument("--exclude-status", action="append", default=[], help="Exclude Drops with a matching status. Repeatable.")
 
+    dive_cmd = sub.add_parser("dive", help="Run a Pearl Dive: retrieve cited local-source nuggets for a question.")
+    dive_cmd.add_argument("question", help="Question to send into the local reef.")
+    dive_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    dive_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    dive_cmd.add_argument("--output", type=Path, default=None, help="Output Markdown path. Defaults inside the vault.")
+    dive_cmd.add_argument("--limit", type=int, default=8, help="Maximum retrieved pearls. Default: 8")
+    dive_cmd.add_argument("--project", action="append", default=[], help="Dive only through Drops with a matching project. Repeatable.")
+    dive_cmd.add_argument("--shoal", action="append", default=[], help="Dive only through Drops with a matching shoal. Repeatable.")
+    dive_cmd.add_argument("--status", action="append", default=[], help="Dive only through Drops with a matching status. Repeatable.")
+    dive_cmd.add_argument("--tag", action="append", default=[], help="Dive only through Drops with a matching tag. Repeatable.")
+    dive_cmd.add_argument("--folder", action="append", default=[], help="Dive only through Drops with a matching folder. Repeatable.")
+    dive_cmd.add_argument("--hostname", action="append", default=[], help="Dive only through Drops with a matching hostname. Repeatable.")
+    dive_cmd.add_argument("--pearl-only", action="store_true", help="Dive only through Pearl Drops.")
+    dive_cmd.add_argument("--exclude-status", action="append", default=[], help="Exclude Drops with a matching status. Repeatable.")
+
     brief_cmd = sub.add_parser("brief", help="Export selected Markdown Drops into a project brief.")
     brief_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     brief_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
@@ -4431,6 +4550,28 @@ def main(argv: list[str] | None = None) -> int:
         print("Search library:")
         print(f"- query: {args.query}")
         print(f"- matches: {matches}")
+        print(f"- output: {output}")
+        print(f"- filters: {search_filter_summary(filters)}")
+        return 0
+
+    if args.command == "dive":
+        filters = default_review_filters(
+            project=args.project,
+            shoal=args.shoal,
+            status=args.status,
+            tag=args.tag,
+            folder=args.folder,
+            hostname=args.hostname,
+            pearl_only=args.pearl_only,
+            exclude_status=args.exclude_status,
+            limit=args.limit,
+        )
+        output, payload = pearl_dive(args.vault, args.question, args.root, args.output, filters)
+        summary = payload.get("summary", {})
+        retrieved = summary.get("retrieved_pearls", 0) if isinstance(summary, dict) else 0
+        print("Pearl Dive:")
+        print(f"- question: {args.question}")
+        print(f"- retrieved pearls: {retrieved}")
         print(f"- output: {output}")
         print(f"- filters: {search_filter_summary(filters)}")
         return 0
