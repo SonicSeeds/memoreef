@@ -39,7 +39,7 @@ def parse_documents(
     ocr: bool = False,
     ocr_lang: str | None = None,
     vision_command: str | None = None,
-    vision_page_limit: int = 3,
+    vision_page_limit: int = 10,
 ) -> tuple[list[Bookmark], list[str]]:
     bookmarks: list[Bookmark] = []
     warnings: list[str] = []
@@ -56,7 +56,7 @@ def parse_document(
     ocr: bool = False,
     ocr_lang: str | None = None,
     vision_command: str | None = None,
-    vision_page_limit: int = 3,
+    vision_page_limit: int = 10,
 ) -> DocumentImportResult:
     source = path.expanduser().resolve()
     suffix = source.suffix.lower()
@@ -220,7 +220,7 @@ def extract_pdf_visual_analysis(
     path: Path,
     text: str,
     vision_command: str | None = None,
-    page_limit: int = 3,
+    page_limit: int = 10,
 ) -> tuple[str | None, list[str]]:
     """Return optional visual notes for a research PDF without making vision mandatory."""
     sections: list[str] = []
@@ -288,7 +288,7 @@ def looks_like_table_row(line: str) -> bool:
     return len(numeric_cells) >= 3
 
 
-def describe_pdf_pages_with_vision_command(path: Path, vision_command: str, page_limit: int = 3) -> tuple[list[str], list[str]]:
+def describe_pdf_pages_with_vision_command(path: Path, vision_command: str, page_limit: int = 10) -> tuple[list[str], list[str]]:
     page_limit = min(max(1, page_limit), PDF_VISION_MAX_PAGES)
     pdftoppm = shutil.which("pdftoppm")
     if not pdftoppm:

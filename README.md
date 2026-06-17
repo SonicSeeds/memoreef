@@ -125,7 +125,7 @@ Example optional vision hook:
 ```bash
 memoreef import-docs paper.pdf --vault /tmp/memoreef-vault \
   --vision-command 'your-vision-cli --image {image} --prompt "{prompt}"' \
-  --vision-page-limit 3
+  --vision-page-limit 10
 ```
 
 The command template supports `{image}`, `{page}`, and `{prompt}` placeholders.

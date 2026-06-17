@@ -4157,7 +4157,7 @@ def build_parser() -> argparse.ArgumentParser:
     import_docs_cmd.add_argument("--ocr", action="store_true", help="Use local OCR for image files and scanned PDFs when tesseract/pdftoppm are installed.")
     import_docs_cmd.add_argument("--ocr-lang", default=None, help="Optional Tesseract language code, e.g. eng, deu, or deu+eng.")
     import_docs_cmd.add_argument("--vision-command", default=None, help="Optional command template for PDF page image analysis. Supports {image}, {page}, and {prompt} placeholders.")
-    import_docs_cmd.add_argument("--vision-page-limit", type=bounded_vision_page_limit, default=3, help="Maximum PDF pages to render for --vision-command, 1-25. Default: 3.")
+    import_docs_cmd.add_argument("--vision-page-limit", type=bounded_vision_page_limit, default=10, help="Maximum PDF pages to render for --vision-command, 1-25. Default: 10.")
     add_vault_import_options(import_docs_cmd)
 
     inspect_cmd = sub.add_parser("inspect", help="Inspect a browser bookmark HTML export without writing files.")
