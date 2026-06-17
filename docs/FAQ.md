@@ -25,7 +25,7 @@ Yes. MemoReef stores sources as structured Markdown with metadata, tags, status,
 
 ## What works today?
 
-MemoReef can import browser bookmark exports, URL lists, CSV files, PDFs, DOCX files, text files, Markdown files, and OCR-assisted image/scanned-PDF files; clip highlighted web text through a localhost bookmarklet; generate Markdown Drops; run a local Review Mode app; autosave Keep/Pearl/Sink decisions; create reports; generate hub maps; and build a static local app view.
+MemoReef can import browser bookmark exports, URL lists, CSV files, PDFs, DOCX files, text files, Markdown files, and OCR-assisted image/scanned-PDF files; clip highlighted web text through a localhost bookmarklet; generate Markdown Drops; run a local Review Mode app with Import Dock drag-and-drop uploads; autosave Keep/Pearl/Sink decisions; create reports; generate hub maps; and build a static local app view.
 
 ## Can MemoReef import PDFs and DOCX files?
 

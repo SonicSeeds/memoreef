@@ -69,6 +69,8 @@ open http://127.0.0.1:8765/
 
 By default this binds only to `127.0.0.1`, loads up to 50 Drift Drops, and autosaves each Keep/Pearl/Sink decision directly to Markdown frontmatter in the vault. The Review Mode **Tag kept/Pearls** button then saves pending decisions and appends local agent-suggested tags to kept/Pearl Drops through the same filesystem bridge. No account, external network, hosted service, API key, database, or sync layer is required. Treat it as a local filesystem bridge: only run it for vaults you intend MemoReef to edit, and keep the default localhost bind unless you deliberately need otherwise.
 
+The local app also includes **Import Dock**: a drag-and-drop/upload area for PDFs, DOCX, TXT, Markdown, and image files. It writes uploaded files directly into the selected vault as Markdown Drops. Enable OCR in Import Dock for scanned PDFs or images when local OCR tools are installed.
+
 For phone triage on a trusted LAN or Tailscale network, start the same local app on the computer that has the vault:
 
 ```bash

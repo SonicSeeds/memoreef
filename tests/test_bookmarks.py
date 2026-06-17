@@ -1253,6 +1253,71 @@ endstream endobj
                 thread.join(timeout=5)
                 server.server_close()
 
+    def test_local_server_root_page_includes_import_dock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            try:
+                server = create_server(vault_path, host="127.0.0.1", port=0, limit=50)
+            except PermissionError as error:
+                self.skipTest(f"localhost socket binding unavailable: {error}")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/", timeout=5) as response:
+                    page = response.read().decode("utf-8")
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertIn("Import Dock", page)
+        self.assertIn("/api/import-docs", page)
+
+    def test_local_server_import_docs_endpoint_writes_uploaded_document(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            try:
+                server = create_server(vault_path, host="127.0.0.1", port=0, limit=50)
+            except PermissionError as error:
+                self.skipTest(f"localhost socket binding unavailable: {error}")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            boundary = "----MemoReefTestBoundary"
+            body = (
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="ocr"\r\n\r\n'
+                "false\r\n"
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="documents"; filename="Research Note.txt"\r\n'
+                "Content-Type: text/plain\r\n\r\n"
+                "Imported through Import Dock\r\n"
+                f"--{boundary}--\r\n"
+            ).encode("utf-8")
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/import-docs",
+                    data=body,
+                    headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    status_code = response.status
+                    payload = json.loads(response.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+            written = [Path(path) for path in payload["written"]]
+            content = written[0].read_text(encoding="utf-8")
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["ok"], True)
+        self.assertEqual(payload["imported"], 1)
+        self.assertEqual(payload["warnings"], [])
+        self.assertIn("Imported through Import Dock", content)
+        self.assertIn('import_source: "document-import"', content)
+
     def test_local_server_drop_endpoint_writes_url_and_title(self):
         with tempfile.TemporaryDirectory() as tmp:
             vault_path = Path(tmp) / "vault"

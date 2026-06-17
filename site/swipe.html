@@ -547,6 +547,96 @@
       color: #dffff7;
       cursor: default;
     }
+
+    .import-dock {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid rgba(103,245,211,.18);
+      border-radius: 24px;
+      background: linear-gradient(145deg, rgba(5,25,34,.76), rgba(5,38,45,.42));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .import-dock h2 {
+      margin: 0;
+      color: var(--reef);
+      font-size: 13px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .import-dock p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .import-dropzone {
+      display: grid;
+      place-items: center;
+      min-height: 78px;
+      padding: 14px;
+      border: 1px dashed rgba(103,245,211,.42);
+      border-radius: 18px;
+      background: rgba(103,245,211,.06);
+      color: #dffff7;
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+      cursor: pointer;
+    }
+    .import-dropzone input { display: none; }
+    .import-dropzone.dragover {
+      border-color: rgba(246,237,215,.74);
+      background: rgba(246,237,215,.08);
+    }
+    .import-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+    .import-options label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #d9eef3;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .import-options select {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0 12px;
+      color: #dffff7;
+      background: rgba(7,28,39,.76);
+      font: inherit;
+      font-size: 12px;
+    }
+    .import-action {
+      min-height: 42px;
+      border-radius: 999px;
+      border-color: rgba(103,245,211,.34);
+      background: linear-gradient(135deg, rgba(103,245,211,.18), rgba(154,214,107,.08));
+      color: #dffff7;
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .import-action:disabled {
+      opacity: .48;
+      cursor: not-allowed;
+    }
+    .import-status {
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    body:not(.local-api-mode) .import-dock .local-only {
+      opacity: .58;
+      pointer-events: none;
+    }
     .keyboard-hint {
       margin: 0;
       color: var(--muted);
@@ -881,6 +971,25 @@
       </label>
       <button class="export-decisions" id="exportDecisionsButton" type="button">Export decisions JSON</button>
     </section>
+
+    <section class="import-dock" id="importDock" aria-label="Import Dock">
+      <h2>Import Dock</h2>
+      <p id="importDockHint">Run the local MemoReef server to drop PDFs, DOCX, TXT, Markdown, or images directly into this vault.</p>
+      <label class="import-dropzone local-only" id="importDropzone">
+        <span id="importDropzoneLabel">Drop documents here or choose files</span>
+        <input id="importDocsInput" type="file" multiple accept=".pdf,.docx,.txt,.md,.markdown,.png,.jpg,.jpeg,.tif,.tiff,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,image/*" />
+      </label>
+      <div class="import-options local-only">
+        <label><input id="importOcrInput" type="checkbox" /> OCR scanned docs</label>
+        <select id="importOcrLang" aria-label="OCR language">
+          <option value="eng">English</option>
+          <option value="deu">German</option>
+          <option value="deu+eng" selected>German + English</option>
+        </select>
+      </div>
+      <button class="import-action local-only" id="importDocsButton" type="button" disabled>Import documents</button>
+      <div class="import-status" id="importStatus">Static mode: imports use the CLI until the localhost server is running.</div>
+    </section>
     <p class="keyboard-hint"><kbd>←</kbd> Sink · <kbd>↑</kbd> Pearl · <kbd>→</kbd> Keep</p>
 
     <section class="stage" aria-live="polite">
@@ -1009,6 +1118,8 @@
     let savedDecisionCount = 0;
     let isSavingDecisions = false;
     let saveAgainAfterCurrent = false;
+    let selectedImportFiles = [];
+    let isImportingDocs = false;
     const reviewStoragePrefix = 'memoreef-review-decisions:';
 
     const state = {
@@ -1044,6 +1155,14 @@
       sheetActions: document.getElementById('sheetActions'),
       reviewSessionInput: document.getElementById('reviewSessionInput'),
       exportDecisionsButton: document.getElementById('exportDecisionsButton'),
+      importDockHint: document.getElementById('importDockHint'),
+      importDropzone: document.getElementById('importDropzone'),
+      importDropzoneLabel: document.getElementById('importDropzoneLabel'),
+      importDocsInput: document.getElementById('importDocsInput'),
+      importDocsButton: document.getElementById('importDocsButton'),
+      importOcrInput: document.getElementById('importOcrInput'),
+      importOcrLang: document.getElementById('importOcrLang'),
+      importStatus: document.getElementById('importStatus'),
       sampleNotice: document.querySelector('.sample-notice'),
       localStatus: document.getElementById('localStatus')
     };
@@ -1067,6 +1186,76 @@
       }
       els.localStatus.hidden = false;
       els.localStatus.textContent = message;
+    }
+
+    function setImportStatus(message) {
+      if (els.importStatus) els.importStatus.textContent = message;
+    }
+
+    function setImportFiles(files) {
+      selectedImportFiles = Array.from(files || []);
+      const count = selectedImportFiles.length;
+      if (els.importDocsButton) els.importDocsButton.disabled = !localApiMode || !count || isImportingDocs;
+      if (els.importDropzoneLabel) {
+        els.importDropzoneLabel.textContent = count
+          ? `${count} file${count === 1 ? '' : 's'} ready for import`
+          : 'Drop documents here or choose files';
+      }
+      if (count) setImportStatus(`${count} file${count === 1 ? '' : 's'} selected · ready to import`);
+    }
+
+    async function importDocuments() {
+      if (!localApiMode) {
+        setImportStatus('Start the local MemoReef server before using Import Dock.');
+        return;
+      }
+      if (!selectedImportFiles.length || isImportingDocs) return;
+      const form = new FormData();
+      selectedImportFiles.forEach(file => form.append('documents', file, file.name));
+      form.append('ocr', els.importOcrInput && els.importOcrInput.checked ? 'true' : 'false');
+      if (els.importOcrLang && els.importOcrLang.value) form.append('ocr_lang', els.importOcrLang.value);
+      isImportingDocs = true;
+      els.importDocsButton.disabled = true;
+      els.importDocsButton.textContent = 'Importing...';
+      setImportStatus('Importing documents into local Markdown Drops...');
+      try {
+        const response = await fetch('/api/import-docs', { method: 'POST', body: form });
+        const data = await response.json();
+        if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
+        const warningText = Array.isArray(data.warnings) && data.warnings.length ? ` · ${data.warnings.length} warning${data.warnings.length === 1 ? '' : 's'}` : '';
+        setImportStatus(`Imported ${data.imported || 0} document Drop${data.imported === 1 ? '' : 's'}${warningText}`);
+        showToast(`Imported ${data.imported || 0} document Drops. The reef accepts offerings.`);
+        selectedImportFiles = [];
+        if (els.importDocsInput) els.importDocsInput.value = '';
+        setImportFiles([]);
+        await loadLocalReviewSession();
+      } catch (error) {
+        setImportStatus(`Import failed: ${error.message}`);
+        showToast(`Import failed: ${error.message}`);
+      } finally {
+        isImportingDocs = false;
+        els.importDocsButton.textContent = 'Import documents';
+        els.importDocsButton.disabled = !localApiMode || !selectedImportFiles.length;
+      }
+    }
+
+    function wireImportDock() {
+      if (!els.importDropzone || !els.importDocsInput || !els.importDocsButton) return;
+      els.importDocsInput.addEventListener('change', event => setImportFiles(event.target.files));
+      els.importDocsButton.addEventListener('click', importDocuments);
+      ['dragenter', 'dragover'].forEach(type => {
+        els.importDropzone.addEventListener(type, event => {
+          event.preventDefault();
+          els.importDropzone.classList.add('dragover');
+        });
+      });
+      ['dragleave', 'drop'].forEach(type => {
+        els.importDropzone.addEventListener(type, event => {
+          event.preventDefault();
+          els.importDropzone.classList.remove('dragover');
+        });
+      });
+      els.importDropzone.addEventListener('drop', event => setImportFiles(event.dataTransfer.files));
     }
 
     function renderStats() {
@@ -1459,6 +1648,9 @@
       hideNotice();
       const root = status && status.root ? `/${status.root}` : '';
       setLocalStatus(`Connected to local vault${root} · loading Drift Drops...`);
+      if (els.importDockHint) els.importDockHint.textContent = `Drop documents into the local vault${root}. OCR uses local tools only.`;
+      setImportStatus('Local Import Dock ready · PDFs, DOCX, TXT, Markdown, and images');
+      setImportFiles(selectedImportFiles);
       loadLocalReviewSession();
     }
 
@@ -1626,6 +1818,7 @@
 
     document.addEventListener('keydown', handleDecisionKey);
 
+    wireImportDock();
     renderCard();
     maybeEnableLocalApiMode();
   </script>

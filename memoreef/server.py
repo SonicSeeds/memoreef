@@ -5,13 +5,46 @@ import ipaddress
 import json
 from pathlib import Path
 import socket
+import tempfile
 from urllib.parse import parse_qs, urlparse
+from email.parser import BytesParser
+from email.policy import default as email_policy
 
 from .bookmarks import Bookmark, write_bookmarks_to_vault
 from .cli import apply_review_decision_payload, build_review_session_payload, default_review_filters, tag_reviewed_drops
+from .documents import parse_documents
 
 
 SITE_DIR = Path(__file__).resolve().parent.parent / "site"
+
+
+def safe_upload_filename(filename: str) -> str:
+    name = Path(filename).name.strip().replace("\x00", "")
+    if not name:
+        return "uploaded-document"
+    return "".join(char if char.isalnum() or char in {".", "-", "_", " "} else "-" for char in name).strip() or "uploaded-document"
+
+
+def unique_upload_path(directory: Path, filename: str) -> Path:
+    candidate = directory / filename
+    if not candidate.exists():
+        return candidate
+    stem = candidate.stem or "uploaded-document"
+    suffix = candidate.suffix
+    index = 2
+    while True:
+        next_candidate = directory / f"{stem}-{index}{suffix}"
+        if not next_candidate.exists():
+            return next_candidate
+        index += 1
+
+
+def multipart_value_bytes(value: object) -> bytes:
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        return value.encode("utf-8")
+    return b""
 
 
 class MemoReefHTTPServer(ThreadingHTTPServer):
@@ -80,7 +113,78 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/drop":
             self.handle_drop()
             return
+        if parsed.path == "/api/import-docs":
+            self.handle_import_docs()
+            return
         self.send_error_json(404, "Not found")
+
+    def handle_import_docs(self) -> None:
+        content_type = self.headers.get("Content-Type", "")
+        if "multipart/form-data" not in content_type:
+            self.send_error_json(400, "multipart/form-data is required")
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self.send_error_json(400, "Invalid Content-Length")
+            return
+        if length <= 0:
+            self.send_error_json(400, "Missing upload body")
+            return
+        if length > 80 * 1024 * 1024:
+            self.send_error_json(413, "Upload too large; keep local import batches under 80 MB")
+            return
+
+        body = self.rfile.read(length)
+        raw = (
+            f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8")
+            + body
+        )
+        message = BytesParser(policy=email_policy).parsebytes(raw)
+        files: list[Path] = []
+        ocr = False
+        ocr_lang: str | None = None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            for part in message.iter_parts():
+                disposition = part.get_content_disposition()
+                if disposition != "form-data":
+                    continue
+                name = part.get_param("name", header="content-disposition")
+                filename = part.get_filename()
+                value = multipart_value_bytes(part.get_payload(decode=True))
+                if filename and name == "documents":
+                    safe_name = safe_upload_filename(filename)
+                    target = unique_upload_path(tmp_dir, safe_name)
+                    target.write_bytes(value)
+                    files.append(target)
+                elif name == "ocr":
+                    ocr = value.decode("utf-8", errors="ignore").strip().lower() in {"1", "true", "yes", "on"}
+                elif name == "ocr_lang":
+                    raw_lang = value.decode("utf-8", errors="ignore").strip()
+                    ocr_lang = raw_lang or None
+
+            if not files:
+                self.send_error_json(400, "No documents uploaded")
+                return
+            try:
+                bookmarks, warnings = parse_documents(files, ocr=ocr, ocr_lang=ocr_lang)
+            except (FileNotFoundError, ValueError) as error:
+                self.send_error_json(400, str(error))
+                return
+            written = write_bookmarks_to_vault(bookmarks, self.server.vault, self.server.root, allow_duplicates=True)
+
+        self.send_json(
+            {
+                "ok": True,
+                "imported": len(written),
+                "written": [str(path) for path in written],
+                "warnings": warnings,
+                "ocr": ocr,
+                "ocr_lang": ocr_lang or "",
+            }
+        )
 
     def handle_tag_reviewed(self) -> None:
         result = tag_reviewed_drops(self.server.vault, self.server.root)
