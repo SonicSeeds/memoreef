@@ -27,11 +27,12 @@ Requirements:
 - Python 3.11+
 - Git
 
-Optional OCR requirements for scanned PDFs and image files:
+Optional OCR/visual-analysis requirements for scanned PDFs, image files, and PDF figure/table crops:
 
 - Tesseract OCR
-- Poppler (`pdftoppm`) for scanned PDF page rendering
+- Poppler (`pdftoppm`, `pdfinfo`) for scanned PDF page rendering and PDF page counts
 - Tesseract language data for non-English OCR, for example German
+- Pillow for optional visual-region crop detection (`python -m pip install -e ".[visual]"`)
 
 On macOS, if `python3 --version` is older than 3.11, install a newer Python first:
 
@@ -55,6 +56,8 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools
 python -m pip install -e .
+# optional, for PDF figure/table crop detection:
+python -m pip install -e ".[visual]"
 ```
 
 Create a local pilot vault from the included example bookmarks:
@@ -118,7 +121,9 @@ memoreef import-docs --ocr --ocr-lang deu+eng /path/to/german-scan.pdf --vault /
 
 `import-docs` turns PDFs, DOCX files, text files, Markdown files, and image files into local Markdown Drops with source-file metadata and a `## Document text` section. It is useful for NotebookLM-style source collection when you want the durable output to stay in your own Markdown/Obsidian memory instead of a hosted notebook. Text-based PDFs work directly. Scanned/image PDFs and image files need `--ocr` plus local OCR tools (`tesseract`; scanned PDFs also need `pdftoppm`/Poppler). Use `--ocr-lang` for non-English documents, for example `deu+eng`.
 
-For research papers, MemoReef also adds a `## Visual artifacts` section when it sees figure/table captions or table-like text in extracted PDF content. Optional page-image analysis is available through `--vision-command`, which renders the first PDF pages with Poppler and passes each page image to your own local or cloud vision command. This is off by default, so MemoReef stays local-first and does not require a vision model.
+For research papers, MemoReef also adds a `## Visual artifacts` section when it sees figure/table captions or table-like text in extracted PDF content. Optional page-image analysis is available through `--vision-command`, which renders the first PDF pages with Poppler, detects large visual regions such as charts/diagrams/tables, crops those regions, and passes each crop to your own local or cloud vision command. If no crop is detected on a page, MemoReef falls back to sending the full rendered page. This is off by default, so MemoReef stays local-first and does not require a vision model.
+
+MemoReef warns when a PDF is large or when the file has more pages than the selected visual-analysis batch. By default it analyzes the first 10 pages; `--vision-page-limit` accepts 1–25.
 
 Example optional vision hook:
 
@@ -150,7 +155,7 @@ Implemented:
 - Import plain text URL lists.
 - Import CSV files with title, URL, source provenance, and tags.
 - Import local PDF, DOCX, text, Markdown, and OCR-assisted image/scanned-PDF files into source-memory Drops.
-- Extract PDF figure/table captions, table-like text, and optional vision-command page descriptions into Visual artifacts sections.
+- Extract PDF figure/table captions, table-like text, optional visual-region crops, and optional vision-command descriptions into Visual artifacts sections.
 - Preserve folder path as Markdown frontmatter.
 - Write one Markdown file per bookmark.
 - Store files in an Obsidian-ready folder structure.

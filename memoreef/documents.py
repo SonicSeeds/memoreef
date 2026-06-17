@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 import re
 import shlex
 import shutil
@@ -26,6 +27,7 @@ class DocumentImportResult:
 
 
 PDF_VISION_MAX_PAGES = 25
+PDF_LARGE_FILE_WARNING_BYTES = 50 * 1024 * 1024
 
 
 PDF_VISUAL_PROMPT = (
@@ -226,6 +228,10 @@ def extract_pdf_visual_analysis(
     sections: list[str] = []
     warnings: list[str] = []
 
+    if vision_command:
+        effective_page_limit = min(max(1, page_limit), PDF_VISION_MAX_PAGES)
+        warnings.extend(pdf_visual_size_warnings(path, page_limit=effective_page_limit))
+
     captions = extract_pdf_visual_captions(text)
     if captions:
         sections.append("### Captions and table references\n\n" + "\n".join(f"- {caption}" for caption in captions))
@@ -295,6 +301,7 @@ def describe_pdf_pages_with_vision_command(path: Path, vision_command: str, page
         return [], [f"{path.name}: --vision-command requested, but pdftoppm/poppler is not installed or not on PATH."]
     descriptions: list[str] = []
     warnings: list[str] = []
+    seen_region_warnings: set[str] = set()
     with tempfile.TemporaryDirectory() as tmp:
         prefix = Path(tmp) / "page"
         render = subprocess.run(
@@ -312,12 +319,164 @@ def describe_pdf_pages_with_vision_command(path: Path, vision_command: str, page
             return [], [f"{path.name}: PDF page rendering for vision produced no images."]
         for page in pages:
             page_number = pdf_rendered_page_number(page)
-            description, warning = run_vision_command(vision_command, page, page_number)
-            if description:
-                descriptions.append(f"#### Page {page_number}\n\n{description}")
-            if warning:
-                warnings.append(warning)
+            regions, region_warnings = crop_pdf_visual_regions(page, Path(tmp), page_number)
+            for region_warning in region_warnings:
+                warning_key = normalize_region_warning_key(region_warning)
+                if warning_key not in seen_region_warnings:
+                    warnings.append(region_warning)
+                    seen_region_warnings.add(warning_key)
+            targets = regions or [page]
+            for region_index, target in enumerate(targets, start=1):
+                description, warning = run_vision_command(vision_command, target, page_number)
+                if description:
+                    if regions:
+                        descriptions.append(f"#### Page {page_number} · visual region {region_index}\n\n{description}")
+                    else:
+                        descriptions.append(f"#### Page {page_number}\n\n{description}")
+                if warning:
+                    warnings.append(warning)
     return descriptions, warnings
+
+
+def normalize_region_warning_key(warning: str) -> str:
+    return re.sub(r"^page \d+: ", "page *: ", warning)
+
+
+def pdf_visual_size_warnings(path: Path, page_limit: int) -> list[str]:
+    warnings: list[str] = []
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = 0
+    if size > PDF_LARGE_FILE_WARNING_BYTES:
+        warnings.append(f"{path.name}: large PDF ({size // (1024 * 1024)} MB); visual analysis may be slow or costly.")
+    page_count = pdf_page_count(path)
+    if page_count and page_count > page_limit:
+        warnings.append(f"{path.name}: PDF has {page_count} pages; visual analysis will inspect first {page_limit} only. Increase --vision-page-limit up to {PDF_VISION_MAX_PAGES} if needed.")
+    return warnings
+
+
+def pdf_page_count(path: Path) -> int | None:
+    pdfinfo = shutil.which("pdfinfo")
+    if pdfinfo:
+        try:
+            completed = subprocess.run([pdfinfo, str(path)], check=False, capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            completed = None
+        if completed and completed.returncode == 0:
+            match = re.search(r"^Pages:\s*(\d+)\s*$", completed.stdout, re.MULTILINE)
+            if match:
+                return int(match.group(1))
+    try:
+        data = read_pdf_count_sample(path)
+    except OSError:
+        return None
+    counts = [int(match.group(1)) for match in re.finditer(rb"/Count\s+(\d+)", data)]
+    return max(counts) if counts else None
+
+
+def read_pdf_count_sample(path: Path, max_bytes: int = 2 * 1024 * 1024) -> bytes:
+    size = path.stat().st_size
+    with path.open("rb") as handle:
+        if size <= max_bytes * 2:
+            return handle.read()
+        head = handle.read(max_bytes)
+        handle.seek(max(0, size - max_bytes))
+        tail = handle.read(max_bytes)
+    return head + tail
+
+
+def crop_pdf_visual_regions(page_image: Path, output_dir: Path, page_number: int, max_regions: int = 6) -> tuple[list[Path], list[str]]:
+    try:
+        from PIL import Image
+    except ImportError as error:
+        return [], [f"page {page_number}: visual region cropping skipped because Pillow is not installed ({error})."]
+    try:
+        image = Image.open(page_image).convert("L")
+    except OSError as error:
+        return [], [f"page {page_number}: visual region cropping failed to read rendered page ({error})."]
+
+    boxes = detect_visual_region_boxes(image)
+    crops: list[Path] = []
+    for index, box in enumerate(boxes[:max_regions], start=1):
+        crop_path = output_dir / f"page-{page_number}-visual-region-{index}.png"
+        image.crop(box).save(crop_path)
+        crops.append(crop_path)
+    return crops, []
+
+
+def detect_visual_region_boxes(image: Any) -> list[tuple[int, int, int, int]]:
+    width, height = image.size
+    if width <= 0 or height <= 0:
+        return []
+    block = max(8, min(width, height) // 80)
+    cols = max(1, (width + block - 1) // block)
+    rows = max(1, (height + block - 1) // block)
+    occupied: set[tuple[int, int]] = set()
+    pixels = image.load()
+    for row in range(rows):
+        y0 = row * block
+        y1 = min(height, y0 + block)
+        for col in range(cols):
+            x0 = col * block
+            x1 = min(width, x0 + block)
+            dark = 0
+            total = max(1, (x1 - x0) * (y1 - y0))
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    if pixels[x, y] < 245:
+                        dark += 1
+            if dark / total > 0.025:
+                occupied.add((col, row))
+
+    boxes: list[tuple[int, int, int, int]] = []
+    seen: set[tuple[int, int]] = set()
+    for cell in sorted(occupied):
+        if cell in seen:
+            continue
+        stack = [cell]
+        seen.add(cell)
+        component: list[tuple[int, int]] = []
+        while stack:
+            col, row = stack.pop()
+            component.append((col, row))
+            for neighbor in ((col - 1, row), (col + 1, row), (col, row - 1), (col, row + 1)):
+                if neighbor in occupied and neighbor not in seen:
+                    seen.add(neighbor)
+                    stack.append(neighbor)
+        box = component_to_image_box(component, block, width, height)
+        if is_plausible_visual_box(box, width, height):
+            boxes.append(expand_box(box, width, height, padding=block))
+    boxes.sort(key=lambda box: (box[1], box[0]))
+    return boxes
+
+
+def component_to_image_box(component: list[tuple[int, int]], block: int, width: int, height: int) -> tuple[int, int, int, int]:
+    min_col = min(col for col, _row in component)
+    max_col = max(col for col, _row in component)
+    min_row = min(row for _col, row in component)
+    max_row = max(row for _col, row in component)
+    return (min_col * block, min_row * block, min(width, (max_col + 1) * block), min(height, (max_row + 1) * block))
+
+
+def is_plausible_visual_box(box: tuple[int, int, int, int], page_width: int, page_height: int) -> bool:
+    x0, y0, x1, y1 = box
+    width = x1 - x0
+    height = y1 - y0
+    area = width * height
+    page_area = page_width * page_height
+    if width < page_width * 0.12 or height < page_height * 0.06:
+        return False
+    if area < page_area * 0.01:
+        return False
+    if area > page_area * 0.85:
+        return False
+    return True
+
+
+def expand_box(box: tuple[int, int, int, int], page_width: int, page_height: int, padding: int) -> tuple[int, int, int, int]:
+    x0, y0, x1, y1 = box
+    return (max(0, x0 - padding), max(0, y0 - padding), min(page_width, x1 + padding), min(page_height, y1 + padding))
 
 
 def pdf_rendered_page_number(path: Path) -> int:

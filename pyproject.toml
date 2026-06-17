@@ -20,6 +20,9 @@ classifiers = [
   "Topic :: Utilities",
 ]
 
+[project.optional-dependencies]
+visual = ["Pillow>=10"]
+
 [project.scripts]
 memoreef = "memoreef.cli:main"
 

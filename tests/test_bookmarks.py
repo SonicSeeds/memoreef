@@ -1,5 +1,6 @@
 from contextlib import redirect_stderr, redirect_stdout
 import io
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -13,7 +14,7 @@ from unittest.mock import patch
 
 from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, parse_markdown_frontmatter, update_markdown_frontmatter, write_bookmarks_to_vault
 from memoreef.cli import main
-from memoreef.documents import pdf_rendered_page_number
+from memoreef.documents import detect_visual_region_boxes, pdf_page_count, pdf_rendered_page_number, pdf_visual_size_warnings
 from memoreef.server import create_server, is_loopback_bind, review_mode_urls
 
 
@@ -471,6 +472,106 @@ endstream endobj
         self.assertIn("### Vision page descriptions", content)
         self.assertIn("#### Page 1", content)
         self.assertIn("line chart with decreasing loss", content)
+
+    @unittest.skipIf(importlib.util.find_spec("PIL") is None, "Pillow not installed")
+    def test_import_docs_runs_vision_on_detected_visual_region_crop(self):
+        stdout = io.StringIO()
+        pdf_bytes = b"""%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /Contents 4 0 R >> endobj
+4 0 obj << /Length 55 >> stream
+BT /F1 12 Tf 72 720 Td (Figure 3 shows a bar chart.) Tj ET
+endstream endobj
+%%EOF
+"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bin_dir = Path(tmp) / "bin"
+            bin_dir.mkdir()
+            fake_pdftoppm = bin_dir / "pdftoppm"
+            fake_pdftoppm.write_text(
+                f"#!{sys.executable}\n"
+                "import pathlib, sys\n"
+                "from PIL import Image, ImageDraw\n"
+                "prefix = pathlib.Path(sys.argv[-1])\n"
+                "image = Image.new('RGB', (600, 800), 'white')\n"
+                "draw = ImageDraw.Draw(image)\n"
+                "draw.rectangle((120, 180, 500, 470), outline='black', width=8)\n"
+                "draw.rectangle((180, 300, 230, 440), fill='black')\n"
+                "draw.rectangle((270, 240, 320, 440), fill='black')\n"
+                "draw.rectangle((360, 200, 410, 440), fill='black')\n"
+                "image.save(prefix.with_name(prefix.name + '-1.png'))\n",
+                encoding="utf-8",
+            )
+            fake_pdftoppm.chmod(0o755)
+            fake_vision = bin_dir / "fake-vision"
+            fake_vision.write_text(
+                f"#!{sys.executable}\n"
+                "import pathlib, sys\n"
+                "image = pathlib.Path(sys.argv[1])\n"
+                "print(f'Analyzed {image.name}: bar chart comparing three conditions.')\n",
+                encoding="utf-8",
+            )
+            fake_vision.chmod(0o755)
+            pdf_path = Path(tmp) / "Region Hook.pdf"
+            vault_path = Path(tmp) / "vault"
+            pdf_path.write_bytes(pdf_bytes)
+
+            old_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = f"{bin_dir}{os.pathsep}{old_path}"
+            try:
+                with redirect_stdout(stdout):
+                    result = main([
+                        "import-docs",
+                        "--vision-command",
+                        f"{fake_vision} {{image}} {{page}}",
+                        "--vision-page-limit",
+                        "1",
+                        str(pdf_path),
+                        "--vault",
+                        str(vault_path),
+                    ])
+            finally:
+                os.environ["PATH"] = old_path
+
+            content = next((vault_path / "MemoReef" / "Drops").glob("*.md")).read_text(encoding="utf-8")
+            frontmatter, _body = parse_markdown_frontmatter(content)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(frontmatter["has_document_visual_analysis"], True)
+        self.assertIn("#### Page 1 · visual region 1", content)
+        self.assertIn("bar chart comparing three conditions", content)
+        self.assertIn("page-1-visual-region-1.png", content)
+
+    def test_pdf_visual_warnings_include_page_count_limit(self):
+        pdf_bytes = b"%PDF-1.4\n2 0 obj << /Type /Pages /Count 42 >> endobj\n%%EOF\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "long-paper.pdf"
+            pdf_path.write_bytes(pdf_bytes)
+
+            self.assertEqual(pdf_page_count(pdf_path), 42)
+            warnings = pdf_visual_size_warnings(pdf_path, page_limit=10)
+
+        self.assertTrue(any("PDF has 42 pages; visual analysis will inspect first 10 only" in warning for warning in warnings))
+
+    @unittest.skipIf(importlib.util.find_spec("PIL") is None, "Pillow not installed")
+    def test_detect_visual_region_boxes_finds_large_chart_block(self):
+        from PIL import Image, ImageDraw
+
+        image = Image.new("L", (600, 800), 255)
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((120, 180, 500, 470), outline=0, width=8)
+        draw.rectangle((180, 300, 230, 440), fill=0)
+
+        boxes = detect_visual_region_boxes(image)
+
+        self.assertTrue(boxes)
+        x0, y0, x1, y1 = boxes[0]
+        self.assertLessEqual(x0, 140)
+        self.assertLessEqual(y0, 200)
+        self.assertGreaterEqual(x1, 480)
+        self.assertGreaterEqual(y1, 450)
 
     def test_import_docs_rejects_invalid_vision_page_limit(self):
         stderr = io.StringIO()
