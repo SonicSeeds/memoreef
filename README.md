@@ -2,7 +2,9 @@
 
 **Save sources. Let ideas surface.**
 
-MemoReef imports browser bookmarks, plain URL lists, and simple CSV link exports into an Obsidian-compatible Markdown vault and turns saved links into an agent-readable source library for future projects.
+MemoReef is local-first research memory for humans and AI agents. It turns saved links, notes, and web sources into a private Markdown source library, so you and your agents can review, connect, cite, and build from trusted context instead of starting from the open web every time.
+
+It is not trying to be another bookmark manager. MemoReef is for people with messy saved research, half-forgotten sources, and projects that need grounded memory.
 
 Want the Obsidian-specific walkthrough? See [Use MemoReef with Obsidian](https://memoreef.de/obsidian.html).
 
@@ -85,15 +87,15 @@ memoreef import-csv /path/to/links.csv --vault /tmp/memoreef-vault
 
 ## Product shape
 
-MemoReef is not a generic bookmark manager. It is a local-first source reef:
+MemoReef is a private source memory layer, not a generic bookmark manager:
 
 - **Drops**: saved links or imported bookmarks.
 - **Drift**: unsorted inbox state for new Drops.
-- **Reef**: the living source library in Markdown/Obsidian.
+- **Reef**: the living research memory in Markdown/Obsidian.
 - **Deep**: long-term archive state for saved sources.
 - **Pearls**: high-value sources worth citing or using in emerging projects.
 - **Shoals**: related source clusters.
-- **Dive**: local search/library retrieval over saved Drops.
+- **Dive**: local search and retrieval over saved Drops for human reading and agent handoff.
 
 ## Current MVP
 
