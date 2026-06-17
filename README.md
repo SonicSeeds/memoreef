@@ -17,12 +17,26 @@ Requirements:
 - Python 3.11+
 - Git
 
+Optional OCR requirements for scanned PDFs and image files:
+
+- Tesseract OCR
+- Poppler (`pdftoppm`) for scanned PDF page rendering
+- Tesseract language data for non-English OCR, for example German
+
 On macOS, if `python3 --version` is older than 3.11, install a newer Python first:
 
 ```bash
 brew install python@3.11
 # or: uv python install 3.11
 ```
+
+On macOS, install OCR tools only if you want `import-docs --ocr` for scanned PDFs or images:
+
+```bash
+brew install tesseract poppler tesseract-lang
+```
+
+Without these optional OCR tools, MemoReef still imports browser bookmarks, URL lists, CSV files, DOCX, TXT, Markdown, and text-based PDFs.
 
 ```bash
 git clone https://github.com/SonicSeeds/memoreef.git
