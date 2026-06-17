@@ -25,6 +25,7 @@ class Bookmark:
     shoals: list[str] = field(default_factory=list)
     triaged_at: str | None = None
     clipped_selection: str | None = None
+    clip_type: str | None = None
 
 
 class BrowserBookmarkParser(HTMLParser):
@@ -334,6 +335,9 @@ def bookmark_to_markdown(bookmark: Bookmark) -> str:
         lines.append(f"browser_add_date: {yaml_quote(bookmark.add_date)}")
     if bookmark.source:
         lines.append(f"import_source: {yaml_quote(bookmark.source)}")
+    if bookmark.clipped_selection:
+        lines.append("has_clipped_selection: true")
+        lines.append(f"clip_type: {yaml_quote(bookmark.clip_type or 'highlight')}")
     if bookmark.projects:
         lines.append("projects:")
         for project in bookmark.projects:

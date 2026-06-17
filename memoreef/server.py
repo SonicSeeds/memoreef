@@ -123,10 +123,10 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
             return
 
         title = str(payload.get("title") or "").strip() or url
-        selection = str(payload.get("selection") or "").strip()[:4000]
-        bookmark = Bookmark(title=title, url=url, clipped_selection=selection or None)
+        selection = str(payload.get("selection") or "").replace("\r\n", "\n").replace("\r", "\n").strip()[:4000]
+        bookmark = Bookmark(title=title, url=url, clipped_selection=selection or None, clip_type="highlight" if selection else None)
         written = write_bookmarks_to_vault([bookmark], self.server.vault, self.server.root, allow_duplicates=True)
-        self.send_json({"ok": True, "written": [str(path) for path in written]})
+        self.send_json({"ok": True, "clipped": bool(selection), "written": [str(path) for path in written]})
 
     def read_json_object_body(self) -> dict[str, object] | None:
         try:

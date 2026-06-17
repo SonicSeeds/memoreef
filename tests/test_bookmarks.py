@@ -1110,10 +1110,13 @@ class BookmarkImportTests(unittest.TestCase):
 
         self.assertEqual(status_code, 200)
         self.assertEqual(payload["ok"], True)
+        self.assertEqual(payload["clipped"], False)
         self.assertEqual(len(written), 1)
         self.assertTrue(written[0].is_absolute())
         self.assertIn('title: "Page title"', content)
         self.assertIn('url: "https://example.com/page"', content)
+        self.assertNotIn("has_clipped_selection", content)
+        self.assertNotIn("## Clipped selection", content)
         self.assertIn("# Page title", content)
 
     def test_local_server_drop_endpoint_writes_and_truncates_selection(self):
@@ -1145,6 +1148,9 @@ class BookmarkImportTests(unittest.TestCase):
             frontmatter, _body = parse_markdown_frontmatter(content)
 
         self.assertEqual(frontmatter["title"], "https://example.com/selection")
+        self.assertEqual(frontmatter["has_clipped_selection"], True)
+        self.assertEqual(frontmatter["clip_type"], "highlight")
+        self.assertEqual(payload["clipped"], True)
         self.assertIn("## Clipped selection", content)
         self.assertIn("> First selected line", content)
         self.assertIn("> " + ("x" * 3980), content)
