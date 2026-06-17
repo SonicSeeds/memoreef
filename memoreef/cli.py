@@ -37,6 +37,7 @@ from .bookmarks import (
     update_markdown_frontmatter,
     write_bookmarks_to_vault,
 )
+from .documents import parse_documents
 
 
 def top_level_folder_counts(bookmarks: list[Bookmark]) -> dict[str, int]:
@@ -4138,6 +4139,10 @@ def build_parser() -> argparse.ArgumentParser:
     import_csv_cmd.add_argument("csv", type=Path, help="CSV file with title,url,source,tags columns.")
     add_vault_import_options(import_csv_cmd)
 
+    import_docs_cmd = sub.add_parser("import-docs", help="Import PDF, DOCX, text, or Markdown documents into local Markdown Drops.")
+    import_docs_cmd.add_argument("documents", type=Path, nargs="+", help="Document files to import (.pdf, .docx, .txt, .md).")
+    add_vault_import_options(import_docs_cmd)
+
     inspect_cmd = sub.add_parser("inspect", help="Inspect a browser bookmark HTML export without writing files.")
     inspect_cmd.add_argument("bookmarks", type=Path, help="Browser bookmark export HTML file.")
 
@@ -4320,6 +4325,38 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Imported {len(written)} Drops into {Path(args.vault).expanduser().resolve() / args.root}")
         if written:
             print(f"First Drop: {written[0]}")
+        return 0
+
+    if args.command == "import-docs":
+        try:
+            bookmarks, warnings = parse_documents(args.documents)
+        except (FileNotFoundError, ValueError) as error:
+            print(str(error))
+            return 1
+        written = write_bookmarks_to_vault(bookmarks, args.vault, args.root, allow_duplicates=args.allow_duplicates)
+        source = args.documents[0] if len(args.documents) == 1 else Path(f"{len(args.documents)} documents")
+        write_import_log(
+            args.vault,
+            args.root,
+            source,
+            {
+                "vault": args.vault.expanduser().resolve(),
+                "root": args.root,
+                "documents": len(args.documents),
+                "allow_duplicates": args.allow_duplicates,
+            },
+            len(bookmarks),
+            len(written),
+            0 if args.allow_duplicates else len(bookmarks) - len(written),
+            warnings,
+        )
+        print(f"Imported {len(written)} document Drops into {Path(args.vault).expanduser().resolve() / args.root}")
+        if written:
+            print(f"First Drop: {written[0]}")
+        if warnings:
+            print(f"Warnings: {len(warnings)}")
+            for warning in warnings:
+                print(f"- {warning}")
         return 0
 
     if args.command == "inspect":

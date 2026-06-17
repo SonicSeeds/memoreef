@@ -295,6 +295,97 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertEqual(len(drops), 1)
             self.assertNotIn("import_source:", drops[0].read_text(encoding="utf-8"))
 
+    def test_import_docs_writes_text_document_drop(self):
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            doc_path = Path(tmp) / "Research Note.txt"
+            vault_path = Path(tmp) / "vault"
+            doc_path.write_text("NotebookLM-style input\n\nMarkdown memory output", encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                result = main(["import-docs", str(doc_path), "--vault", str(vault_path)])
+
+            drops = list((vault_path / "MemoReef" / "Drops").glob("*.md"))
+            logs = list((vault_path / "MemoReef" / "imports").glob("*-import.md"))
+            content = drops[0].read_text(encoding="utf-8")
+            frontmatter, _body = parse_markdown_frontmatter(content)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(drops), 1)
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(frontmatter["has_document_text"], True)
+        self.assertEqual(frontmatter["document_type"], "txt")
+        self.assertIn("## Document text", content)
+        self.assertIn("NotebookLM-style input", content)
+        self.assertIn("Markdown memory output", content)
+
+    def test_import_docs_extracts_docx_text(self):
+        import zipfile
+
+        stdout = io.StringIO()
+        document_xml = """<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>
+<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body>
+<w:p><w:r><w:t>First DOCX paragraph</w:t></w:r></w:p>
+<w:p><w:r><w:t>Second DOCX paragraph</w:t></w:r></w:p>
+</w:body></w:document>"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            doc_path = Path(tmp) / "Agent Brief.docx"
+            vault_path = Path(tmp) / "vault"
+            with zipfile.ZipFile(doc_path, "w") as archive:
+                archive.writestr("word/document.xml", document_xml)
+
+            with redirect_stdout(stdout):
+                result = main(["import-docs", str(doc_path), "--vault", str(vault_path)])
+
+            content = next((vault_path / "MemoReef" / "Drops").glob("*.md")).read_text(encoding="utf-8")
+            frontmatter, _body = parse_markdown_frontmatter(content)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(frontmatter["document_type"], "docx")
+        self.assertIn("First DOCX paragraph", content)
+        self.assertIn("Second DOCX paragraph", content)
+
+    def test_import_docs_extracts_simple_pdf_text(self):
+        stdout = io.StringIO()
+        pdf_bytes = b"""%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /Contents 4 0 R >> endobj
+4 0 obj << /Length 66 >> stream
+BT /F1 12 Tf 72 720 Td (PDF source memory) Tj 0 -18 Td (Markdown vault output) Tj ET
+endstream endobj
+%%EOF
+"""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf_path = Path(tmp) / "Source Memory.pdf"
+            vault_path = Path(tmp) / "vault"
+            pdf_path.write_bytes(pdf_bytes)
+
+            with redirect_stdout(stdout):
+                result = main(["import-docs", str(pdf_path), "--vault", str(vault_path)])
+
+            content = next((vault_path / "MemoReef" / "Drops").glob("*.md")).read_text(encoding="utf-8")
+            frontmatter, _body = parse_markdown_frontmatter(content)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(frontmatter["document_type"], "pdf")
+        self.assertIn("PDF source memory", content)
+        self.assertIn("Markdown vault output", content)
+
+    def test_import_docs_rejects_unsupported_files(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "data.xlsx"
+            path.write_text("not supported", encoding="utf-8")
+            with redirect_stdout(stdout):
+                result = main(["import-docs", str(path), "--vault", str(Path(tmp) / "vault")])
+
+        self.assertEqual(result, 1)
+        self.assertIn("Unsupported document type", stdout.getvalue())
+
     def test_inspect_command_prints_summary(self):
         bookmarks_path = Path(__file__).parent.parent / "examples" / "bookmarks.html"
         stdout = io.StringIO()

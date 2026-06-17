@@ -26,6 +26,9 @@ class Bookmark:
     triaged_at: str | None = None
     clipped_selection: str | None = None
     clip_type: str | None = None
+    document_text: str | None = None
+    document_type: str | None = None
+    original_file: str | None = None
 
 
 class BrowserBookmarkParser(HTMLParser):
@@ -338,6 +341,12 @@ def bookmark_to_markdown(bookmark: Bookmark) -> str:
     if bookmark.clipped_selection:
         lines.append("has_clipped_selection: true")
         lines.append(f"clip_type: {yaml_quote(bookmark.clip_type or 'highlight')}")
+    if bookmark.document_text is not None:
+        lines.append("has_document_text: true")
+    if bookmark.document_type:
+        lines.append(f"document_type: {yaml_quote(bookmark.document_type)}")
+    if bookmark.original_file:
+        lines.append(f"original_file: {yaml_quote(bookmark.original_file)}")
     if bookmark.projects:
         lines.append("projects:")
         for project in bookmark.projects:
@@ -373,6 +382,15 @@ def bookmark_to_markdown(bookmark: Bookmark) -> str:
             *[f"> {line}" if line else ">" for line in bookmark.clipped_selection.splitlines()],
             "",
         ])
+    if bookmark.document_text is not None:
+        lines.extend([
+            "## Document text",
+            "",
+        ])
+        if bookmark.document_text.strip():
+            lines.extend([bookmark.document_text.strip(), ""])
+        else:
+            lines.extend(["_No extractable text found._", ""])
     lines.extend([
         "## Summary",
         "",

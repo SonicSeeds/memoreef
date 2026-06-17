@@ -77,13 +77,16 @@ The pilot creates Markdown Drops under:
 /tmp/memoreef-pilot/MemoReef/Drops/
 ```
 
-Import your own browser bookmarks, URL lists, or CSV files with `title,url,source,tags` columns:
+Import your own browser bookmarks, URL lists, CSV files with `title,url,source,tags` columns, or local documents:
 
 ```bash
 memoreef import /path/to/bookmarks.html --vault /tmp/memoreef-vault
 memoreef import-links /path/to/links.txt --vault /tmp/memoreef-vault
 memoreef import-csv /path/to/links.csv --vault /tmp/memoreef-vault
+memoreef import-docs /path/to/research.pdf /path/to/brief.docx --vault /tmp/memoreef-vault
 ```
+
+`import-docs` turns PDFs, DOCX files, text files, and Markdown files into local Markdown Drops with source-file metadata and a `## Document text` section. It is useful for NotebookLM-style source collection when you want the durable output to stay in your own Markdown/Obsidian memory instead of a hosted notebook. Scanned/image PDFs need OCR first.
 
 ## Product shape
 
@@ -104,6 +107,7 @@ Implemented:
 - Parse Netscape-style browser bookmark HTML exports.
 - Import plain text URL lists.
 - Import CSV files with title, URL, source provenance, and tags.
+- Import local PDF, DOCX, text, and Markdown files into source-memory Drops.
 - Preserve folder path as Markdown frontmatter.
 - Write one Markdown file per bookmark.
 - Store files in an Obsidian-ready folder structure.
