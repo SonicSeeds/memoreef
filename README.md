@@ -114,10 +114,13 @@ Import your own browser bookmarks, URL lists, CSV files with `title,url,source,t
 memoreef import /path/to/bookmarks.html --vault /tmp/memoreef-vault
 memoreef import-links /path/to/links.txt --vault /tmp/memoreef-vault
 memoreef import-csv /path/to/links.csv --vault /tmp/memoreef-vault
+memoreef extract-articles --vault /tmp/memoreef-vault --limit 25
 memoreef import-docs /path/to/research.pdf /path/to/brief.docx --vault /tmp/memoreef-vault
 memoreef import-docs --ocr /path/to/scanned.pdf /path/to/diagram.png --vault /tmp/memoreef-vault
 memoreef import-docs --ocr --ocr-lang deu+eng /path/to/german-scan.pdf --vault /tmp/memoreef-vault
 ```
+
+`extract-articles` fetches saved HTTP/HTTPS URLs directly and writes the readable main page content into a `## Article text` section on each Drop. It records `article_extraction_status`, final/canonical URL, extraction time, and errors in frontmatter. Paywalls, blocked pages, JavaScript-only pages, non-HTML files, and pages without enough readable text are marked honestly instead of faked.
 
 `import-docs` turns PDFs, DOCX files, text files, Markdown files, and image files into local Markdown Drops with source-file metadata and a `## Document text` section. It is useful for NotebookLM-style source collection when you want the durable output to stay in your own Markdown/Obsidian memory instead of a hosted notebook. Text-based PDFs work directly. Scanned/image PDFs and image files need `--ocr` plus local OCR tools (`tesseract`; scanned PDFs also need `pdftoppm`/Poppler). Use `--ocr-lang` for non-English documents, for example `deu+eng`.
 
@@ -156,6 +159,7 @@ Implemented:
 - Parse Netscape-style browser bookmark HTML exports.
 - Import plain text URL lists.
 - Import CSV files with title, URL, source provenance, and tags.
+- Extract readable article text from saved HTTP/HTTPS web pages into `## Article text` sections with honest status/error metadata.
 - Import local PDF, DOCX, text, Markdown, and OCR-assisted image/scanned-PDF files into source-memory Drops.
 - Extract PDF numeric table rows into Numeric artifacts for exact-number answers.
 - Digitize calibrated vertical bar chart geometry from vision output into CSV numeric artifacts.
@@ -174,7 +178,6 @@ Implemented:
 
 Not implemented yet:
 
-- Full article extraction/summarization.
 - LLM-generated summaries and deep semantic tagging.
 - Browser extension.
 - Obsidian plugin.
@@ -490,9 +493,11 @@ Refresh basic page metadata:
 ```bash
 python3.11 -m memoreef.cli refresh-metadata --vault /tmp/memoreef-vault --dry-run
 python3.11 -m memoreef.cli refresh-metadata --vault /tmp/memoreef-vault --limit 50 --timeout 5
+python3.11 -m memoreef.cli extract-articles --vault /tmp/memoreef-vault --dry-run
+python3.11 -m memoreef.cli extract-articles --vault /tmp/memoreef-vault --limit 50 --timeout 8
 ```
 
-Metadata refresh fetches saved URLs directly, extracts page title, description, canonical URL, and hostname, then updates only the related frontmatter fields. It does not use third-party APIs and does not move, delete, or rewrite notes beyond those metadata fields.
+Metadata refresh fetches saved URLs directly, extracts page title, description, canonical URL, and hostname, then updates only the related frontmatter fields. Article extraction fetches saved HTTP/HTTPS URLs directly and writes the readable main page text to `## Article text`. Both commands avoid third-party APIs; extraction failures such as paywalls, JavaScript-only pages, unsupported content types, and network errors are recorded in Drop frontmatter instead of hidden.
 
 Suggest projects and shoals from existing curated Drops:
 

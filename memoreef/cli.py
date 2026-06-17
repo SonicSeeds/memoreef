@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timedelta, timezone
-from html import escape as html_escape
+from html import escape as html_escape, unescape as html_unescape
 from html.parser import HTMLParser
 import json
 import os
@@ -2364,6 +2364,266 @@ def refresh_metadata(
     return updated, skipped, warnings, planned
 
 
+ARTICLE_BLOCK_TAGS = {"p", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6"}
+ARTICLE_SKIP_TAGS = {"script", "style", "noscript", "nav", "footer", "header", "aside", "form", "button", "svg"}
+
+
+class ArticleTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.title_parts: list[str] = []
+        self.canonical_url = ""
+        self.in_title = False
+        self.skip_depth = 0
+        self.article_depth = 0
+        self.main_depth = 0
+        self.body_depth = 0
+        self.current_tag: str | None = None
+        self.current_parts: list[str] = []
+        self.article_blocks: list[tuple[str, str]] = []
+        self.main_blocks: list[tuple[str, str]] = []
+        self.body_blocks: list[tuple[str, str]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
+        attrs_dict = {key.lower(): value or "" for key, value in attrs}
+        if tag in ARTICLE_SKIP_TAGS:
+            self.skip_depth += 1
+            return
+        if tag == "title":
+            self.in_title = True
+        if tag == "link" and attrs_dict.get("rel", "").lower() == "canonical" and attrs_dict.get("href"):
+            self.canonical_url = attrs_dict["href"]
+        if tag == "article":
+            self.article_depth += 1
+        if tag == "main":
+            self.main_depth += 1
+        if tag == "body":
+            self.body_depth += 1
+        if tag in ARTICLE_BLOCK_TAGS:
+            self.flush_block()
+            self.current_tag = tag
+            self.current_parts = []
+        elif tag == "br" and self.current_tag:
+            self.current_parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if self.skip_depth:
+            if tag in ARTICLE_SKIP_TAGS:
+                self.skip_depth = max(0, self.skip_depth - 1)
+            return
+        if tag == "title":
+            self.in_title = False
+        if tag in ARTICLE_BLOCK_TAGS:
+            self.flush_block()
+        if tag == "article":
+            self.article_depth = max(0, self.article_depth - 1)
+        if tag == "main":
+            self.main_depth = max(0, self.main_depth - 1)
+        if tag == "body":
+            self.body_depth = max(0, self.body_depth - 1)
+
+    def handle_data(self, data: str) -> None:
+        if self.skip_depth:
+            return
+        if self.in_title:
+            self.title_parts.append(data)
+        if self.current_tag:
+            self.current_parts.append(data)
+
+    def flush_block(self) -> None:
+        if not self.current_tag:
+            return
+        text = clean_article_text("".join(self.current_parts))
+        tag = self.current_tag
+        self.current_tag = None
+        self.current_parts = []
+        if not text:
+            return
+        block = (tag, text)
+        if self.article_depth:
+            self.article_blocks.append(block)
+        elif self.main_depth:
+            self.main_blocks.append(block)
+        elif self.body_depth:
+            self.body_blocks.append(block)
+
+    def result(self) -> dict[str, object]:
+        self.flush_block()
+        blocks = self.article_blocks or self.main_blocks or self.body_blocks
+        source = "article" if self.article_blocks else "main" if self.main_blocks else "body"
+        return {
+            "title": clean_article_text("".join(self.title_parts)),
+            "canonical_url": self.canonical_url,
+            "blocks": blocks,
+            "source": source,
+        }
+
+
+def clean_article_text(value: str) -> str:
+    value = html_unescape(value)
+    value = re.sub(r"[ \t\r\f\v]+", " ", value)
+    value = re.sub(r"\n\s*", "\n", value)
+    return value.strip()
+
+
+def article_blocks_to_markdown(blocks: list[tuple[str, str]], title: str = "") -> str:
+    lines: list[str] = []
+    title_seen = False
+    for tag, text in blocks:
+        if tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+            level = int(tag[1])
+            prefix = "#" * min(level, 4)
+            lines.extend([f"{prefix} {text}", ""])
+            if tag == "h1":
+                title_seen = True
+        elif tag == "li":
+            lines.append(f"- {text}")
+        elif tag == "blockquote":
+            lines.extend([f"> {line}" for line in text.splitlines()])
+            lines.append("")
+        else:
+            lines.extend([text, ""])
+    if title and not title_seen and not any(line.startswith("# ") for line in lines):
+        lines = [f"# {title}", ""] + lines
+    markdown = "\n".join(lines).strip()
+    return markdown + "\n" if markdown else ""
+
+
+def replace_markdown_full_section(content: str, heading: str, section_text: str | None) -> str:
+    pattern = re.compile(rf"\n## {re.escape(heading)}\n.*?(?=\n## |\Z)", re.DOTALL)
+    replacement = "" if section_text is None else f"\n## {heading}\n\n{section_text.rstrip()}\n"
+    if pattern.search(content):
+        updated = pattern.sub(replacement, content).rstrip() + "\n"
+    elif section_text is not None:
+        updated = content.rstrip() + replacement + "\n"
+    else:
+        updated = content
+    return updated
+
+
+def response_content_type(response: object) -> str:
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return ""
+    getter = getattr(headers, "get", None)
+    if callable(getter):
+        return str(getter("Content-Type", "") or "")
+    return ""
+
+
+def fetch_article_text(url: str, timeout: float, max_bytes: int = 1024 * 1024) -> dict[str, object]:
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"}:
+        return {"status": "skipped", "error": "unsupported URL scheme"}
+    if not parsed.netloc:
+        return {"status": "skipped", "error": "malformed URL"}
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={"User-Agent": "MemoReef/0.1 local article extraction"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            content_type = response_content_type(response)
+            if content_type and "html" not in content_type.lower() and "text/" not in content_type.lower():
+                return {"status": "skipped", "error": f"unsupported content type: {content_type}"}
+            data = response.read(max_bytes + 1)
+            if len(data) > max_bytes:
+                return {"status": "failed", "error": f"response exceeds {max_bytes} bytes"}
+            final_url = response.geturl() or url
+            charset = response_charset(response) or "utf-8"
+            html = data.decode(charset, errors="replace")
+    except urllib.error.HTTPError as error:
+        status = "blocked" if error.code in {401, 403, 429} else "failed"
+        return {"status": status, "error": f"HTTP {error.code}", "final_url": error.geturl() or url}
+    except Exception as error:
+        return {"status": "failed", "error": str(error), "final_url": url}
+
+    parser = ArticleTextParser()
+    try:
+        parser.feed(html)
+        parsed_article = parser.result()
+    except Exception as error:
+        return {"status": "failed", "error": f"article parse failed: {error}", "final_url": final_url}
+
+    blocks = parsed_article.get("blocks", [])
+    if not isinstance(blocks, list) or not blocks:
+        return {"status": "empty", "error": "no readable article text found", "final_url": final_url}
+    title = str(parsed_article.get("title") or "")
+    article_markdown = article_blocks_to_markdown(blocks, title)
+    if len(re.findall(r"[A-Za-z0-9]", article_markdown)) < 80:
+        return {"status": "empty", "error": "not enough readable article text found", "final_url": final_url}
+    canonical_url = ""
+    raw_canonical = str(parsed_article.get("canonical_url") or "")
+    if raw_canonical:
+        canonical_url = canonicalize_url(urljoin(final_url, raw_canonical))
+    return {
+        "status": "ok",
+        "error": "",
+        "final_url": final_url,
+        "canonical_url": canonical_url,
+        "article_title": title,
+        "article_text": article_markdown,
+        "method": "html-main-content",
+        "source": str(parsed_article.get("source") or "body"),
+    }
+
+
+def extract_articles(
+    vault: Path,
+    root: str = "MemoReef",
+    dry_run: bool = False,
+    limit: int | None = None,
+    timeout: float = 8,
+) -> dict[str, object]:
+    vault_path = vault.expanduser().resolve()
+    drops_dir = vault_path / root / "Drops"
+    drop_paths = sorted(drops_dir.rglob("*.md")) if drops_dir.exists() else []
+    if limit is not None:
+        drop_paths = drop_paths[: max(0, limit)]
+    updated = 0
+    extracted = 0
+    skipped = 0
+    warnings: list[str] = []
+    planned: list[str] = []
+    for path in drop_paths:
+        content = path.read_text(encoding="utf-8", errors="replace")
+        frontmatter, _body = parse_markdown_frontmatter(content)
+        raw_url = str(frontmatter.get("url") or "").strip()
+        relative_path = path.resolve().relative_to(vault_path).as_posix()
+        if not raw_url:
+            skipped += 1
+            warnings.append(f"{relative_path}: missing URL")
+            continue
+        result = fetch_article_text(raw_url, timeout)
+        status = str(result.get("status") or "failed")
+        error = str(result.get("error") or "")
+        updates = {
+            "article_extracted_at": utc_now_iso(),
+            "article_extraction_status": status,
+            "article_extraction_error": error,
+            "article_extraction_method": str(result.get("method") or ""),
+            "article_final_url": str(result.get("final_url") or raw_url),
+            "article_canonical_url": str(result.get("canonical_url") or ""),
+            "article_title": str(result.get("article_title") or ""),
+            "has_article_text": status == "ok",
+        }
+        planned.append(relative_path)
+        if status != "ok" and error:
+            warnings.append(f"{relative_path}: {error}")
+        if not dry_run:
+            updated_content = update_markdown_frontmatter(content, updates)
+            article_text = str(result.get("article_text") or "") if status == "ok" else None
+            updated_content = replace_markdown_full_section(updated_content, "Article text", article_text)
+            path.write_text(updated_content, encoding="utf-8")
+        updated += 1
+        if status == "ok":
+            extracted += 1
+    return {"updated": updated, "extracted": extracted, "skipped": skipped, "warnings": warnings, "planned": planned}
+
+
 GARDEN_STOPWORDS = {
     "the", "and", "for", "with", "from", "into", "your", "you", "are", "was", "were",
     "this", "that", "not", "but", "can", "how", "why", "what", "when", "where",
@@ -3435,6 +3695,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <li>Run <code>duplicate-report</code> to spot exact URL, same-domain, and similar-title clutter.</li>
           <li>Run <code>check-links</code> to find broken, suspicious, or unreachable saved URLs.</li>
           <li>Run <code>refresh-metadata</code> to fetch titles, descriptions, canonical URLs, and hostnames.</li>
+          <li>Run <code>extract-articles</code> to write readable saved-page content into <code>## Article text</code> sections.</li>
           <li>Run <code>suggest-gardens</code> to propose existing projects and shoals for unsorted Drops.</li>
           <li>Review the suggestions JSON, then run <code>apply-garden-suggestions --dry-run</code> before applying accepted labels.</li>
 
@@ -4373,6 +4634,13 @@ def build_parser() -> argparse.ArgumentParser:
     inspect_cmd = sub.add_parser("inspect", help="Inspect a browser bookmark HTML export without writing files.")
     inspect_cmd.add_argument("bookmarks", type=Path, help="Browser bookmark export HTML file.")
 
+    extract_articles_cmd = sub.add_parser("extract-articles", help="Fetch saved web URLs and write readable article text into Drops.")
+    extract_articles_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    extract_articles_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    extract_articles_cmd.add_argument("--dry-run", action="store_true", help="Preview extraction without modifying Markdown files.")
+    extract_articles_cmd.add_argument("--limit", type=int, default=None, help="Only process the first N Drops.")
+    extract_articles_cmd.add_argument("--timeout", type=float, default=8, help="HTTP timeout per URL in seconds. Default: 8")
+
     review_cmd = sub.add_parser("export-review-session", help="Export Markdown Drops to review-session JSON.")
     review_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     review_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
@@ -4614,6 +4882,29 @@ def main(argv: list[str] | None = None) -> int:
         print("Top-level folders:")
         for folder, count in counts.items():
             print(f"- {folder}: {count}")
+        return 0
+
+    if args.command == "extract-articles":
+        result = extract_articles(args.vault, args.root, args.dry_run, args.limit, args.timeout)
+        if args.dry_run:
+            print("Dry run article extraction:")
+            print(f"- would process: {result['updated']}")
+        else:
+            print("Extracted articles:")
+            print(f"- processed: {result['updated']}")
+        print(f"- extracted: {result['extracted']}")
+        print(f"- skipped: {result['skipped']}")
+        warnings = result.get("warnings", [])
+        print(f"- warnings: {len(warnings) if isinstance(warnings, list) else 0}")
+        if args.dry_run:
+            planned = result.get("planned", [])
+            if isinstance(planned, list) and planned:
+                print("- would process files:")
+                for item in planned[:20]:
+                    print(f"  - {item}")
+        if isinstance(warnings, list):
+            for warning in warnings:
+                print(f"  - {warning}")
         return 0
 
     if args.command == "export-review-session":

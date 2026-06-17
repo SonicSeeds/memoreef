@@ -90,6 +90,7 @@ Useful follow-on commands:
 
 ```bash
 python3.11 -m memoreef.cli refresh-metadata --vault ~/Obsidian/Main --limit 50
+python3.11 -m memoreef.cli extract-articles --vault ~/Obsidian/Main --limit 50
 python3.11 -m memoreef.cli search-library --vault ~/Obsidian/Main --query "agent workflow"
 python3.11 -m memoreef.cli brief --vault ~/Obsidian/Main --pearl-only
 python3.11 -m memoreef.cli suggest-gardens --vault ~/Obsidian/Main
@@ -167,17 +168,17 @@ Include:
 
 ### 4. Add enrichment stub
 
-No paid API required. First pass:
+First pass now includes:
 
 - HTTP HEAD/GET status check;
 - current page title if fetch succeeds;
 - source domain;
-- estimated content type;
+- readable web article extraction into `## Article text`;
+- extraction status/error metadata for blocked, JS-only, non-HTML, or unreadable pages;
 - dead-link flag.
 
 Future optional:
 
-- readability extraction;
 - local summarizer;
 - configured LLM provider;
 - embeddings/index.

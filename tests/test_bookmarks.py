@@ -2841,6 +2841,81 @@ endstream endobj
             self.assertIn("Link check report", html)
             self.assertIn("link-check-report", html)
 
+    def test_extract_articles_writes_article_text_and_frontmatter(self):
+        html = b"""<!doctype html><html><head><title>Ignored Browser Title</title><link rel='canonical' href='/canonical'></head><body>
+<nav>Navigation sludge</nav><article><h1>Actual Article Title</h1><p>First useful paragraph about local research memory.</p><p>Second useful paragraph with enough signal for agents.</p></article><footer>Footer sludge</footer>
+</body></html>"""
+
+        def fake_urlopen(request, timeout=0):
+            return FakeHTTPResponse(200, "https://example.com/article", html, "utf-8")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([Bookmark("Saved Link", "https://example.com/article")], vault_path)
+
+            with patch("urllib.request.urlopen", fake_urlopen):
+                with redirect_stdout(io.StringIO()):
+                    result = main(["extract-articles", "--vault", str(vault_path)])
+
+            drop_path = next((vault_path / "MemoReef" / "Drops").glob("*.md"))
+            content = drop_path.read_text(encoding="utf-8")
+            frontmatter, _body = parse_markdown_frontmatter(content)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(frontmatter["article_extraction_status"], "ok")
+        self.assertEqual(frontmatter["article_extraction_method"], "html-main-content")
+        self.assertEqual(frontmatter["article_canonical_url"], "https://example.com/canonical")
+        self.assertEqual(frontmatter["has_article_text"], True)
+        self.assertIn("## Article text", content)
+        self.assertIn("# Actual Article Title", content)
+        self.assertIn("First useful paragraph about local research memory.", content)
+        self.assertIn("Second useful paragraph with enough signal for agents.", content)
+        self.assertNotIn("Navigation sludge", content)
+        self.assertNotIn("Footer sludge", content)
+
+    def test_extract_articles_records_failure_without_article_text(self):
+        def fake_urlopen(request, timeout=0):
+            raise urllib.error.HTTPError("https://example.com/paywall", 403, "Forbidden", {}, None)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([Bookmark("Blocked Link", "https://example.com/paywall")], vault_path)
+
+            with patch("urllib.request.urlopen", fake_urlopen):
+                with redirect_stdout(io.StringIO()):
+                    result = main(["extract-articles", "--vault", str(vault_path)])
+
+            drop_path = next((vault_path / "MemoReef" / "Drops").glob("*.md"))
+            content = drop_path.read_text(encoding="utf-8")
+            frontmatter, _body = parse_markdown_frontmatter(content)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(frontmatter["article_extraction_status"], "blocked")
+        self.assertIn("HTTP 403", frontmatter["article_extraction_error"])
+        self.assertEqual(frontmatter["has_article_text"], False)
+        self.assertNotIn("## Article text", content)
+
+    def test_extract_articles_dry_run_does_not_modify_drop(self):
+        html = b"<html><body><article><p>Dry run article body should not be written.</p></article></body></html>"
+
+        def fake_urlopen(request, timeout=0):
+            return FakeHTTPResponse(200, "https://example.com/dry", html, "utf-8")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([Bookmark("Dry Run", "https://example.com/dry")], vault_path)
+            drop_path = next((vault_path / "MemoReef" / "Drops").glob("*.md"))
+            before = drop_path.read_text(encoding="utf-8")
+
+            with patch("urllib.request.urlopen", fake_urlopen):
+                with redirect_stdout(io.StringIO()):
+                    result = main(["extract-articles", "--vault", str(vault_path), "--dry-run"])
+
+            after = drop_path.read_text(encoding="utf-8")
+
+        self.assertEqual(result, 0)
+        self.assertEqual(before, after)
+
     def test_refresh_metadata_updates_frontmatter(self):
         html = b"""<!doctype html>
 <html><head>

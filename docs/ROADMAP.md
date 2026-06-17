@@ -51,6 +51,7 @@ Purpose: preserve what matters from sources while marking uncertainty honestly.
 
 Current capabilities:
 
+- Best-effort web article extraction into `## Article text` with status/error metadata.
 - Document text extraction.
 - Visual artifacts from captions/table-like text.
 - Optional bounded `--vision-command` for PDF page/crop analysis.
@@ -60,6 +61,7 @@ Current capabilities:
 
 Next acceptance criteria:
 
+- Easier first-run controls for article extraction from imported URL/bookmark Drops.
 - Source quote extraction with stable anchors where possible.
 - Better table structure recovery for PDFs with multi-column/merged cells.
 - Chart digitization beyond simple vertical bars only after calibration rules are safe.

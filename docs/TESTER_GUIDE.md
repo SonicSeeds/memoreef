@@ -10,12 +10,13 @@ Please try the full first-user path:
 
 1. Install MemoReef from GitHub.
 2. Import a small set of real bookmarks or links.
-3. Start the local Review Mode app.
-4. Add one real document through Import Dock.
-5. Review a few Drops with Keep / Pearl / Sink.
-6. Check the generated Markdown files.
-7. Run one Pearl Dive query.
-8. Open an issue or send feedback about anything unclear.
+3. Extract readable article text from a few saved web URLs.
+4. Start the local Review Mode app.
+5. Add one real document through Import Dock.
+6. Review a few Drops with Keep / Pearl / Sink.
+7. Check the generated Markdown files.
+8. Run one Pearl Dive query.
+9. Open an issue or send feedback about anything unclear.
 
 A good test takes 10–20 minutes. Use non-sensitive sources first.
 
@@ -110,7 +111,21 @@ OCR for scanned PDFs or images:
 memoreef import-docs --ocr --ocr-lang deu+eng /path/to/scanned.pdf --vault /tmp/memoreef-test-vault
 ```
 
-## 4. Start Review Mode
+## 4. Extract article text from saved URLs
+
+Run this on the small test vault first:
+
+```bash
+memoreef extract-articles --vault /tmp/memoreef-test-vault --limit 25
+```
+
+Expected result:
+
+- Drops for readable HTML pages get a `## Article text` section.
+- Frontmatter records `article_extraction_status`, final/canonical URL, extraction time, and any error.
+- Paywalls, blocked pages, JavaScript-only pages, non-HTML files, and pages without enough readable text are marked honestly instead of pretending.
+
+## 5. Start Review Mode
 
 ```bash
 memoreef serve --vault /tmp/memoreef-test-vault
@@ -130,7 +145,7 @@ Controls:
 
 Decisions autosave directly into Markdown frontmatter while the local server is running.
 
-## 5. Test Import Dock
+## 6. Test Import Dock
 
 In Review Mode, use **Import Dock** to add a document without returning to the terminal.
 
@@ -150,7 +165,7 @@ Expected result:
 - Review Mode refreshes with current Drift Drops.
 - OCR only runs if enabled and local OCR tools are installed.
 
-## 6. Check the Markdown output
+## 7. Check the Markdown output
 
 Open:
 
@@ -158,11 +173,11 @@ Open:
 /tmp/memoreef-test-vault/MemoReef/Drops/
 ```
 
-Each Drop should be a readable Markdown file with frontmatter. Document imports should include a `## Document text` section when text was extracted.
+Each Drop should be a readable Markdown file with frontmatter. Web article extraction should add a `## Article text` section when the saved page exposes readable HTML. Document imports should include a `## Document text` section when text was extracted.
 
 If you use Obsidian, open `/tmp/memoreef-test-vault` as a vault and inspect the `MemoReef` folder.
 
-## 7. Run a Pearl Dive
+## 8. Run a Pearl Dive
 
 Ask one question against your local sources:
 
@@ -203,7 +218,7 @@ Current limits:
 - No hosted account or cloud sync.
 - No browser extension yet.
 - No Obsidian plugin yet.
-- No full article extraction yet.
+- Web article extraction is best-effort: paywalls, blocked pages, JavaScript-only pages, and pages without readable HTML may not extract.
 - No LLM summaries yet.
 - OCR extracts text from scanned/image files. Optional vision hooks can add visual/numeric artifacts, including calibrated vertical-bar digitized estimates, but broad chart/diagram understanding is still limited.
 - Use a small test vault first before importing a large personal archive.

@@ -25,7 +25,17 @@ Yes. MemoReef stores sources as structured Markdown with metadata, tags, status,
 
 ## What works today?
 
-MemoReef can import browser bookmark exports, URL lists, CSV files, PDFs, DOCX files, text files, Markdown files, and OCR-assisted image/scanned-PDF files; clip highlighted web text through a localhost bookmarklet; generate Markdown Drops; run a local Review Mode app with Import Dock drag-and-drop uploads; autosave Keep/Pearl/Sink decisions; create reports; generate hub maps; and build a static local app view.
+MemoReef can import browser bookmark exports, URL lists, CSV files, PDFs, DOCX files, text files, Markdown files, and OCR-assisted image/scanned-PDF files; extract readable article text from saved HTTP/HTTPS pages; clip highlighted web text through a localhost bookmarklet; generate Markdown Drops; run a local Review Mode app with Import Dock drag-and-drop uploads; autosave Keep/Pearl/Sink decisions; create reports; generate hub maps; and build a static local app view.
+
+## Can MemoReef extract article text from saved web pages?
+
+Yes, for readable HTTP/HTTPS HTML pages. Run:
+
+```bash
+memoreef extract-articles --vault /tmp/memoreef-vault --limit 25
+```
+
+MemoReef writes extracted page content into `## Article text` and records extraction status/error metadata in frontmatter. Paywalls, blocked pages, JavaScript-only pages, non-HTML files, and pages without enough readable text are marked honestly.
 
 ## Can MemoReef import PDFs and DOCX files?
 
@@ -43,7 +53,7 @@ Text-based PDFs can be imported directly. Scanned/image PDFs can use `import-doc
 
 ## What is not implemented yet?
 
-Figure-aware visual understanding for diagrams/charts, full article extraction, LLM summarization, deep semantic tagging, a browser extension, an Obsidian plugin, Notion/API connectors, and hosted multi-device sync are not part of the current MVP.
+Figure-aware visual understanding for diagrams/charts, LLM summarization, deep semantic tagging, a browser extension, an Obsidian plugin, Notion/API connectors, and hosted multi-device sync are not part of the current MVP. Web article extraction is best-effort and may fail on paywalls, blocked pages, JavaScript-only pages, or pages without readable HTML.
 
 ## Is the mobile app real?
 
