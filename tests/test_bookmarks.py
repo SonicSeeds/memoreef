@@ -434,6 +434,79 @@ Delta −3.5"""
         self.assertIn('Samples,"1,234"', numeric)
         self.assertIn("Delta,−3.5", numeric)
 
+    def test_pdf_numeric_analysis_digitizes_calibrated_vertical_bar_chart(self):
+        visual = """### Vision page descriptions
+
+```json
+{"type":"chart_digitization","chart_type":"vertical_bar","artifact":"Figure 2","source":"page 3 visual region 1","y_axis":{"unit":"%","ticks":[{"value":"0","pixel_y":440},{"value":"100","pixel_y":140}]},"bars":[{"label":"Model A","pixel_top_y":230,"confidence":"high"},{"label":"Model B","pixel_top_y":170,"confidence":"medium"}]}
+```"""
+
+        numeric = extract_pdf_numeric_analysis("", visual)
+
+        self.assertIsNotNone(numeric)
+        assert numeric is not None
+        self.assertIn("### Digitized chart values", numeric)
+        self.assertIn("Figure 2,vertical_bar,Model A,70,digitized_estimate,%,high,page 3 visual region 1,230", numeric)
+        self.assertIn("Figure 2,vertical_bar,Model B,90,digitized_estimate,%,medium,page 3 visual region 1,170", numeric)
+
+    def test_pdf_numeric_analysis_rejects_uncalibrated_chart_digitization(self):
+        visual = """```json
+{"type":"chart_digitization","chart_type":"vertical_bar","artifact":"Figure 2","y_axis":{"ticks":[{"value":"0","pixel_y":440}]},"bars":[{"label":"A","pixel_top_y":230}]}
+```"""
+
+        numeric = extract_pdf_numeric_analysis("", visual)
+
+        self.assertIsNone(numeric)
+
+    def test_pdf_numeric_analysis_rejects_non_vertical_chart_digitization(self):
+        visual = """```json
+{"type":"chart_digitization","chart_type":"line","artifact":"Figure 2","y_axis":{"ticks":[{"value":"0","pixel_y":440},{"value":"100","pixel_y":140}]},"bars":[{"label":"A","pixel_top_y":230}]}
+```"""
+
+        numeric = extract_pdf_numeric_analysis("", visual)
+
+        self.assertIsNone(numeric)
+
+    def test_pdf_numeric_analysis_rejects_extrapolated_chart_digitization(self):
+        visual = """```json
+{"type":"chart_digitization","chart_type":"vertical_bar","artifact":"Figure 2","y_axis":{"ticks":[{"value":"0","pixel_y":440},{"value":"100","pixel_y":140}]},"bars":[{"label":"A","pixel_top_y":20}]}
+```"""
+
+        numeric = extract_pdf_numeric_analysis("", visual)
+
+        self.assertIsNone(numeric)
+
+    def test_pdf_numeric_analysis_rejects_inconsistent_chart_ticks(self):
+        visual = """```json
+{"type":"chart_digitization","chart_type":"vertical_bar","artifact":"Figure 2","y_axis":{"ticks":[{"value":"0","pixel_y":440},{"value":"50","pixel_y":300},{"value":"100","pixel_y":140}]},"bars":[{"label":"A","pixel_top_y":230}]}
+```"""
+
+        numeric = extract_pdf_numeric_analysis("", visual)
+
+        self.assertIsNone(numeric)
+
+    def test_pdf_numeric_analysis_rejects_partial_numeric_chart_fields(self):
+        visual = """```json
+{"type":"chart_digitization","chart_type":"vertical_bar","artifact":"Figure 2","y_axis":{"ticks":[{"value":"between 0 and 10","pixel_y":440},{"value":"100","pixel_y":140}]},"bars":[{"label":"A","pixel_top_y":"about 230"}]}
+```"""
+
+        numeric = extract_pdf_numeric_analysis("", visual)
+
+        self.assertIsNone(numeric)
+
+    def test_pdf_numeric_analysis_neutralizes_chart_csv_formula_labels(self):
+        visual = """```json
+{"type":"chart_digitization","chart_type":"vertical_bar","artifact":"=cmd","source":"@source","y_axis":{"unit":"%","ticks":[{"value":"0","pixel_y":440},{"value":"100","pixel_y":140}]},"bars":[{"label":"=SUM(A1:A2)","pixel_top_y":230,"confidence":"high"}]}
+```"""
+
+        numeric = extract_pdf_numeric_analysis("", visual)
+
+        self.assertIsNotNone(numeric)
+        assert numeric is not None
+        self.assertIn("'=cmd", numeric)
+        self.assertIn("'=SUM(A1:A2)", numeric)
+        self.assertIn("'@source", numeric)
+
     def test_pdf_numeric_analysis_rejects_malformed_vision_numeric_json(self):
         visual = """### Vision page descriptions
 

@@ -38,6 +38,9 @@ PDF_VISUAL_PROMPT = (
     "Focus on research-paper evidence. For exact numeric values, do not estimate: only report values from printed numeric labels, table cells, data labels, axis tick labels, or explicitly tick-aligned marks. "
     "If exact values are readable, include a fenced ```json block with this schema: "
     "{\"type\":\"numeric_artifact\",\"artifact\":\"Figure/Table identifier if visible\",\"source\":\"page/crop\",\"values\":[{\"label\":\"series/row\",\"x\":\"axis/category if visible\",\"y\":\"exact value\",\"unit\":\"unit if visible\",\"confidence\":\"high|medium|low\"}],\"notes\":\"uncertainty\"}. "
+    "For simple vertical bar charts where tick labels and bar tops are visible, you may instead include exactly a fenced ```json block with this chart digitization schema: "
+    "{\"type\":\"chart_digitization\",\"chart_type\":\"vertical_bar\",\"artifact\":\"Figure identifier\",\"source\":\"page/crop\",\"y_axis\":{\"unit\":\"unit\",\"ticks\":[{\"value\":\"0\",\"pixel_y\":440},{\"value\":\"100\",\"pixel_y\":140}]},\"bars\":[{\"label\":\"A\",\"pixel_top_y\":230,\"confidence\":\"medium\"}]}. "
+    "Only provide chart_digitization when coordinates are referenced to the analyzed crop/page image. "
     "If exact values are not readable, say that exact values were not extracted."
 )
 
@@ -264,9 +267,10 @@ def extract_pdf_visual_analysis(
 def extract_pdf_numeric_analysis(text: str, visual_analysis: str | None = None) -> str | None:
     sections: list[str] = []
     table_artifacts = extract_numeric_table_artifacts(text)
+    digitized_chart_artifacts = extract_digitized_chart_artifacts(visual_analysis or "")
     vision_artifacts = extract_vision_numeric_json_artifacts(visual_analysis or "")
 
-    if not table_artifacts and not vision_artifacts:
+    if not table_artifacts and not digitized_chart_artifacts and not vision_artifacts:
         return None
 
     sections.append(
@@ -274,11 +278,14 @@ def extract_pdf_numeric_analysis(text: str, visual_analysis: str | None = None) 
         "Agents may answer exact numeric questions only from quoted source table text or validated structured values in this section. "
         "CSV tables here are machine-extracted candidates from PDF text and include their source snippet; preserve row/column context and do not invent missing headers. "
         "Vision-reported values are accepted only when they pass the numeric-artifact schema and include confidence. "
+        "Digitized chart values are calibrated estimates computed from chart geometry, not source-printed exact values; use them only with their confidence/source fields and call them digitized estimates. "
         "If a value is only described in visual prose, treat it as a trend/meaning summary, not exact evidence. "
         "If the requested exact value is absent here, say that the exact value was not extracted."
     )
     if table_artifacts:
         sections.append("### Extracted numeric tables\n\n" + "\n\n".join(table_artifacts))
+    if digitized_chart_artifacts:
+        sections.append("### Digitized chart values\n\n" + "\n\n".join(digitized_chart_artifacts))
     if vision_artifacts:
         sections.append("### Vision-reported numeric candidates\n\n" + "\n\n".join(vision_artifacts))
     return "\n\n".join(sections)
@@ -360,10 +367,186 @@ def looks_like_header_tokens(tokens: list[str], line: str) -> bool:
 NUMERIC_TOKEN_PATTERN = re.compile(
     r"(?:[+\-−]?\d{1,3}(?:,\d{3})+(?:\.\d+)?|[+\-−]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+\-]?\d+)?|\([0-9]+(?:\.[0-9]+)?\))%?"
 )
+STRICT_NUMERIC_FIELD_PATTERN = re.compile(
+    r"^(?:[+\-−]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?|\.\d+)(?:[eE][+\-]?\d+)?%?|\(\d+(?:\.\d+)?\)%?)$"
+)
 
 
 def contains_number(value: str) -> bool:
     return bool(NUMERIC_TOKEN_PATTERN.search(value))
+
+
+def extract_digitized_chart_artifacts(markdown: str) -> list[str]:
+    artifacts: list[str] = []
+    for raw_json in re.findall(r"```json\s*(.*?)\s*```", markdown, flags=re.S | re.I):
+        try:
+            parsed = json.loads(raw_json)
+        except json.JSONDecodeError:
+            continue
+        artifact = digitize_chart_json(parsed)
+        if artifact:
+            artifacts.append(artifact)
+    return artifacts[:10]
+
+
+def digitize_chart_json(value: object) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    if value.get("type") != "chart_digitization":
+        return None
+    if value.get("chart_type") != "vertical_bar":
+        return None
+    ticks = extract_chart_ticks(value.get("y_axis"))
+    if len(ticks) < 2:
+        return None
+    tick_low, tick_high = choose_calibration_ticks(ticks)
+    if tick_low is None or tick_high is None:
+        return None
+    if not chart_ticks_are_consistent(ticks, tick_low, tick_high):
+        return None
+    bars = value.get("bars")
+    if not isinstance(bars, list):
+        return None
+    unit = ""
+    if isinstance(value.get("y_axis"), dict):
+        unit = safe_short_string(value["y_axis"].get("unit"), fallback="")
+    rows = [["artifact", "chart_type", "label", "value", "value_kind", "unit", "confidence", "source", "pixel_top_y"]]
+    for bar in bars[:100]:
+        row = digitize_vertical_bar_row(bar, value, tick_low, tick_high, unit)
+        if row:
+            rows.append(row)
+    if len(rows) < 2:
+        return None
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows(rows)
+    return (
+        f"#### {safe_short_string(value.get('artifact'), fallback='Digitized vertical bar chart')}\n\n"
+        "Digitized CSV:\n\n"
+        f"{fenced_code('csv', output.getvalue().strip())}"
+    )
+
+
+def extract_chart_ticks(y_axis: object) -> list[tuple[float, float]]:
+    if not isinstance(y_axis, dict):
+        return []
+    ticks = y_axis.get("ticks")
+    if not isinstance(ticks, list):
+        return []
+    parsed: list[tuple[float, float]] = []
+    for tick in ticks[:20]:
+        if not isinstance(tick, dict):
+            continue
+        value = parse_number(tick.get("value"))
+        pixel_y = parse_number(tick.get("pixel_y"))
+        if value is None or pixel_y is None:
+            continue
+        parsed.append((value, pixel_y))
+    return parsed
+
+
+def choose_calibration_ticks(ticks: list[tuple[float, float]]) -> tuple[tuple[float, float] | None, tuple[float, float] | None]:
+    best_pair: tuple[tuple[float, float], tuple[float, float]] | None = None
+    best_span = 0.0
+    for i, first in enumerate(ticks):
+        for second in ticks[i + 1 :]:
+            value_span = abs(second[0] - first[0])
+            pixel_span = abs(second[1] - first[1])
+            if value_span <= 0 or pixel_span <= 0:
+                continue
+            span = value_span * pixel_span
+            if span > best_span:
+                best_pair = (first, second)
+                best_span = span
+    if best_pair is None:
+        return None, None
+    return best_pair
+
+
+def chart_ticks_are_consistent(ticks: list[tuple[float, float]], tick_a: tuple[float, float], tick_b: tuple[float, float]) -> bool:
+    value_span = abs(tick_b[0] - tick_a[0])
+    tolerance = max(value_span * 0.02, 1e-6)
+    for value, pixel_y in ticks:
+        predicted = interpolate_value_from_pixel_y(pixel_y, tick_a, tick_b)
+        if predicted is None:
+            return False
+        if abs(predicted - value) > tolerance:
+            return False
+    return True
+
+
+def pixel_y_within_calibration(pixel_y: float, tick_a: tuple[float, float], tick_b: tuple[float, float]) -> bool:
+    low = min(tick_a[1], tick_b[1])
+    high = max(tick_a[1], tick_b[1])
+    tolerance = max((high - low) * 0.01, 1.0)
+    return low - tolerance <= pixel_y <= high + tolerance
+
+
+def digitize_vertical_bar_row(
+    bar: object,
+    chart: dict[str, object],
+    tick_a: tuple[float, float],
+    tick_b: tuple[float, float],
+    unit: str,
+) -> list[str] | None:
+    if not isinstance(bar, dict):
+        return None
+    pixel_top = parse_number(bar.get("pixel_top_y"))
+    if pixel_top is None:
+        return None
+    if not pixel_y_within_calibration(pixel_top, tick_a, tick_b):
+        return None
+    value = interpolate_value_from_pixel_y(pixel_top, tick_a, tick_b)
+    if value is None:
+        return None
+    confidence = safe_short_string(bar.get("confidence"), fallback="medium").lower()
+    if confidence not in {"high", "medium", "low"}:
+        confidence = "low"
+    return [
+        safe_csv_text(safe_short_string(chart.get("artifact"), fallback="unknown")),
+        "vertical_bar",
+        safe_csv_text(safe_short_string(bar.get("label"), fallback="unknown")),
+        format_digitized_number(value),
+        "digitized_estimate",
+        safe_csv_text(unit),
+        confidence,
+        safe_csv_text(safe_short_string(chart.get("source"), fallback="unknown")),
+        format_digitized_number(pixel_top),
+    ]
+
+
+def interpolate_value_from_pixel_y(pixel_y: float, tick_a: tuple[float, float], tick_b: tuple[float, float]) -> float | None:
+    value_a, pixel_a = tick_a
+    value_b, pixel_b = tick_b
+    if pixel_a == pixel_b:
+        return None
+    slope = (value_b - value_a) / (pixel_b - pixel_a)
+    return value_a + (pixel_y - pixel_a) * slope
+
+
+def parse_number(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    text = str(value).strip().replace("−", "-")
+    if not STRICT_NUMERIC_FIELD_PATTERN.fullmatch(text):
+        return None
+    token = text.replace(",", "").rstrip("%")
+    if token.startswith("(") and token.endswith(")"):
+        token = "-" + token[1:-1]
+    try:
+        return float(token)
+    except ValueError:
+        return None
+
+
+def format_digitized_number(value: float) -> str:
+    if abs(value - round(value)) < 1e-9:
+        return str(int(round(value)))
+    return f"{value:.6g}"
 
 
 def extract_vision_numeric_json_artifacts(markdown: str) -> list[str]:
@@ -420,6 +603,12 @@ def normalize_numeric_value_item(value: object) -> dict[str, str] | None:
         "unit": safe_short_string(value.get("unit"), fallback=""),
         "confidence": confidence,
     }
+
+
+def safe_csv_text(value: str) -> str:
+    if value.startswith(("=", "+", "-", "@")):
+        return "'" + value
+    return value
 
 
 def safe_short_string(value: object, fallback: str, max_len: int = 200) -> str:
