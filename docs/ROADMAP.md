@@ -12,12 +12,12 @@ Turn saved links, notes, documents, and web sources into a private Markdown sour
 
 Purpose: a technical/curious tester can clone MemoReef, run it, import their own small source set, and tell us where it breaks.
 
-Status: active.
+Status: tester-ready; awaiting 2–3 trusted tester signals.
 
 Acceptance criteria:
 
 - README has a clean clone/install/run path.
-- `docs/TESTER_GUIDE.md` walks through sample data, real imports, Review Mode, Import Dock, and feedback.
+- `docs/TESTER_GUIDE.md` walks through sample data, real imports, Review Mode, Import Dock, Pearl Dive, and feedback.
 - A smoke script verifies the tester path from a clean checkout.
 - A tester can import at least one browser bookmark export, URL list, and local document.
 - Review Mode can autosave Keep/Pearl/Sink decisions to Markdown frontmatter.
@@ -93,11 +93,11 @@ Current capabilities:
 - Local library page/search over generated app pages.
 - Brief generation from filtered Drops.
 - Pearl Dive CLI that retrieves cited local-source nuggets and writes Dive Reports.
+- Pearl Dive app surface in the generated local app.
 - Reports for duplicates, links, metadata, gardens/projects/shoals.
 
 Next acceptance criteria:
 
-- Pearl Dive app surface, not only CLI.
 - Agent-assisted answer synthesis from Dive Reports only, with source files/URLs cited.
 - No answer from unsourced memory unless explicitly labeled.
 - Clear distinction between quote, summary, estimate, and missing evidence.
@@ -128,16 +128,17 @@ Current capabilities:
 
 - Public GitHub repo.
 - MIT license.
-- README, grant brief, production sheet, tester guide.
+- README, grant brief, production sheet, tester guide, feedback guide, and trusted tester invite copy.
 - Demo page and screenshots.
-- Unit test suite.
+- GitHub issue templates for tester feedback, bugs, and feature requests.
+- Unit test suite and fresh-clone smoke path verified from GitHub `main`.
 
 Next acceptance criteria:
 
-- Fresh-clone tester smoke passes and is documented.
-- GitHub issues/templates invite exact tester feedback.
-- Public roadmap is current and honest.
-- Demo video matches actual shipped flow.
+- Keep fresh-clone tester smoke green as the install path changes.
+- Keep GitHub issue templates aligned with the tester flow.
+- Keep public roadmap current and honest.
+- Keep demo video aligned with actual shipped flow.
 - 2–3 trusted tester signals exist before broad launch.
 
 ## Operating rule
