@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>MemoReef Review Mode</title>
-  <meta name="description" content="Mobile-friendly MemoReef Review Mode with swipe triage, Pearl marking, agent finish, continue-later flows, and local vault autosave." />
+  <meta name="description" content="Mobile-friendly MemoReef Review Mode with swipe triage, Treasure marking, agent finish, continue-later flows, and local vault autosave." />
   <style>
     :root {
       color-scheme: dark;
@@ -960,9 +960,9 @@
     <section class="summary" aria-label="Review progress">
       <div class="stat"><strong id="reviewedCount">37</strong><span>reviewed</span></div>
       <div class="stat"><strong id="remainingCount">863</strong><span>remaining</span></div>
-      <div class="stat"><strong id="pearlCount">12</strong><span>pearls</span></div>
+      <div class="stat"><strong id="pearlCount">12</strong><span>treasures</span></div>
     </section>
-    <p class="agent-note" hidden>Session summary: 37 reviewed · 863 remaining · 12 pearls found.</p>
+    <p class="agent-note" hidden>Session summary: 37 reviewed · 863 remaining · 12 treasures found.</p>
 
     <section class="bridge-controls" aria-label="Review session file bridge">
       <label class="load-label">
@@ -990,15 +990,15 @@
       <button class="import-action local-only" id="importDocsButton" type="button" disabled>Import documents</button>
       <div class="import-status" id="importStatus">Static mode: imports use the CLI until the localhost server is running.</div>
     </section>
-    <p class="keyboard-hint"><kbd>←</kbd> Sink · <kbd>↑</kbd> Pearl · <kbd>→</kbd> Keep</p>
+    <p class="keyboard-hint"><kbd>←</kbd> Sink · <kbd>↑</kbd> Treasure · <kbd>→</kbd> Keep</p>
 
     <section class="stage" aria-live="polite">
       <div class="card-wrap" id="cardWrap">
         <div class="back-card" aria-hidden="true"></div>
-        <article class="drop-card" id="dropCard" tabindex="0" aria-label="Current Drop. Swipe left to sink, right to keep, up to pearl.">
+        <article class="drop-card" id="dropCard" tabindex="0" aria-label="Current Drop. Swipe left to sink, right to keep, up to treasure.">
           <div class="decision-badge sink">Sink</div>
           <div class="decision-badge keep">Keep</div>
-          <div class="decision-badge pearl">Pearl</div>
+          <div class="decision-badge pearl">Treasure</div>
           <div class="card-reef" aria-hidden="true"></div>
 
           <div class="card-top">
@@ -1035,15 +1035,15 @@
         <button class="action-btn sink-btn" id="sinkBtn" type="button" aria-label="Sink this drop">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg><span>Sink</span>
         </button>
-        <button class="action-btn pearl-btn" id="pearlBtn" type="button" aria-label="Mark this drop as pearl">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 15 9l6 .9-4.5 4.3 1.1 6.1L12 17.2 6.4 20.3l1.1-6.1L3 9.9 9 9l3-6Z"/></svg><span>Pearl</span>
+        <button class="action-btn pearl-btn" id="pearlBtn" type="button" aria-label="Mark this drop as treasure">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 15 9l6 .9-4.5 4.3 1.1 6.1L12 17.2 6.4 20.3l1.1-6.1L3 9.9 9 9l3-6Z"/></svg><span>Treasure</span>
         </button>
         <button class="action-btn keep-btn" id="keepBtn" type="button" aria-label="Keep this drop">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg><span>Keep</span>
         </button>
       </div>
       <div class="escape-actions">
-        <button class="escape-btn agent" id="agentFinishBtn" type="button">Tag kept/Pearls</button>
+        <button class="escape-btn agent" id="agentFinishBtn" type="button">Tag kept/Treasures</button>
         <button class="escape-btn" id="laterBtn" type="button">Continue later</button>
       </div>
       <div class="history" id="history" aria-label="Review history"></div>
@@ -1080,7 +1080,7 @@
         source: 'Reading list',
         confidence: '74% signal',
         tags: ['feeds', 'curation', 'reading'],
-        note: '<b>Agent guess:</b> possible Pearl. Strong fit for MemoReef positioning and Ask My Signals.'
+        note: '<b>Agent guess:</b> possible Treasure. Strong fit for MemoReef positioning and Ask My Signals.'
       },
       {
         title: 'Launch Checklist for SaaS Landing Pages',
@@ -1098,7 +1098,7 @@
         source: 'Bookmarks / Tools',
         confidence: '91% signal',
         tags: ['obsidian', 'markdown', 'schema'],
-        note: '<b>Agent guess:</b> Pearl candidate. Directly maps to MemoReef export quality.'
+        note: '<b>Agent guess:</b> Treasure candidate. Directly maps to MemoReef export quality.'
       },
       {
         title: 'Top 200 AI Tools You Need This Week',
@@ -1301,13 +1301,14 @@
 
     function decisionFor(action, drop) {
       const normalized = action.toLowerCase();
-      const decision = normalized === 'pearl' ? 'pearl' : normalized === 'keep' ? 'keep' : 'sink';
+      const decision = normalized === 'treasure' ? 'treasure' : normalized === 'keep' ? 'keep' : 'sink';
       return {
         id: drop.id || drop.path || drop.url || drop.title,
         path: drop.path || '',
         decision,
         status: decision === 'sink' ? 'discarded' : 'reef',
-        pearl: decision === 'pearl'
+        treasure: decision === 'treasure',
+        pearl: false
       };
     }
 
@@ -1363,7 +1364,7 @@
       state.isDeciding = true;
 
       const direction = action === 'Sink' ? -1 : action === 'Keep' ? 1 : 0;
-      const y = action === 'Pearl' ? -150 : 18;
+      const y = action === 'Treasure' ? -150 : 18;
       const rotation = action === 'Sink' ? -18 : action === 'Keep' ? 18 : 0;
       const className = action === 'Sink' ? 'show-sink' : action === 'Keep' ? 'show-keep' : 'show-pearl';
       decisions.push(decisionFor(action, drop));
@@ -1379,7 +1380,7 @@
         if (state.index >= drops.length) state.index = 0;
         state.reviewed += 1;
         state.remaining = drops.length;
-        if (action === 'Pearl') state.pearls += 1;
+        if (action === 'Treasure') state.pearls += 1;
         addHistory(action, drop);
         state.isDeciding = false;
         renderCard();
@@ -1391,15 +1392,15 @@
       els.sheetActions.innerHTML = '';
 
       if (kind === 'agents') {
-        els.sheetTitle.textContent = 'Tag kept and Pearl Drops?';
-        els.sheetCopy.textContent = `You reviewed ${state.reviewed} items. MemoReef will save pending decisions, then add local agent-suggested tags to kept and Pearl Drops in this vault.`;
-        addSheetButton('Tag kept/Pearls', 'primary', () => finishWithAgents());
+        els.sheetTitle.textContent = 'Tag kept and Treasured Drops?';
+        els.sheetCopy.textContent = `You reviewed ${state.reviewed} items. MemoReef will save pending decisions, then add local agent-suggested tags to kept and Treasured Drops in this vault.`;
+        addSheetButton('Tag kept/Treasures', 'primary', () => finishWithAgents());
         addSheetButton('Keep reviewing', 'neutral', closeSheet);
       } else {
         els.sheetTitle.textContent = 'Continue sorting later';
         els.sheetCopy.textContent = `Progress saved: ${state.reviewed} reviewed, ${state.remaining} still waiting in Review Mode. No forced decisions. Civilized.`;
         addSheetButton('Save and leave review', 'primary', () => continueLater());
-        addSheetButton('Tag kept/Pearls instead', 'neutral', () => openSheet('agents'));
+        addSheetButton('Tag kept/Treasures instead', 'neutral', () => openSheet('agents'));
         addSheetButton('Keep reviewing', 'neutral', closeSheet);
       }
 
@@ -1424,7 +1425,7 @@
       if (localApiMode) {
         await saveLocalDecisions({ quiet: true });
         try {
-          showToast('Tagging kept and Pearl Drops...');
+          showToast('Tagging kept and Treasured Drops...');
           const response = await fetch('/api/tag-reviewed', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1436,9 +1437,9 @@
           }
           els.cardWrap.style.display = 'none';
           els.done.classList.add('show');
-          els.doneTitle.textContent = 'Kept and Pearl Drops are tagged';
-          els.doneCopy.textContent = `Local agents scanned ${data.considered || 0} Drops, found ${data.eligible || 0} kept/Pearl items, updated ${data.updated || 0}, and added ${data.tags_added || 0} tags.`;
-          setLocalStatus(`${data.tags_added || 0} tags added · kept/Pearls updated`);
+          els.doneTitle.textContent = 'Kept and Treasured Drops are tagged';
+          els.doneCopy.textContent = `Local agents scanned ${data.considered || 0} Drops, found ${data.eligible || 0} kept or Treasured items, updated ${data.updated || 0}, and added ${data.tags_added || 0} tags.`;
+          setLocalStatus(`${data.tags_added || 0} tags added · kept/Treasures updated`);
           showToast(`Tagged ${data.updated || 0} reviewed Drops. Tiny librarians filed actual paperwork.`);
           return;
         } catch (error) {
@@ -1475,7 +1476,7 @@
         tags: Array.isArray(drop.tags) ? drop.tags : [],
         folders: Array.isArray(drop.folders) ? drop.folders : [],
         status: drop.status || 'drift',
-        pearl: Boolean(drop.pearl),
+        pearl: Boolean(drop.treasure ?? drop.pearl),
         note: `<b>Source context:</b> ${escapeHtml(formatDropContext(drop))}`
       };
     }
@@ -1493,7 +1494,7 @@
       state.index = 0;
       state.reviewed = decisions.length;
       state.remaining = drops.length;
-      state.pearls = decisions.filter(decision => decision.pearl).length;
+      state.pearls = decisions.filter(decision => decision.treasure || decision.pearl).length;
       state.isDeciding = false;
       state.history = [];
       els.history.innerHTML = '';
@@ -1776,13 +1777,13 @@
       }
       if (axis === 'x' && x < -110) return decide('Sink');
       if (axis === 'x' && x > 110) return decide('Keep');
-      if (axis === 'y' && y < -125 && Math.abs(x) < 140) return decide('Pearl');
+      if (axis === 'y' && y < -125 && Math.abs(x) < 140) return decide('Treasure');
       els.card.style.transform = '';
     }
 
     document.getElementById('sinkBtn').addEventListener('click', () => decide('Sink'));
     document.getElementById('keepBtn').addEventListener('click', () => decide('Keep'));
-    document.getElementById('pearlBtn').addEventListener('click', () => decide('Pearl'));
+    document.getElementById('pearlBtn').addEventListener('click', () => decide('Treasure'));
     document.getElementById('agentFinishBtn').addEventListener('click', () => openSheet('agents'));
     document.getElementById('laterBtn').addEventListener('click', () => openSheet('later'));
     document.getElementById('restartBtn').addEventListener('click', restart);
@@ -1812,7 +1813,7 @@
       }
       if (event.key === 'ArrowUp' || event.key.toLowerCase() === 'p') {
         event.preventDefault();
-        decide('Pearl');
+        decide('Treasure');
       }
     }
 

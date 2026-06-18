@@ -29,7 +29,7 @@ Good feedback is specific and grounded:
 
 - Install path: what worked, what failed, exact command if relevant.
 - Import: source type tried, approximate count, whether Drops appeared.
-- Review Mode: whether Keep / Pearl / Sink made sense.
+- Review Mode: whether Keep / Treasure / Sink made sense.
 - Import Dock: whether drag/drop or upload behaved as expected.
 - Bookmarklet: whether clipping created the right Drop.
 - Pearl Dive: question tried, whether retrieved Pearls were useful, what gaps were obvious.

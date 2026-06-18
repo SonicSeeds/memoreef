@@ -80,7 +80,7 @@ python3.11 -m memoreef.cli serve --vault /tmp/memoreef-pilot
 open http://127.0.0.1:8765/
 ```
 
-By default this binds only to `127.0.0.1`, loads up to 50 Drift Drops, and autosaves each Keep/Pearl/Sink decision directly to Markdown frontmatter in the vault. The Review Mode **Tag kept/Pearls** button then saves pending decisions and appends local agent-suggested tags to kept/Pearl Drops through the same filesystem bridge. No account, external network, hosted service, API key, database, or sync layer is required. Treat it as a local filesystem bridge: only run it for vaults you intend MemoReef to edit, and keep the default localhost bind unless you deliberately need otherwise.
+By default this binds only to `127.0.0.1`, loads up to 50 Drift Drops, and autosaves each Keep/Treasure/Sink decision directly to Markdown frontmatter in the vault. The Review Mode **Tag kept/Treasures** button then saves pending decisions and appends local agent-suggested tags to kept or Treasured Drops through the same filesystem bridge. No account, external network, hosted service, API key, database, or sync layer is required. Treat it as a local filesystem bridge: only run it for vaults you intend MemoReef to edit, and keep the default localhost bind unless you deliberately need otherwise.
 
 The local app also includes **Import Dock**: a drag-and-drop/upload area for PDFs, DOCX, TXT, Markdown, and image files. It writes uploaded files directly into the selected vault as Markdown Drops. Enable OCR in Import Dock for scanned PDFs or images when local OCR tools are installed.
 
@@ -170,7 +170,7 @@ Implemented:
 - Mark imported items as `status: drift`, `agent_ready: true`, and triage-ready Drop frontmatter.
 - Export and apply local Review Mode decisions.
 - Serve local Review Mode with direct vault autosave for decisions.
-- Generate agent finish plans, deterministic proposal drafts, and local agent tags for kept/Pearl Drops.
+- Generate agent finish plans, deterministic proposal drafts, and local agent tags for kept or Treasured Drops.
 - Generate Obsidian hub map notes and Drop-to-hub `[[links]]` so reviewed Drops form visible graph clusters.
 - Create duplicate, dead-link, metadata, garden suggestion, and library search reports.
 - Generate a refined static local app with dashboard, pilot, tour, library, Pearl Dive, review, reports, briefs, and Drop detail pages.
@@ -208,7 +208,7 @@ url: "https://example.com/local-agents"
 type: drop
 status: drift
 agent_ready: true
-pearl: false
+treasure: false
 folders:
   - "AI Agents"
 tags:
@@ -313,7 +313,7 @@ Phone/LAN/Tailscale mode uses the same real Review Mode and the same local Markd
 python3.11 -m memoreef.cli phone --vault /tmp/memoreef-pilot --limit 25
 ```
 
-The command prints the phone URLs, saves `MemoReef/phone-triage-url.txt`, optionally saves a QR PNG when the optional `qrcode` package is available, and keeps the local Review Mode server running. The phone talks to that user's computer; that computer writes Keep/Pearl/Sink decisions to that user's local vault.
+The command prints the phone URLs, saves `MemoReef/phone-triage-url.txt`, optionally saves a QR PNG when the optional `qrcode` package is available, and keeps the local Review Mode server running. The phone talks to that user's computer; that computer writes Keep/Treasure/Sink decisions to that user's local vault.
 
 The lower-level server command is also available:
 
@@ -380,7 +380,7 @@ Create filtered review sessions for focused queues:
 ```bash
 python3.11 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault --project "AI Agents"
 python3.11 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault --shoal "Automation"
-python3.11 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault --pearl-only
+python3.11 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault --treasure-only
 python3.11 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault --status drift --exclude-status discarded
 python3.11 -m memoreef.cli export-review-session --vault /tmp/memoreef-vault --status drift --limit 25
 ```
@@ -392,7 +392,7 @@ Search your local library:
 ```bash
 python3.11 -m memoreef.cli search-library --vault /tmp/memoreef-vault --query "agent workflow"
 python3.11 -m memoreef.cli search-library --vault /tmp/memoreef-vault --query "workflow" --project "AI Agents"
-python3.11 -m memoreef.cli search-library --vault /tmp/memoreef-vault --query "research" --pearl-only
+python3.11 -m memoreef.cli search-library --vault /tmp/memoreef-vault --query "research" --treasure-only
 python3.11 -m memoreef.cli search-library --vault /tmp/memoreef-vault --query "automation" --status drift --exclude-status discarded
 ```
 
@@ -402,7 +402,7 @@ Run a Pearl Dive to retrieve cited nuggets for a question:
 
 ```bash
 python3.11 -m memoreef.cli dive "agent workflow" --vault /tmp/memoreef-vault
-python3.11 -m memoreef.cli dive "research" --vault /tmp/memoreef-vault --pearl-only --limit 5
+python3.11 -m memoreef.cli dive "research" --vault /tmp/memoreef-vault --treasure-only --limit 5
 ```
 
 Pearl Dive is local-only and read-only against Drops. It writes a Markdown Dive Report under `MemoReef/answers/*-dive-report.md` unless `--output` is provided, includes Retrieved Pearls with source URLs and Drop paths, and names Uncharted Gaps when the local reef cannot support an answer.
@@ -411,7 +411,7 @@ Export selected Drops into a Markdown project brief:
 
 ```bash
 python3.11 -m memoreef.cli brief --vault /tmp/memoreef-vault --project "AI Agents"
-python3.11 -m memoreef.cli brief --vault /tmp/memoreef-vault --project "AI Agents" --pearl-only --limit 10
+python3.11 -m memoreef.cli brief --vault /tmp/memoreef-vault --project "AI Agents" --treasure-only --limit 10
 ```
 
 Project briefs are local-only and read-only against Drops. They write Markdown under `MemoReef/briefs/*-project-brief.md` unless `--output` is provided, include source URLs and Drop metadata, and add an Agent handoff section that tells an agent to use only listed sources, cite URLs, note gaps, and avoid invented claims.
@@ -436,16 +436,16 @@ python3.11 -m memoreef.cli apply-review-decisions --vault /tmp/memoreef-vault --
 python3.11 -m memoreef.cli apply-review-decisions --vault /tmp/memoreef-vault --decisions /tmp/memoreef-review-decisions.json
 ```
 
-This updates `status`, `pearl`, and `triaged_at` only. It does not move or delete files.
+This updates `status`, `treasure`, and `triaged_at` only. It does not move or delete files.
 
-Tag kept and Pearl Drops with local agent-suggested tags:
+Tag kept and Treasured Drops with local agent-suggested tags:
 
 ```bash
 python3.11 -m memoreef.cli tag-reviewed --vault /tmp/memoreef-vault --dry-run
 python3.11 -m memoreef.cli tag-reviewed --vault /tmp/memoreef-vault
 ```
 
-`tag-reviewed` scans Drops that are already kept (`status: reef` or `status: deep`) or marked `pearl: true`, then appends conservative lowercase/hyphen tags from the Drop title, URL, folder path, projects, shoals, page metadata, and note text. It preserves existing tags, skips Drift/Sink items, writes `agent_tagged_at` and `agent_tag_count`, and does not call an external API. In local server Review Mode, the **Tag kept/Pearls** button first saves pending decisions and then calls this same local tagger through `/api/tag-reviewed`.
+`tag-reviewed` scans Drops that are already kept (`status: reef` or `status: deep`) or marked `treasure: true`, then appends conservative lowercase/hyphen tags from the Drop title, URL, folder path, projects, shoals, page metadata, and note text. It preserves existing tags, skips Drift/Sink items, writes `agent_tagged_at` and `agent_tag_count`, and does not call an external API. In local server Review Mode, the **Tag kept/Treasures** button first saves pending decisions and then calls this same local tagger.
 
 Create an agent finish plan for the remaining unreviewed Drops:
 
@@ -453,7 +453,7 @@ Create an agent finish plan for the remaining unreviewed Drops:
 python3.11 -m memoreef.cli plan-agent-finish --vault /tmp/memoreef-vault --decisions /tmp/memoreef-review-decisions.json
 ```
 
-The agent finish plan JSON groups reviewed taste examples into Pearl, Keep, and Sink, then lists the remaining Drops for a later agent task. It does not modify Markdown, and it does not classify the remaining Drops yet.
+The agent finish plan JSON groups reviewed taste examples into Treasure, Keep, and Sink, then lists the remaining Drops for a later agent task. It does not modify Markdown, and it does not classify the remaining Drops yet.
 
 Draft agent proposals from an agent finish plan:
 
@@ -461,7 +461,7 @@ Draft agent proposals from an agent finish plan:
 python3.11 -m memoreef.cli draft-agent-proposals --plan /tmp/agent-finish-plan.json
 ```
 
-The agent proposals JSON suggests status, Pearl state, confidence, priority, note location, and rationale for each remaining Drop using deterministic local heuristics.
+The agent proposals JSON suggests status, Treasure state, confidence, priority, note location, and rationale for each remaining Drop using deterministic local heuristics.
 
 Apply accepted agent proposals back to Markdown Drop frontmatter:
 

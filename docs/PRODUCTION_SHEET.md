@@ -29,10 +29,10 @@ Implemented:
 
 - Python package `memoreef` with CLI import, pilot, app, review, report, search, brief, and tagging workflows.
 - Netscape bookmark HTML parser plus plain URL-list and CSV importers.
-- Markdown writer for Obsidian-style Drops with Drift/Reef/Deep/Discarded/Pearl frontmatter.
+- Markdown writer for Obsidian-style Drops with Drift/Reef/Deep/Discarded/Treasure frontmatter.
 - Import inspection, URL canonicalization, dedupe behavior, and import logs.
 - Guided local pilot flow with generated `PILOT_README.md` and `app/pilot.html`.
-- Filesystem-backed Review Mode server with direct Keep/Pearl/Sink autosave to the vault.
+- Filesystem-backed Review Mode server with direct Keep/Treasure/Sink autosave to the vault.
 - Self-serve phone triage via trusted LAN/Tailscale URL/QR from `phone`.
 - Local reviewed-Drop tagger via `tag-reviewed` and `POST /api/tag-reviewed`.
 - Duplicate, link-check, metadata, garden-suggestion, library-search, and project-brief commands.
@@ -68,7 +68,7 @@ Given a browser bookmark HTML export, MemoReef should:
   - type: drop
   - status: drift
   - agent_ready: true
-  - pearl: false
+  - treasure: false
   - folders
   - tags derived from folders, where safe.
 
@@ -92,7 +92,7 @@ Useful follow-on commands:
 python3.11 -m memoreef.cli refresh-metadata --vault ~/Obsidian/Main --limit 50
 python3.11 -m memoreef.cli extract-articles --vault ~/Obsidian/Main --limit 50
 python3.11 -m memoreef.cli search-library --vault ~/Obsidian/Main --query "agent workflow"
-python3.11 -m memoreef.cli brief --vault ~/Obsidian/Main --pearl-only
+python3.11 -m memoreef.cli brief --vault ~/Obsidian/Main --treasure-only
 python3.11 -m memoreef.cli suggest-gardens --vault ~/Obsidian/Main
 ```
 
@@ -124,7 +124,7 @@ memoreef/
   bookmarks.py
   vault.py          # split from bookmarks.py later
   enrich.py         # metadata/fetch/dead-link checks later
-  triage.py         # Drift/Pearls/Deep/Projects state later
+  triage.py         # Drift/Treasures/Deep/Projects state later
   agents.py         # agent briefing/export format later
 examples/
 docs/
@@ -244,7 +244,7 @@ Use sparingly:
 - Drift: unsorted inbox.
 - Reef: local source library.
 - Deep: archive.
-- Pearl: high-value source.
+- Treasure: high-value source.
 - Dive: search/agent retrieval.
 
 Prefer human-readable labels in navigation:

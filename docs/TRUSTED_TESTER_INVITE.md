@@ -6,7 +6,7 @@ Use this when asking 2–3 technical or curious people to try MemoReef.
 
 Hey — I’m testing MemoReef, an early local-first research memory tool.
 
-It turns bookmarks, links, and local documents into a private Markdown source library, then lets you review sources as Keep / Pearl / Sink and run local Pearl Dive retrieval against your own saved material.
+It turns bookmarks, links, and local documents into a private Markdown source library, then lets you review sources as Keep / Treasure / Sink and run local Pearl Dive retrieval against your own saved material.
 
 It is early open source, not polished SaaS. I’m looking for honest first-run feedback: where install breaks, where the terms are confusing, whether Review Mode is useful, and whether the Markdown output feels usable.
 

@@ -150,7 +150,7 @@ def demo_bookmarks() -> list[Bookmark]:
             "https://example.com/ai-agents/local-agent-playbook",
             source="memo-demo",
             status="reef",
-            pearl=True,
+            treasure=True,
             folders=["Research", "AI Agents"],
             tags=["ai-agents", "local-first", "workflow"],
             projects=["AI Agents"],
@@ -181,7 +181,7 @@ def demo_bookmarks() -> list[Bookmark]:
             "https://example.com/knowledge/markdown-archive-patterns",
             source="memo-demo",
             status="deep",
-            pearl=True,
+            treasure=True,
             folders=["Knowledge Management"],
             tags=["markdown", "durability", "notes"],
             projects=["Local Knowledge Base"],
@@ -365,7 +365,7 @@ def enrich_demo_drop(path: Path, vault: Path) -> None:
         "\n".join(
             [
                 f"- Status: {frontmatter.get('status', 'drift')}",
-                f"- Pearl: {'yes' if frontmatter.get('pearl') is True else 'no'}",
+                f"- Treasure: {'yes' if frontmatter.get('treasure', frontmatter.get('pearl')) is True else 'no'}",
                 "- Use the frontmatter, summary, tags, projects, and shoals as local context.",
                 f"- Relative path: {path.resolve().relative_to(vault.resolve()).as_posix()}",
             ]
@@ -378,7 +378,7 @@ def write_demo_decisions(vault: Path, root: str, review_session: Path) -> Path:
     drops = load_drop_items(vault, root)
     decisions: list[dict[str, str]] = []
     wanted = {
-        "Local AI agent playbook for research teams": "pearl",
+        "Local AI agent playbook for research teams": "treasure",
         "How small teams build local knowledge bases": "keep",
         "Noise article with vague productivity tricks": "sink",
     }
@@ -635,6 +635,7 @@ def default_review_filters(
     folder: list[str] | None = None,
     hostname: list[str] | None = None,
     pearl_only: bool = False,
+    treasure_only: bool = False,
     exclude_status: list[str] | None = None,
     limit: int | None = None,
 ) -> dict[str, object]:
@@ -646,6 +647,7 @@ def default_review_filters(
         "folder": folder or [],
         "hostname": hostname or [],
         "pearl_only": pearl_only,
+        "treasure_only": treasure_only,
         "exclude_status": exclude_status or [],
         "limit": limit,
     }
@@ -676,7 +678,7 @@ def review_hostname(drop: dict[str, object]) -> str:
 def review_filter_active(filters: dict[str, object]) -> bool:
     return any(
         bool(filters.get(key))
-        for key in ("project", "shoal", "status", "tag", "folder", "hostname", "pearl_only", "exclude_status", "limit")
+        for key in ("project", "shoal", "status", "tag", "folder", "hostname", "pearl_only", "treasure_only", "exclude_status", "limit")
     )
 
 
@@ -695,8 +697,8 @@ def review_filter_summary(filters: dict[str, object]) -> str:
         values = filters.get(key)
         if isinstance(values, list) and values:
             parts.append(f"{label}={', '.join(str(value) for value in values)}")
-    if filters.get("pearl_only"):
-        parts.append("pearl-only=true")
+    if filters_treasure_only(filters):
+        parts.append("treasure-only=true")
     if filters.get("limit") is not None:
         parts.append(f"limit={filters['limit']}")
     return ", ".join(parts) if parts else "none"
@@ -706,6 +708,15 @@ def review_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if str(item).strip() and str(item).strip() != "[]"]
+
+
+def drop_is_treasured(drop: dict[str, object]) -> bool:
+    """Return the triage high-value-source flag, with legacy pearl fallback."""
+    return bool(drop.get("treasure", drop.get("pearl", False)))
+
+
+def filters_treasure_only(filters: dict[str, object]) -> bool:
+    return bool(filters.get("treasure_only", filters.get("pearl_only", False)))
 
 
 def search_filter_summary(filters: dict[str, object]) -> str:
@@ -753,7 +764,7 @@ def review_item_matches_filters(drop: dict[str, object], filters: dict[str, obje
         return False
     if not normalized_match(review_hostname(drop), filter_values(filters, "hostname")):
         return False
-    if filters.get("pearl_only") and not bool(drop.get("pearl", False)):
+    if filters_treasure_only(filters) and not drop_is_treasured(drop):
         return False
     exclude_statuses = filter_values(filters, "exclude_status")
     if exclude_statuses and normalized_match(drop.get("status", ""), exclude_statuses):
@@ -854,7 +865,7 @@ def score_search_item(drop: dict[str, object], query_terms: list[str]) -> dict[s
         "url": drop.get("url", ""),
         "hostname": drop.get("hostname", ""),
         "status": drop.get("status", "drift"),
-        "pearl": bool(drop.get("pearl", False)),
+        "treasure": drop_is_treasured(drop),
         "projects": drop.get("projects", []),
         "shoals": drop.get("shoals", []),
         "folders": drop.get("folders", []),
@@ -902,7 +913,7 @@ def search_library(
     results.sort(
         key=lambda item: (
             -int(item.get("score", 0)),
-            not bool(item.get("pearl", False)),
+            not drop_is_treasured(item),
             str(item.get("status") or "") != "drift",
             str(item.get("path") or ""),
         )
@@ -955,7 +966,7 @@ def render_dive_report(vault: Path, root: str, question: str, filters: dict[str,
     if not items:
         lines.append("No matching Drops found. Import more sources, broaden filters, or try a different question.")
     for index, item in enumerate(items, start=1):
-        pearl = "yes" if bool(item.get("pearl", False)) else "no"
+        treasured = "yes" if drop_is_treasured(item) else "no"
         snippet = str(item.get("snippet") or "").strip() or "No matching snippet available."
         lines.extend(
             [
@@ -964,7 +975,7 @@ def render_dive_report(vault: Path, root: str, question: str, filters: dict[str,
                 f"- URL: {item.get('url') or 'none'}",
                 f"- Drop path: `{item.get('path') or ''}`",
                 f"- Status: {item.get('status') or 'drift'}",
-                f"- Pearl: {pearl}",
+                f"- Treasured source: {treasured}",
                 f"- Matched fields: {brief_list(item.get('matched_fields'))}",
                 "",
                 "Nugget:",
@@ -1075,7 +1086,7 @@ def render_project_brief(vault: Path, root: str, filters: dict[str, object], dro
         "## Summary counts",
         "",
         f"- Selected sources: {len(drops)}",
-        f"- Pearls: {sum(1 for drop in drops if bool(drop.get('pearl', False)))}",
+        f"- Treasured sources: {sum(1 for drop in drops if drop_is_treasured(drop))}",
         f"- Missing summaries: {len(missing_summaries)}",
     ]
     for status, count in sorted(status_counts.items()):
@@ -1085,14 +1096,14 @@ def render_project_brief(vault: Path, root: str, filters: dict[str, object], dro
     if not drops:
         lines.append("No Drops matched the applied filters.")
     for index, drop in enumerate(drops, start=1):
-        pearl = "yes" if bool(drop.get("pearl", False)) else "no"
+        treasured = "yes" if drop_is_treasured(drop) else "no"
         lines.extend(
             [
                 f"### {index}. {drop.get('title') or 'Untitled'}",
                 "",
                 f"- URL: {drop.get('url') or 'none'}",
                 f"- Status: {drop.get('status') or 'drift'}",
-                f"- Pearl: {pearl}",
+                f"- Treasured source: {treasured}",
                 f"- Tags: {brief_list(drop.get('tags'))}",
                 f"- Projects: {brief_list(drop.get('projects'))}",
                 f"- Shoals: {brief_list(drop.get('shoals'))}",
@@ -1177,7 +1188,7 @@ def create_project_brief(
         "filters": filters,
         "summary": {
             "sources": len(drops),
-            "pearls": sum(1 for drop in drops if bool(drop.get("pearl", False))),
+            "treasures": sum(1 for drop in drops if drop_is_treasured(drop)),
             "missing_summaries": sum(1 for drop in drops if not str(drop.get("summary") or "").strip()),
         },
         "items": drops,
@@ -1251,11 +1262,11 @@ def load_drop_items(vault: Path, root: str = "MemoReef") -> list[dict[str, objec
 
 def review_decision_fields(decision: str) -> dict[str, object] | None:
     if decision == "sink":
-        return {"status": "discarded", "pearl": False}
+        return {"status": "discarded", "treasure": False, "pearl": False}
     if decision == "keep":
-        return {"status": "reef", "pearl": False}
-    if decision == "pearl":
-        return {"status": "reef", "pearl": True}
+        return {"status": "reef", "treasure": False, "pearl": False}
+    if decision in {"treasure", "pearl"}:
+        return {"status": "reef", "treasure": True, "pearl": False}
     return None
 
 
@@ -1383,10 +1394,10 @@ def apply_review_decision_payload(
 
 
 AGENT_FINISH_INSTRUCTIONS = [
-    "Use pearl decisions as strongest positive taste examples.",
+    "Use treasure decisions as strongest positive taste examples.",
     "Use keep decisions as acceptable but ordinary examples.",
     "Use sink decisions as negative examples.",
-    "For remaining Drops, propose status, pearl, tags, priority, and note location in a later task.",
+    "For remaining Drops, propose status, treasure, tags, priority, and note location in a later task.",
     "Do not delete or move files without explicit user approval.",
 ]
 
@@ -1416,7 +1427,7 @@ def build_agent_finish_plan(
     payload = json.loads(decisions_path.read_text(encoding="utf-8"))
     decision_items = payload.get("decisions")
 
-    taste_examples: dict[str, list[dict[str, object]]] = {"pearl": [], "keep": [], "sink": []}
+    taste_examples: dict[str, list[dict[str, object]]] = {"treasure": [], "keep": [], "sink": []}
     reviewed_paths: set[str] = set()
     warnings: list[str] = []
 
@@ -1434,6 +1445,8 @@ def build_agent_finish_plan(
         if not isinstance(raw_path, str) or not raw_path.strip():
             warnings.append(f"decision {index}: missing path")
             continue
+        if raw_decision == "pearl":
+            raw_decision = "treasure"
         if not isinstance(raw_decision, str) or raw_decision not in taste_examples:
             warnings.append(f"{raw_path}: unsupported decision")
             continue
@@ -1462,7 +1475,7 @@ def build_agent_finish_plan(
         "summary": {
             "reviewed": reviewed_count,
             "remaining": len(remaining_drops),
-            "pearls": len(taste_examples["pearl"]),
+            "treasures": len(taste_examples["treasure"]),
             "kept": len(taste_examples["keep"]),
             "sunk": len(taste_examples["sink"]),
         },
@@ -1502,29 +1515,29 @@ def taste_tokens(examples: object) -> set[str]:
     return tokens
 
 
-def build_proposal_rationale(scores: dict[str, int], proposed_status: str, proposed_pearl: bool) -> list[str]:
+def build_proposal_rationale(scores: dict[str, int], proposed_status: str, proposed_treasure: bool) -> list[str]:
     rationale: list[str] = []
-    if proposed_pearl:
-        rationale.append("Strongest overlap is with Pearl examples.")
+    if proposed_treasure:
+        rationale.append("Strongest overlap is with Treasure examples.")
     elif proposed_status == "discarded":
         rationale.append("Strongest overlap is with Sink examples.")
     elif proposed_status == "reef":
-        rationale.append("Shares tags, folders, title, summary, or URL terms with kept or Pearl examples.")
+        rationale.append("Shares tags, folders, title, summary, or URL terms with kept or Treasure examples.")
         rationale.append("No strong sink signal found.")
     else:
         rationale.append("No clear taste signal was found.")
-    rationale.append(f"Local overlap scores: pearl={scores['pearl']}, keep={scores['keep']}, sink={scores['sink']}.")
+    rationale.append(f"Local overlap scores: treasure={scores['treasure']}, keep={scores['keep']}, sink={scores['sink']}.")
     return rationale
 
 
 def classify_proposal(drop: dict[str, object], taste_examples: dict[str, object]) -> dict[str, object]:
     drop_tokens = tokens_for_drop(drop)
     scores = {
-        "pearl": len(drop_tokens & taste_tokens(taste_examples.get("pearl"))),
+        "treasure": len(drop_tokens & taste_tokens(taste_examples.get("treasure", taste_examples.get("pearl")))),
         "keep": len(drop_tokens & taste_tokens(taste_examples.get("keep"))),
         "sink": len(drop_tokens & taste_tokens(taste_examples.get("sink"))),
     }
-    positive_score = max(scores["pearl"], scores["keep"])
+    positive_score = max(scores["treasure"], scores["keep"])
     ordered_scores = sorted(scores.values(), reverse=True)
     top_score = ordered_scores[0] if ordered_scores else 0
     second_score = ordered_scores[1] if len(ordered_scores) > 1 else 0
@@ -1536,8 +1549,8 @@ def classify_proposal(drop: dict[str, object], taste_examples: dict[str, object]
     elif positive_score >= 2 and positive_score >= scores["sink"] + 2:
         proposed_status = "reef"
 
-    proposed_pearl = scores["pearl"] >= 2 and scores["pearl"] >= max(scores["keep"], scores["sink"]) + 2
-    if proposed_pearl:
+    proposed_treasure = scores["treasure"] >= 2 and scores["treasure"] >= max(scores["keep"], scores["sink"]) + 2
+    if proposed_treasure:
         proposed_status = "reef"
 
     if clearly_dominant:
@@ -1547,9 +1560,9 @@ def classify_proposal(drop: dict[str, object], taste_examples: dict[str, object]
     else:
         confidence = "low"
 
-    if proposed_pearl:
+    if proposed_treasure:
         priority = "high"
-        note_location = "MemoReef/Pearls"
+        note_location = "MemoReef/Treasures"
     elif proposed_status == "reef":
         priority = "normal"
         note_location = "MemoReef/Reef"
@@ -1571,12 +1584,13 @@ def classify_proposal(drop: dict[str, object], taste_examples: dict[str, object]
         "url": drop.get("url", ""),
         "current_status": drop.get("status", "drift"),
         "proposed_status": proposed_status,
-        "proposed_pearl": proposed_pearl,
+        "proposed_treasure": proposed_treasure,
+        "proposed_pearl": proposed_treasure,
         "confidence": confidence,
         "priority": priority,
         "suggested_tags": [str(tag) for tag in tags],
         "suggested_note_location": note_location,
-        "rationale": build_proposal_rationale(scores, proposed_status, proposed_pearl),
+        "rationale": build_proposal_rationale(scores, proposed_status, proposed_treasure),
         "requires_user_review": confidence != "high",
     }
 
@@ -1608,7 +1622,7 @@ def draft_agent_proposals(plan: Path, output: Path | None = None) -> tuple[Path,
 
     summary = {
         "proposed": len(proposals),
-        "pearl": sum(1 for proposal in proposals if proposal["proposed_pearl"]),
+        "treasure": sum(1 for proposal in proposals if proposal["proposed_treasure"]),
         "reef": sum(1 for proposal in proposals if proposal["proposed_status"] == "reef"),
         "discarded": sum(1 for proposal in proposals if proposal["proposed_status"] == "discarded"),
         "needs_review": sum(1 for proposal in proposals if proposal["requires_user_review"]),
@@ -1666,10 +1680,10 @@ def apply_agent_proposals(
             warnings.append(f"{raw_path}: unsupported proposed_status")
             continue
 
-        proposed_pearl = item.get("proposed_pearl")
-        if not isinstance(proposed_pearl, bool):
-            warnings.append(f"{raw_path}: proposed_pearl must be boolean; using false")
-            proposed_pearl = False
+        proposed_treasure = item.get("proposed_treasure", item.get("proposed_pearl"))
+        if not isinstance(proposed_treasure, bool):
+            warnings.append(f"{raw_path}: proposed_treasure must be boolean; using false")
+            proposed_treasure = False
 
         relative_path = Path(raw_path)
         if relative_path.is_absolute():
@@ -1698,15 +1712,18 @@ def apply_agent_proposals(
         if not isinstance(priority, str) or not priority.strip():
             priority = "normal" if proposed_status == "reef" else "low"
         note_location = item.get("suggested_note_location")
+        if isinstance(note_location, str):
+            note_location = note_location.replace("MemoReef/Pearls", "MemoReef/Treasures")
         if not isinstance(note_location, str) or not note_location.strip():
-            note_location = "MemoReef/Pearls" if proposed_pearl else "MemoReef/Reef" if proposed_status == "reef" else "MemoReef/Discarded" if proposed_status == "discarded" else "MemoReef/Drops"
+            note_location = "MemoReef/Treasures" if proposed_treasure else "MemoReef/Reef" if proposed_status == "reef" else "MemoReef/Discarded" if proposed_status == "discarded" else "MemoReef/Drops"
         confidence = item.get("confidence")
         if not isinstance(confidence, str) or not confidence.strip():
             confidence = "unknown"
 
         updates = {
             "status": proposed_status,
-            "pearl": proposed_pearl,
+            "treasure": proposed_treasure,
+            "pearl": False,
             "priority": priority,
             "note_location": note_location,
             "agent_proposed_at": utc_now_iso(),
@@ -1727,7 +1744,7 @@ def duplicate_drop_item(drop: dict[str, object]) -> dict[str, object]:
         "title": drop.get("title", ""),
         "url": drop.get("url", ""),
         "status": drop.get("status", "drift"),
-        "pearl": bool(drop.get("pearl", False)),
+        "treasure": drop_is_treasured(drop),
     }
 
 
@@ -2656,7 +2673,7 @@ def tag_tokens_from_text(value: str) -> list[str]:
 
 def reviewed_drop_for_tagging(frontmatter: dict[str, object]) -> bool:
     status = str(frontmatter.get("status") or "").strip().lower()
-    return bool(frontmatter.get("pearl", False)) or status in {"reef", "deep"}
+    return bool(frontmatter.get("treasure", frontmatter.get("pearl", False))) or status in {"reef", "deep"}
 
 
 def tag_candidate_scores(frontmatter: dict[str, object], body: str) -> dict[str, int]:
@@ -2883,7 +2900,7 @@ def hub_drop_item(path: Path, vault: Path) -> dict[str, object]:
         "title": str(frontmatter.get("title") or path.stem),
         "url": url,
         "status": str(frontmatter.get("status") or "drift"),
-        "pearl": bool(frontmatter.get("pearl", False)),
+        "treasure": bool(frontmatter.get("treasure", frontmatter.get("pearl", False))),
         "tags": garden_list(frontmatter.get("tags")),
         "projects": garden_list(frontmatter.get("projects")),
         "shoals": garden_list(frontmatter.get("shoals")),
@@ -3145,7 +3162,7 @@ def garden_drop_item(path: Path, vault: Path) -> dict[str, object]:
         "projects": garden_list(frontmatter.get("projects")),
         "shoals": garden_list(frontmatter.get("shoals")),
         "status": str(frontmatter.get("status") or "drift"),
-        "pearl": bool(frontmatter.get("pearl", False)),
+        "treasure": bool(frontmatter.get("treasure", frontmatter.get("pearl", False))),
         "page_title": str(frontmatter.get("page_title") or ""),
         "page_description": str(frontmatter.get("page_description") or ""),
         "hostname": hostname.lower(),
@@ -3506,7 +3523,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
     drift = sum(1 for drop in drops if drop.get("status") == "drift")
     reef = sum(1 for drop in drops if drop.get("status") == "reef")
     discarded = sum(1 for drop in drops if drop.get("status") == "discarded")
-    pearls = sum(1 for drop in drops if bool(drop.get("pearl", False)))
+    treasures = sum(1 for drop in drops if drop_is_treasured(drop))
 
     latest_review_session = latest_matching_file(root_path / "review-sessions", ["*-review-session.json"])
     latest_review_decisions = latest_matching_file(vault_path, ["*review-decisions*.json"])
@@ -3529,7 +3546,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
             "total": total,
             "drift": drift,
             "reef": reef,
-            "pearls": pearls,
+            "treasures": treasures,
             "discarded": discarded,
         },
         "latest_review_session": latest_review_session,
@@ -3658,7 +3675,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
       <div class=\"stat\"><strong>{count('total')}</strong><span>Total Drops</span></div>
       <div class=\"stat\"><strong>{count('drift')}</strong><span>Drift</span></div>
       <div class=\"stat\"><strong>{count('reef')}</strong><span>Reef</span></div>
-      <div class=\"stat\"><strong>{count('pearls')}</strong><span>Pearls</span></div>
+      <div class=\"stat\"><strong>{count('treasures')}</strong><span>Treasures</span></div>
       <div class=\"stat\"><strong>{count('discarded')}</strong><span>Discarded</span></div>
     </section>
 
@@ -3704,7 +3721,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <li>Run <code>brief --project "AI Agents"</code> to export selected Drops into an agent-ready Markdown project brief.</li>
           <li>Run <code>hub-map</code> to create Obsidian map notes and Drop-to-hub graph links.</li>
           <li>Open <code>briefs.html</code> and <code>reports.html</code> to inspect generated handoff Markdown and local report JSON.</li>
-          <li>Run <code>export-review-session</code> with optional filtered review queues like <code>--project</code>, <code>--shoal</code>, or <code>--pearl-only</code>, then open <code>site/swipe.html</code> for Review Mode.</li>
+          <li>Run <code>export-review-session</code> with optional filtered review queues like <code>--project</code>, <code>--shoal</code>, or <code>--treasure-only</code>, then open <code>site/swipe.html</code> for Review Mode.</li>
           <li>Export decisions from Review Mode, then run <code>apply-review-decisions</code>.</li>
           <li>Create an agent finish plan with <code>plan-agent-finish</code>.</li>
           <li>Draft Agent proposals with <code>draft-agent-proposals</code>.</li>
@@ -3888,7 +3905,7 @@ def render_dive_page(vault: Path, root: str = "MemoReef") -> str:
     <section class="panel">
       <p>Send your agents into the reef to retrieve cited Pearls and nuggets of wisdom from saved Drops.</p>
       <p><code>python3 -m memoreef.cli dive "agent workflow" --vault {html_escape(str(vault_path))}</code></p>
-      <p>Useful filters: <code>--project</code>, <code>--shoal</code>, <code>--tag</code>, <code>--hostname</code>, <code>--pearl-only</code>, <code>--exclude-status</code>, and <code>--limit</code>.</p>
+      <p>Useful filters: <code>--project</code>, <code>--shoal</code>, <code>--tag</code>, <code>--hostname</code>, <code>--treasure-only</code>, <code>--exclude-status</code>, and <code>--limit</code>.</p>
       <p>Pearl Dive is local-only. It retrieves cited leads and names gaps; it does not pretend to synthesize truth from nowhere. Refresh this page after running a new dive.</p>
     </section>
     <section class="panel">
@@ -3954,7 +3971,7 @@ def render_library_page(vault: Path, root: str = "MemoReef") -> str:
     <section class=\"panel\">
       <p>Search your local Markdown Drops without a backend:</p>
       <p><code>python3 -m memoreef.cli search-library --vault {html_escape(str(vault))} --query "agent workflow"</code></p>
-      <p>Use filters such as <code>--project</code>, <code>--shoal</code>, <code>--tag</code>, <code>--hostname</code>, <code>--pearl-only</code>, and <code>--exclude-status</code> to focus the Library.</p>
+      <p>Use filters such as <code>--project</code>, <code>--shoal</code>, <code>--tag</code>, <code>--hostname</code>, <code>--treasure-only</code>, and <code>--exclude-status</code> to focus the Library.</p>
     </section>
     <section class=\"panel\">
       <h2>Latest search</h2>
@@ -4382,7 +4399,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
         counts = {}
     drops = load_garden_drop_items(vault_path, root)
     title_examples = drop_titles(drops, 5)
-    pearl_titles = drop_titles([drop for drop in drops if bool(drop.get("pearl"))], 4)
+    treasure_titles = drop_titles([drop for drop in drops if drop_is_treasured(drop)], 4)
     reef_titles = drop_titles([drop for drop in drops if str(drop.get("status") or "") in {"reef", "deep"}], 4)
     projects = top_values(drops, "projects")
     shoals = top_values(drops, "shoals")
@@ -4428,7 +4445,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
 
     value_signals = [
         f"{counts.get('reef', 0)} Drops are already in the Reef.",
-        f"{counts.get('pearls', 0)} are marked as Pearls.",
+        f"{counts.get('treasures', 0)} are marked as Treasures.",
     ]
     if projects:
         value_signals.append(f"Projects detected: {', '.join(projects)}.")
@@ -4531,14 +4548,14 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
   <main>
     {app_nav("tour")}
     <h1>Messy saves become source memory.</h1>
-    <p class="lede">This static tour was generated from the current vault. It shows why MemoReef exists: scattered saves become reviewed local Markdown, useful Pearls, clutter reports, agent handoff plans, and searchable source memory.</p>
+    <p class="lede">This static tour was generated from the current vault. It shows why MemoReef exists: scattered saves become reviewed local Markdown, useful Treasures, clutter reports, agent handoff plans, and searchable source memory.</p>
     <p>Vault: <code>{html_escape(str(vault_path))}</code> · Root: <code>{html_escape(root)}</code></p>
 
     <div class="stats">
       <div class="stat"><strong>{html_escape(str(counts.get('total', 0)))}</strong><span>Total Drops</span></div>
       <div class="stat"><strong>{html_escape(str(counts.get('drift', 0)))}</strong><span>Drift</span></div>
       <div class="stat"><strong>{html_escape(str(counts.get('reef', 0)))}</strong><span>Reef</span></div>
-      <div class="stat"><strong>{html_escape(str(counts.get('pearls', 0)))}</strong><span>Pearls</span></div>
+      <div class="stat"><strong>{html_escape(str(counts.get('treasures', 0)))}</strong><span>Treasures</span></div>
       <div class="stat"><strong>{html_escape(str(counts.get('discarded', 0)))}</strong><span>Discarded</span></div>
     </div>
 
@@ -4550,11 +4567,11 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
       </section>
       <section>
         <h2>The value</h2>
-        <p>Useful saves become a Reef with Pearls, projects, and shoals.</p>
+        <p>Useful saves become a Reef with Treasures, projects, and shoals.</p>
         {html_list(value_signals)}
         <p>Real Drops in this vault include: {html_escape(', '.join(title_examples) if title_examples else 'none yet')}.</p>
         <p>Detail pages: {', '.join(detail_examples) if detail_examples else 'none yet'}.</p>
-        <p>Pearl or curated examples include: {html_escape(', '.join(pearl_titles or reef_titles) if (pearl_titles or reef_titles) else 'none yet')}.</p>
+        <p>Treasured or curated examples include: {html_escape(', '.join(treasure_titles or reef_titles) if (treasure_titles or reef_titles) else 'none yet')}.</p>
       </section>
       <section>
         <h2>The handoff</h2>
@@ -4651,7 +4668,8 @@ def build_parser() -> argparse.ArgumentParser:
     review_cmd.add_argument("--tag", action="append", default=[], help="Include Drops with a matching tag. Repeatable.")
     review_cmd.add_argument("--folder", action="append", default=[], help="Include Drops with a matching folder. Repeatable.")
     review_cmd.add_argument("--hostname", action="append", default=[], help="Include Drops with a matching hostname. Repeatable.")
-    review_cmd.add_argument("--pearl-only", action="store_true", help="Include only Pearl Drops.")
+    review_cmd.add_argument("--treasure-only", action="store_true", help="Include only Treasured Drops.")
+    review_cmd.add_argument("--pearl-only", action="store_true", help=argparse.SUPPRESS)
     review_cmd.add_argument("--exclude-status", action="append", default=[], help="Exclude Drops with a matching status. Repeatable.")
 
     review_cmd.add_argument("--limit", type=int, default=None, help="Cap exported Drops after sorting and filtering.")
@@ -4668,7 +4686,8 @@ def build_parser() -> argparse.ArgumentParser:
     search_cmd.add_argument("--tag", action="append", default=[], help="Search Drops with a matching tag. Repeatable.")
     search_cmd.add_argument("--folder", action="append", default=[], help="Search Drops with a matching folder. Repeatable.")
     search_cmd.add_argument("--hostname", action="append", default=[], help="Search Drops with a matching hostname. Repeatable.")
-    search_cmd.add_argument("--pearl-only", action="store_true", help="Search only Pearl Drops.")
+    search_cmd.add_argument("--treasure-only", action="store_true", help="Search only Treasured Drops.")
+    search_cmd.add_argument("--pearl-only", action="store_true", help=argparse.SUPPRESS)
     search_cmd.add_argument("--exclude-status", action="append", default=[], help="Exclude Drops with a matching status. Repeatable.")
 
     dive_cmd = sub.add_parser("dive", help="Run a Pearl Dive: retrieve cited local-source nuggets for a question.")
@@ -4683,7 +4702,8 @@ def build_parser() -> argparse.ArgumentParser:
     dive_cmd.add_argument("--tag", action="append", default=[], help="Dive only through Drops with a matching tag. Repeatable.")
     dive_cmd.add_argument("--folder", action="append", default=[], help="Dive only through Drops with a matching folder. Repeatable.")
     dive_cmd.add_argument("--hostname", action="append", default=[], help="Dive only through Drops with a matching hostname. Repeatable.")
-    dive_cmd.add_argument("--pearl-only", action="store_true", help="Dive only through Pearl Drops.")
+    dive_cmd.add_argument("--treasure-only", action="store_true", help="Dive only through Treasured Drops.")
+    dive_cmd.add_argument("--pearl-only", action="store_true", help=argparse.SUPPRESS)
     dive_cmd.add_argument("--exclude-status", action="append", default=[], help="Exclude Drops with a matching status. Repeatable.")
 
     brief_cmd = sub.add_parser("brief", help="Export selected Markdown Drops into a project brief.")
@@ -4695,7 +4715,8 @@ def build_parser() -> argparse.ArgumentParser:
     brief_cmd.add_argument("--status", action="append", default=[], help="Include Drops with a matching status. Repeatable.")
     brief_cmd.add_argument("--tag", action="append", default=[], help="Include Drops with a matching tag. Repeatable.")
     brief_cmd.add_argument("--hostname", action="append", default=[], help="Include Drops with a matching hostname. Repeatable.")
-    brief_cmd.add_argument("--pearl-only", action="store_true", help="Include only Pearl Drops.")
+    brief_cmd.add_argument("--treasure-only", action="store_true", help="Include only Treasured Drops.")
+    brief_cmd.add_argument("--pearl-only", action="store_true", help=argparse.SUPPRESS)
     brief_cmd.add_argument("--limit", type=int, default=None, help="Cap exported sources after sorting and filtering.")
 
     apply_cmd = sub.add_parser("apply-review-decisions", help="Apply Review Mode decision JSON to Markdown Drops.")
@@ -4756,7 +4777,7 @@ def build_parser() -> argparse.ArgumentParser:
     refresh_cmd.add_argument("--limit", type=int, default=None, help="Refresh only the first N Drops.")
     refresh_cmd.add_argument("--timeout", type=float, default=5, help="HTTP timeout in seconds. Default: 5")
 
-    tag_reviewed_cmd = sub.add_parser("tag-reviewed", help="Add local agent-suggested tags to kept and Pearl Drops.")
+    tag_reviewed_cmd = sub.add_parser("tag-reviewed", help="Add local agent-suggested tags to kept and Treasured Drops.")
     tag_reviewed_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     tag_reviewed_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
     tag_reviewed_cmd.add_argument("--dry-run", action="store_true", help="Preview tags without modifying Markdown files.")
@@ -4916,6 +4937,7 @@ def main(argv: list[str] | None = None) -> int:
             folder=args.folder,
             hostname=args.hostname,
             pearl_only=args.pearl_only,
+            treasure_only=args.treasure_only,
             exclude_status=args.exclude_status,
             limit=args.limit,
         )
@@ -4938,6 +4960,7 @@ def main(argv: list[str] | None = None) -> int:
             folder=args.folder,
             hostname=args.hostname,
             pearl_only=args.pearl_only,
+            treasure_only=args.treasure_only,
             exclude_status=args.exclude_status,
             limit=args.limit,
         )
@@ -4960,6 +4983,7 @@ def main(argv: list[str] | None = None) -> int:
             folder=args.folder,
             hostname=args.hostname,
             pearl_only=args.pearl_only,
+            treasure_only=args.treasure_only,
             exclude_status=args.exclude_status,
             limit=args.limit,
         )
@@ -4981,6 +5005,7 @@ def main(argv: list[str] | None = None) -> int:
             tag=args.tag,
             hostname=args.hostname,
             pearl_only=args.pearl_only,
+            treasure_only=args.treasure_only,
             limit=args.limit,
         )
         output, payload = create_project_brief(args.vault, args.root, args.output, filters)
@@ -5178,7 +5203,7 @@ def main(argv: list[str] | None = None) -> int:
             print("Tagged reviewed Drops:")
             print(f"- files updated: {result['updated']}")
         print(f"- files scanned: {result['considered']}")
-        print(f"- kept/Pearl eligible: {result['eligible']}")
+        print(f"- kept/Treasure eligible: {result['eligible']}")
         print(f"- tags added: {result['tags_added']}")
         warnings = result.get("warnings", [])
         print(f"- warnings: {len(warnings) if isinstance(warnings, list) else 0}")

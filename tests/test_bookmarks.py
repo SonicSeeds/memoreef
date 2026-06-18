@@ -73,13 +73,13 @@ class BookmarkImportTests(unittest.TestCase):
         content = bookmark_to_markdown(Bookmark("Example", "https://example.com"))
 
         self.assertIn("status: drift", content)
-        self.assertIn("pearl: false", content)
+        self.assertIn("treasure: false", content)
 
     def test_explicit_status_and_pearl_are_written(self):
         content = bookmark_to_markdown(Bookmark("Example", "https://example.com", status="reef", pearl=True))
 
         self.assertIn("status: reef", content)
-        self.assertIn("pearl: true", content)
+        self.assertIn("treasure: true", content)
 
     def test_projects_are_written(self):
         content = bookmark_to_markdown(Bookmark("Example", "https://example.com", projects=["Project Alpha"]))
@@ -882,7 +882,7 @@ endstream endobj
             self.assertEqual(drop["title"], "Example Source")
             self.assertEqual(drop["url"], "https://example.com")
             self.assertEqual(drop["status"], "drift")
-            self.assertEqual(drop["pearl"], False)
+            self.assertEqual(drop["treasure"], False)
             self.assertEqual(drop["folders"], ["AI Agents"])
             self.assertEqual(drop["tags"], ["research", "ai-agents"])
             self.assertEqual(drop["summary"], "_Not enriched yet._")
@@ -952,13 +952,13 @@ endstream endobj
                 "Agents",
                 "--folder",
                 "inbox",
-                "--pearl-only",
+                "--treasure-only",
             )
 
             self.assertEqual(result, 0)
             self.assertEqual([item["title"] for item in data["items"]], ["Match"])
             self.assertIn("project=ai agents", output)
-            self.assertIn("pearl-only=true", output)
+            self.assertIn("treasure-only=true", output)
 
     def test_export_review_session_filters_hostname_metadata_and_url_fallback(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1108,7 +1108,7 @@ endstream endobj
         with tempfile.TemporaryDirectory() as tmp:
             vault_path = Path(tmp) / "vault"
             write_bookmarks_to_vault([
-                Bookmark("Agent Workflow Pearl", "https://one.example", projects=["AI Agents"], status="drift", pearl=True),
+                Bookmark("Agent Workflow Treasure", "https://one.example", projects=["AI Agents"], status="drift", pearl=True),
                 Bookmark("Agent Workflow Discarded", "https://two.example", projects=["AI Agents"], status="discarded", pearl=True),
                 Bookmark("Agent Workflow Other", "https://three.example", projects=["Other"], status="drift", pearl=True),
             ], vault_path, allow_duplicates=True)
@@ -1117,7 +1117,7 @@ endstream endobj
                 vault_path,
                 "--project",
                 "AI Agents",
-                "--pearl-only",
+                "--treasure-only",
                 "--exclude-status",
                 "discarded",
                 "--limit",
@@ -1126,9 +1126,9 @@ endstream endobj
 
             self.assertEqual(result, 0)
             self.assertEqual(len(data["items"]), 1)
-            self.assertEqual(data["items"][0]["title"], "Agent Workflow Pearl")
+            self.assertEqual(data["items"][0]["title"], "Agent Workflow Treasure")
             self.assertEqual(data["filters"]["project"], ["AI Agents"])
-            self.assertTrue(data["filters"]["pearl_only"])
+            self.assertTrue(data["filters"]["treasure_only"])
             self.assertEqual(data["filters"]["exclude_status"], ["discarded"])
             self.assertEqual(data["filters"]["limit"], 1)
 
@@ -1160,19 +1160,19 @@ endstream endobj
         with tempfile.TemporaryDirectory() as tmp:
             vault_path = Path(tmp) / "vault"
             written = write_bookmarks_to_vault([
-                Bookmark("Agent Workflow Pearl", "https://agent.example/workflow", projects=["AI Agents"], status="reef", pearl=True),
+                Bookmark("Agent Workflow Treasure", "https://agent.example/workflow", projects=["AI Agents"], status="reef", pearl=True),
                 Bookmark("Other Source", "https://other.example", projects=["Other"], status="reef"),
             ], vault_path, allow_duplicates=True)
             self.append_drop_body(written[0], "Agent workflow handoff notes should cite local sources before making claims.")
 
-            result, output, text = self.dive_text(vault_path, "agent workflow", "--project", "AI Agents", "--pearl-only")
+            result, output, text = self.dive_text(vault_path, "agent workflow", "--project", "AI Agents", "--treasure-only")
 
             self.assertEqual(result, 0)
             self.assertIn("Pearl Dive:", output)
             self.assertIn("- retrieved pearls: 1", output)
             self.assertIn("# MemoReef Pearl Dive", text)
             self.assertIn("## Retrieved Pearls", text)
-            self.assertIn("Agent Workflow Pearl", text)
+            self.assertIn("Agent Workflow Treasure", text)
             self.assertIn("https://agent.example/workflow", text)
             self.assertIn("Drop path:", text)
             self.assertIn("Nugget:", text)
@@ -1278,7 +1278,7 @@ endstream endobj
                 "reef",
                 "--tag",
                 "agents",
-                "--pearl-only",
+                "--treasure-only",
                 "--limit",
                 "1",
             )
@@ -1473,7 +1473,7 @@ endstream endobj
                     "path": relative,
                     "decision": decision,
                     "status": "reef",
-                    "pearl": decision == "pearl",
+                    "treasure": decision == "treasure",
                 }
             ],
         }
@@ -1495,7 +1495,7 @@ endstream endobj
             self.assertIn("Applied review decisions:", stdout.getvalue())
             self.assertIn("- updated: 1", stdout.getvalue())
             self.assertIn("status: reef", content)
-            self.assertIn("pearl: false", content)
+            self.assertIn("treasure: false", content)
             self.assertIn('triaged_at: "2026-06-12T12:45:00Z"', content)
 
     def test_apply_review_decisions_pearl_updates_frontmatter(self):
@@ -1504,7 +1504,7 @@ endstream endobj
             vault_path = Path(tmp) / "vault"
             written = write_bookmarks_to_vault([Bookmark("Example Source", "https://example.com")], vault_path)
             decisions_path = Path(tmp) / "decisions.json"
-            self.write_decisions(decisions_path, written[0], vault_path, "pearl")
+            self.write_decisions(decisions_path, written[0], vault_path, "treasure")
 
             with redirect_stdout(stdout):
                 result = main(["apply-review-decisions", "--vault", str(vault_path), "--decisions", str(decisions_path)])
@@ -1512,7 +1512,7 @@ endstream endobj
             content = written[0].read_text(encoding="utf-8")
             self.assertEqual(result, 0)
             self.assertIn("status: reef", content)
-            self.assertIn("pearl: true", content)
+            self.assertIn("treasure: true", content)
 
     def test_apply_review_decisions_sink_moves_drop_to_discarded_with_delete_after(self):
         stdout = io.StringIO()
@@ -1531,7 +1531,7 @@ endstream endobj
             self.assertFalse(written[0].exists())
             self.assertTrue(discarded.exists())
             self.assertIn("status: discarded", content)
-            self.assertIn("pearl: false", content)
+            self.assertIn("treasure: false", content)
             self.assertIn("discarded_at: \"2026-06-12T12:45:00Z\"", content)
             self.assertIn("delete_after: \"2026-07-12T12:45:00Z\"", content)
 
@@ -1542,7 +1542,7 @@ endstream endobj
             written = write_bookmarks_to_vault([Bookmark("Example Source", "https://example.com")], vault_path)
             before = written[0].read_text(encoding="utf-8")
             decisions_path = Path(tmp) / "decisions.json"
-            self.write_decisions(decisions_path, written[0], vault_path, "pearl")
+            self.write_decisions(decisions_path, written[0], vault_path, "treasure")
 
             with redirect_stdout(stdout):
                 result = main([
@@ -1672,7 +1672,7 @@ endstream endobj
                 payload = {
                     "version": 1,
                     "reviewed_at": "2026-06-14T12:00:00Z",
-                    "decisions": [{"id": relative, "path": relative, "decision": "pearl"}],
+                    "decisions": [{"id": relative, "path": relative, "decision": "treasure"}],
                 }
                 request = urllib.request.Request(
                     f"{base_url}/api/review-decisions",
@@ -1689,7 +1689,7 @@ endstream endobj
                 self.assertEqual(result["updated"], 1)
                 self.assertEqual(result["skipped"], 0)
                 self.assertEqual(frontmatter["status"], "reef")
-                self.assertEqual(frontmatter["pearl"], True)
+                self.assertEqual(frontmatter["treasure"], True)
                 self.assertEqual(frontmatter["triaged_at"], "2026-06-14T12:00:00Z")
             finally:
                 server.shutdown()
@@ -2057,14 +2057,14 @@ endstream endobj
             vault_path = Path(tmp) / "vault"
             output_path = Path(tmp) / "agent-finish-plan.json"
             bookmarks = [
-                Bookmark("Pearl Source", "https://pearl.example", folders=["AI Agents"]),
+                Bookmark("Pearl Source", "https://treasure.example", folders=["AI Agents"]),
                 Bookmark("Keep Source", "https://keep.example", folders=["Research"]),
                 Bookmark("Sink Source", "https://sink.example", folders=["Noise"]),
                 Bookmark("Remaining Source", "https://remaining.example", folders=["Later"]),
             ]
             written = write_bookmarks_to_vault(bookmarks, vault_path)
             decisions_path = Path(tmp) / "decisions.json"
-            self.write_plan_decisions(decisions_path, vault_path, [(written[0], "pearl"), (written[1], "keep"), (written[2], "sink")])
+            self.write_plan_decisions(decisions_path, vault_path, [(written[0], "treasure"), (written[1], "keep"), (written[2], "sink")])
 
             with redirect_stdout(stdout):
                 result = main(["plan-agent-finish", "--vault", str(vault_path), "--decisions", str(decisions_path), "--output", str(output_path)])
@@ -2073,10 +2073,10 @@ endstream endobj
             self.assertEqual(result, 0)
             self.assertEqual(data["summary"]["reviewed"], 3)
             self.assertEqual(data["summary"]["remaining"], 1)
-            self.assertEqual(data["summary"]["pearls"], 1)
+            self.assertEqual(data["summary"]["treasures"], 1)
             self.assertEqual(data["summary"]["kept"], 1)
             self.assertEqual(data["summary"]["sunk"], 1)
-            self.assertEqual(len(data["taste_examples"]["pearl"]), 1)
+            self.assertEqual(len(data["taste_examples"]["treasure"]), 1)
             self.assertEqual(len(data["taste_examples"]["keep"]), 1)
             self.assertEqual(len(data["taste_examples"]["sink"]), 1)
             self.assertEqual(len(data["remaining_drops"]), 1)
@@ -2136,7 +2136,7 @@ endstream endobj
             before = written[0].read_text(encoding="utf-8")
             decisions_path = Path(tmp) / "decisions.json"
             output_path = Path(tmp) / "agent-finish-plan.json"
-            self.write_plan_decisions(decisions_path, vault_path, [(written[0], "pearl")])
+            self.write_plan_decisions(decisions_path, vault_path, [(written[0], "treasure")])
 
             with redirect_stdout(stdout):
                 result = main(["plan-agent-finish", "--vault", str(vault_path), "--decisions", str(decisions_path), "--output", str(output_path)])
@@ -2146,7 +2146,7 @@ endstream endobj
 
     def write_plan(self, path: Path, remaining: object, taste_examples=None):
         path.write_text(
-            json.dumps({"version": 1, "remaining_drops": remaining, "taste_examples": taste_examples or {"pearl": [], "keep": [], "sink": []}}),
+            json.dumps({"version": 1, "remaining_drops": remaining, "taste_examples": taste_examples or {"treasure": [], "keep": [], "sink": []}}),
             encoding="utf-8",
         )
 
@@ -2185,7 +2185,7 @@ endstream endobj
             plan_path = Path(tmp) / "agent-finish-plan.json"
             output_path = Path(tmp) / "agent-proposals.json"
             taste = {
-                "pearl": [{"title": "local ai agents research", "tags": ["ai-agents", "research"]}],
+                "treasure": [{"title": "local ai agents research", "tags": ["ai-agents", "research"]}],
                 "keep": [],
                 "sink": [{"title": "coupon spam deals", "tags": ["spam", "coupons"]}],
             }
@@ -2202,7 +2202,7 @@ endstream endobj
             proposals = {item["id"]: item for item in json.loads(output_path.read_text(encoding="utf-8"))["proposals"]}
             self.assertEqual(result, 0)
             self.assertEqual(proposals["p"]["proposed_status"], "reef")
-            self.assertEqual(proposals["p"]["proposed_pearl"], True)
+            self.assertEqual(proposals["p"]["proposed_treasure"], True)
             self.assertEqual(proposals["s"]["proposed_status"], "discarded")
             self.assertEqual(proposals["w"]["proposed_status"], "drift")
             self.assertEqual(proposals["w"]["confidence"], "low")
@@ -2246,7 +2246,7 @@ endstream endobj
             vault_path = Path(tmp) / "vault"
             write_bookmarks_to_vault([
                 Bookmark("Drift Source", "https://drift.example"),
-                Bookmark("Pearl Source", "https://pearl.example", status="reef", pearl=True),
+                Bookmark("Pearl Source", "https://treasure.example", status="reef", pearl=True),
                 Bookmark("Discarded Source", "https://discarded.example", status="discarded"),
             ], vault_path)
 
@@ -2325,20 +2325,20 @@ endstream endobj
             agent_proposals = list((root / "agent-plans").glob("*-agent-proposals.json"))
 
             statuses = set()
-            pearls = 0
+            treasures = 0
             combined_text = ""
             for drop in drops:
                 text = drop.read_text(encoding="utf-8")
                 combined_text += text
                 frontmatter, _body = parse_markdown_frontmatter(text)
                 statuses.add(frontmatter.get("status"))
-                if frontmatter.get("pearl") is True:
-                    pearls += 1
+                if frontmatter.get("treasure") is True:
+                    treasures += 1
 
             self.assertEqual(result, 0)
             self.assertGreaterEqual(len(drops), 12)
             self.assertTrue({"drift", "reef", "deep", "discarded"}.issubset(statuses))
-            self.assertGreaterEqual(pearls, 2)
+            self.assertGreaterEqual(treasures, 2)
             self.assertTrue(readme.exists())
             self.assertTrue(dashboard.exists())
             self.assertTrue(library.exists())
@@ -2469,7 +2469,7 @@ endstream endobj
                 "id": str(drop_path.resolve().relative_to(vault_path.resolve())),
                 "path": str(drop_path.resolve().relative_to(vault_path.resolve())),
                 "proposed_status": status,
-                "proposed_pearl": pearl,
+                "proposed_treasure": pearl,
                 "confidence": extra.get("confidence", "high"),
                 "priority": extra.get("priority", "normal"),
                 "suggested_note_location": extra.get("suggested_note_location", "MemoReef/Reef"),
@@ -2493,7 +2493,7 @@ endstream endobj
             text = written[0].read_text(encoding="utf-8")
             self.assertEqual(result, 0)
             self.assertIn("status: reef", text)
-            self.assertIn("pearl: false", text)
+            self.assertIn("treasure: false", text)
             self.assertIn('priority: "normal"', text)
             self.assertIn('note_location: "MemoReef/Reef"', text)
             self.assertIn("agent_proposed_at:", text)
@@ -2506,10 +2506,10 @@ endstream endobj
         stdout = io.StringIO()
         with tempfile.TemporaryDirectory() as tmp:
             vault_path = Path(tmp) / "vault"
-            written = write_bookmarks_to_vault([Bookmark("Pearl", "https://pearl.example"), Bookmark("Noise", "https://noise.example")], vault_path)
+            written = write_bookmarks_to_vault([Bookmark("Treasure", "https://treasure.example"), Bookmark("Noise", "https://noise.example")], vault_path)
             proposals_path = Path(tmp) / "agent-proposals.json"
             self.write_proposals(proposals_path, vault_path, [
-                (written[0], "reef", True, False, {"priority": "high", "suggested_note_location": "MemoReef/Pearls"}),
+                (written[0], "reef", True, False, {"priority": "high", "suggested_note_location": "MemoReef/Treasures"}),
                 (written[1], "discarded", False, False, {"priority": "low", "suggested_note_location": "MemoReef/Discarded"}),
             ])
 
@@ -2518,9 +2518,9 @@ endstream endobj
 
             self.assertEqual(result, 0)
             self.assertIn("status: reef", written[0].read_text(encoding="utf-8"))
-            self.assertIn("pearl: true", written[0].read_text(encoding="utf-8"))
+            self.assertIn("treasure: true", written[0].read_text(encoding="utf-8"))
             self.assertIn("status: discarded", written[1].read_text(encoding="utf-8"))
-            self.assertIn("pearl: false", written[1].read_text(encoding="utf-8"))
+            self.assertIn("treasure: false", written[1].read_text(encoding="utf-8"))
 
     def test_apply_agent_proposals_dry_run_and_needs_review(self):
         stdout = io.StringIO()
@@ -2561,9 +2561,9 @@ endstream endobj
             payload = {
                 "version": 1,
                 "proposals": [
-                    {"path": "MemoReef/Drops/missing.md", "proposed_status": "reef", "proposed_pearl": False, "requires_user_review": False},
-                    {"path": "../outside.md", "proposed_status": "reef", "proposed_pearl": False, "requires_user_review": False},
-                    {"path": str(written[0].resolve().relative_to(vault_path.resolve())), "proposed_status": "bogus", "proposed_pearl": False, "requires_user_review": False},
+                    {"path": "MemoReef/Drops/missing.md", "proposed_status": "reef", "proposed_treasure": False, "requires_user_review": False},
+                    {"path": "../outside.md", "proposed_status": "reef", "proposed_treasure": False, "requires_user_review": False},
+                    {"path": str(written[0].resolve().relative_to(vault_path.resolve())), "proposed_status": "bogus", "proposed_treasure": False, "requires_user_review": False},
                 ],
             }
             proposals_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -3338,7 +3338,7 @@ endstream endobj
             self.assertIn('title: "Candidate"', text)
             self.assertIn('url: "https://example.com"', text)
             self.assertIn("status: reef", text)
-            self.assertIn("pearl: true", text)
+            self.assertIn("treasure: true", text)
             self.assertIn('  - "Research"', text)
             self.assertIn('  - "original"', text)
             self.assertIn("## Notes", text)

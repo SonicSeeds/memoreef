@@ -20,7 +20,7 @@ Acceptance criteria:
 - `docs/TESTER_GUIDE.md` walks through sample data, real imports, Review Mode, Import Dock, Pearl Dive, and feedback.
 - A smoke script verifies the tester path from a clean checkout.
 - A tester can import at least one browser bookmark export, URL list, and local document.
-- Review Mode can autosave Keep/Pearl/Sink decisions to Markdown frontmatter.
+- Review Mode can autosave Keep/Treasure/Sink decisions to Markdown frontmatter.
 - Bookmarklet clipping works against the localhost bridge.
 - At least 2–3 trusted testers try it and leave issues, stars, or concrete feedback.
 
@@ -74,9 +74,9 @@ Purpose: users quickly separate signal from sediment before agents act.
 Current capabilities:
 
 - Drift/Reef/Deep/Discarded states.
-- Pearl marking.
+- Treasure marking.
 - Review Mode with keyboard controls and autosave.
-- Local tag suggestions for kept/Pearl Drops.
+- Local tag suggestions for kept or Treasured Drops.
 - Discarded archive path with delete marker.
 
 Next acceptance criteria:

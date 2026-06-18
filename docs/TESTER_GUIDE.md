@@ -13,7 +13,7 @@ Please try the full first-user path:
 3. Extract readable article text from a few saved web URLs.
 4. Start the local Review Mode app.
 5. Add one real document through Import Dock.
-6. Review a few Drops with Keep / Pearl / Sink.
+6. Review a few Drops with Keep / Treasure / Sink.
 7. Check the generated Markdown files.
 8. Run one Pearl Dive query.
 9. Open an issue or send feedback about anything unclear.
@@ -167,10 +167,10 @@ Review Mode should load Drift Drops from your local vault.
 Controls:
 
 - `←` Sink
-- `↑` Pearl
+- `↑` Treasure
 - `→` Keep
 - Open source: opens the original source link
-- Tag kept/Pearls: adds local suggested tags to reviewed kept/Pearl Drops
+- Tag kept/Treasures: adds local suggested tags to reviewed kept or Treasured Drops
 - Continue later: stops without forcing more decisions
 
 Decisions autosave directly into Markdown frontmatter while the local server is running.

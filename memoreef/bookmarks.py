@@ -18,6 +18,7 @@ class Bookmark:
     icon: str | None = None
     source: str | None = None
     status: str = "drift"
+    treasure: bool = False
     pearl: bool = False
     folders: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
@@ -31,6 +32,10 @@ class Bookmark:
     document_type: str | None = None
     original_file: str | None = None
     document_numeric_analysis: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.pearl:
+            self.treasure = True
 
 
 class BrowserBookmarkParser(HTMLParser):
@@ -231,7 +236,7 @@ def markdown_drop_to_review_item(path: Path, vault: str | Path) -> dict[str, obj
         "title": str(frontmatter.get("title") or path.stem),
         "url": str(frontmatter.get("url") or ""),
         "status": str(frontmatter.get("status") or "drift"),
-        "pearl": bool(frontmatter.get("pearl", False)),
+        "treasure": bool(frontmatter.get("treasure", frontmatter.get("pearl", False))),
         "folders": [str(folder) for folder in folders],
         "tags": [str(tag) for tag in tags],
         "summary": extract_summary(body),
@@ -334,7 +339,7 @@ def bookmark_to_markdown(bookmark: Bookmark) -> str:
         "type: drop",
         f"status: {bookmark.status}",
         "agent_ready: true",
-        f"pearl: {'true' if bookmark.pearl else 'false'}",
+        f"treasure: {'true' if bookmark.treasure else 'false'}",
     ]
     if bookmark.add_date:
         lines.append(f"browser_add_date: {yaml_quote(bookmark.add_date)}")

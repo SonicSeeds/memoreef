@@ -139,7 +139,7 @@ Prepare for the swipe/keyboard UI by formalizing statuses.
 
 ### Additional fields
 
-- `pearl: true|false`
+- `treasure: true|false`
 - `projects: []`
 - `shoals: []`
 - `triaged_at`
@@ -167,7 +167,7 @@ site/swipe.html
 - Mobile-first card stack for Drops.
 - Keyboard shortcuts:
   - `K`: keep in Reef
-  - `P`: mark Pearl
+  - `T`: mark Treasure
   - `D`: send to Deep
   - `X`: discard
   - `ArrowRight`: next
@@ -234,7 +234,7 @@ site/swipe.html
 ### Acceptance criteria
 
 - Opens directly with `open site/swipe.html`.
-- Counters update when Sink, Keep, or Pearl is selected.
+- Counters update when Sink, Keep, or Treasure is selected.
 - Let agents finish and Continue later show clear static prototype states.
 - Swipe gestures and visible buttons work for the main actions.
 
@@ -269,7 +269,7 @@ Complete the local-first Review Mode loop by applying exported decision JSON bac
 
 - Add a CLI command that applies Review Mode decision JSON to Drops.
 - Support a dry run before writing changes.
-- Update `status`, `pearl`, and `triaged_at`.
+- Update `status`, `treasure`, and `triaged_at`.
 - Prevent path traversal so decisions cannot modify files outside the vault Drops folder.
 - Do not move or delete files.
 - Do not assign categories, tags, priority, note locations, duplicate handling, or dead-link handling yet.
@@ -314,7 +314,7 @@ Draft reviewable agent proposals for remaining Drops from an agent finish plan.
 
 - Read an agent finish plan JSON.
 - Draft proposals for remaining Drops.
-- Include proposed status, pearl state, confidence, priority, suggested note location, rationale, and review flag.
+- Include proposed status, treasure state, confidence, priority, suggested note location, rationale, and review flag.
 - Use deterministic local token-overlap heuristics only.
 - Preserve existing Drop tags as suggested tags; do not invent new tags.
 - Do not modify Markdown files.
@@ -325,7 +325,7 @@ Draft reviewable agent proposals for remaining Drops from an agent finish plan.
 - `python3 -m memoreef.cli draft-agent-proposals --plan <agent-finish-plan.json>` writes proposals next to the plan.
 - `--output` writes the proposal JSON to an explicit path.
 - Weak or tied signals remain `drift` and require user review.
-- Pearl-like remaining Drops can be proposed as pearls.
+- Treasure-like remaining Drops can be proposed as Treasures.
 - Sink-like remaining Drops can be proposed as discarded.
 - Markdown Drop files are not modified.
 
@@ -338,7 +338,7 @@ Make MemoReef feel like a usable local app by generating a static dashboard for 
 
 - Add `python3 -m memoreef.cli app --vault <vault>`.
 - Generate `<vault>/MemoReef/app/index.html`.
-- Summarize total Drops, Drift, Reef, Pearls, and Discarded counts.
+- Summarize total Drops, Drift, Reef, Treasures, and Discarded counts.
 - Show the latest review session, review decisions, agent finish plan, and agent proposals when present.
 - Show a clear next recommended action.
 - Include local workflow instructions for Review Mode, applying decisions, creating a finish plan, and drafting proposals.
@@ -362,7 +362,7 @@ Complete the local agent finish loop by applying accepted agent proposal JSON ba
 - Support `--dry-run`.
 - Skip proposals marked `requires_user_review: true` by default.
 - Support `--include-needs-review` to apply those proposals deliberately.
-- Update only `status`, `pearl`, `priority`, `note_location`, `agent_proposed_at`, and `agent_confidence`.
+- Update only `status`, `treasure`, `priority`, `note_location`, `agent_proposed_at`, and `agent_confidence`.
 - Prevent path traversal.
 - Do not move or delete files.
 - Do not apply rationale into Markdown.
@@ -503,7 +503,7 @@ Create focused review queues by filtering Drops during review session export.
 
 - Add filter options to `python3 -m memoreef.cli export-review-session`.
 - Support repeatable `--project`, `--shoal`, `--status`, `--tag`, `--folder`, `--hostname`, and `--exclude-status`.
-- Support `--pearl-only` and `--limit`.
+- Support `--treasure-only` and `--limit`.
 - Match exact strings case-insensitively.
 - AND different filter groups together and OR repeated values inside one group.
 - Apply exclusions after inclusions and limit after filtering/sorting.
@@ -576,7 +576,7 @@ Export selected local Markdown Drops into a readable Markdown project brief for 
 
 - Add `python3 -m memoreef.cli brief --vault <vault> --project "AI Agents"`.
 - Support repeatable `--project`, `--shoal`, `--status`, `--tag`, and `--hostname`.
-- Support `--pearl-only`, `--limit`, and optional `--output`.
+- Support `--treasure-only`, `--limit`, and optional `--output`.
 - Write default briefs under `<vault>/MemoReef/briefs/YYYY-MM-DD-HHMMSS-project-brief.md`.
 - Include generated timestamp, applied filters, summary counts, source metadata, source notes/summaries, Agent handoff instructions, and Gaps / next review.
 - Keep the command local-only and read-only against Markdown Drops.
@@ -588,7 +588,7 @@ Export selected local Markdown Drops into a readable Markdown project brief for 
 ### Acceptance criteria
 
 - Project-filtered brief generation works.
-- Pearl-only, status, tag, and limit filters work together.
+- Treasure-only, status, tag, and limit filters work together.
 - Brief generation does not modify Drop Markdown files.
 - Generated app and tour detect the latest brief.
 - Demo creates a brief containing a real demo source title and Agent handoff text.
@@ -670,13 +670,13 @@ Create a premium visual baseline for MemoReef before pilot testing without chang
 ## Task 27 — Local reviewed-Drop tagging
 
 ### Goal
-Turn the Review Mode “agents finish” promise into a real local workflow for adding useful tags to Drops the user already kept or marked as Pearls.
+Turn the Review Mode “agents finish” promise into a real local workflow for adding useful tags to Drops the user already kept or marked as Treasures.
 
 ### Requirements
 
 - Add `python3 -m memoreef.cli tag-reviewed --vault <vault>`.
 - Support `--dry-run` and `--limit`.
-- Scan only reviewed useful Drops: `status: reef`, `status: deep`, or `pearl: true`.
+- Scan only reviewed useful Drops: `status: reef`, `status: deep`, or `treasure: true`.
 - Skip Drift and Discarded Drops.
 - Preserve existing tags and append deterministic lowercase/hyphen tag suggestions.
 - Use local heuristics from title, URL/hostname, folder path, projects, shoals, page metadata, and note body.
@@ -689,7 +689,7 @@ Turn the Review Mode “agents finish” promise into a real local workflow for 
 ### Acceptance criteria
 
 - CLI dry run reports planned tag additions without modifying Markdown.
-- CLI apply modifies kept/Pearl Drops and leaves Drift/Sink Drops untouched.
+- CLI apply modifies kept or Treasured Drops and leaves Drift/Sink Drops untouched.
 - Local server endpoint updates reviewed Drops through the same tagger.
 - Review Mode button reports real scanned/eligible/updated/tags-added counts in local-server mode.
 - Existing tests still pass.
@@ -711,7 +711,7 @@ Real pilot testing showed that `tag-reviewed` successfully added tags, but the v
 - Add `python3 -m memoreef.cli hub-map --vault <vault>`.
 - Support `--dry-run`, `--min-drops`, `--max-hubs`, and optional `--output-dir`.
 - Read local Markdown Drops only.
-- Use reviewed useful Drops by default: `status: reef`, `status: deep`, or `pearl: true`.
+- Use reviewed useful Drops by default: `status: reef`, `status: deep`, or `treasure: true`.
 - Build deterministic hub labels from existing tags, projects, shoals, hostname, and refreshed metadata.
 - Filter obvious noise labels such as browser folder names, numeric folders, tracking parameters, and generic words.
 - Generate `<vault>/MemoReef/Maps/Emerging Hubs.md`.
