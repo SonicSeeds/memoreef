@@ -43,6 +43,36 @@ brew install tesseract poppler tesseract-lang
 
 MemoReef still works without OCR tools for bookmarks, URL lists, CSV files, DOCX, TXT, Markdown, and text-based PDFs.
 
+## If you use an AI coding agent
+
+If your normal workflow is "agent, install this and tell me what happened," use that. It is a real MemoReef use case.
+
+Give your agent this prompt:
+
+```text
+Clone MemoReef from https://github.com/SonicSeeds/memoreef.
+Install it in a Python 3.11 virtual environment.
+Run the tester-readiness smoke test.
+Create a small local MemoReef vault.
+Import a small bookmark export or URL list that I provide.
+Run article extraction on the test vault.
+Start Review Mode locally and show me the local URL.
+Show me the generated vault path and the Drops folder path.
+Do not upload my bookmarks, documents, vault, or generated Drops anywhere.
+Do not use external AI/API services unless I explicitly approve it.
+Do not modify unrelated files outside the MemoReef checkout and the test vault.
+Report every command you ran, whether it passed, and every place where the instructions were confusing or failed.
+```
+
+What to send back as feedback:
+
+- Did the agent complete the install?
+- Which command failed, if any?
+- Did the agent know where to put your bookmark export or URL list?
+- Did Review Mode open locally?
+- Did the generated Drops look readable?
+- Did the agent get confused by the README or tester guide?
+
 ## 1. Install MemoReef
 
 ```bash

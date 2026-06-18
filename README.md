@@ -8,7 +8,7 @@ It is not trying to be another bookmark manager. MemoReef is for people with mes
 
 Want the Obsidian-specific walkthrough? See [Use MemoReef with Obsidian](https://memoreef.de/obsidian.html).
 
-Testing MemoReef for the first time? Use the [Tester Guide](docs/TESTER_GUIDE.md). Sharing feedback? Use [Trusted Tester Feedback](docs/TRUSTED_TESTER_FEEDBACK.md). Inviting testers? Use the [Trusted Tester Invite](docs/TRUSTED_TESTER_INVITE.md). Building the full product? See the [Roadmap](docs/ROADMAP.md).
+Testing MemoReef for the first time? Use the [Tester Guide](docs/TESTER_GUIDE.md). If you normally work through an AI coding agent, the tester guide includes a copy-paste agent install prompt. Sharing feedback? Use [Trusted Tester Feedback](docs/TRUSTED_TESTER_FEEDBACK.md). Inviting testers? Use the [Trusted Tester Invite](docs/TRUSTED_TESTER_INVITE.md). Building the full product? See the [Roadmap](docs/ROADMAP.md).
 
 ## Demo video
 
