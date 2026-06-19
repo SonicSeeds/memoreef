@@ -20,3 +20,6 @@ dist/
 # MemoReef generated vaults
 memoreef-vault/
 MemoReef-output/
+
+# private local notes
+docs/TRUSTED_TESTER_INVITE.md
