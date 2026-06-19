@@ -237,7 +237,7 @@ Please report:
 - What source type did you try: bookmarks, links, CSV, PDF, DOCX, image, scanned PDF?
 - Would you use this again for a real project?
 
-GitHub issues are ideal because they create visible project activity, but short direct feedback is also useful. For the exact feedback shape, see [Trusted Tester Feedback](TRUSTED_TESTER_FEEDBACK.md).
+GitHub issues are ideal because they create visible project activity, but short direct feedback is also useful.
 
 ## Known limits
 
