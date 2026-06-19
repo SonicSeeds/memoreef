@@ -193,7 +193,7 @@ For common questions about local-first storage, Obsidian support, agent use, and
 
 ## Screenshots
 
-![MemoReef full landing page from surface to octopus reef](docs/screenshots/landing-page-full-text-pearl.png)
+![MemoReef full landing page from surface to octopus reef](docs/screenshots/landing-page-octopus-pearls.png)
 
 | Review Mode local app: autosaves to vault | Mobile app mockup: visual only |
 | --- | --- |
