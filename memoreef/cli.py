@@ -460,6 +460,7 @@ Then open the dashboard, local library, Pearl Dive, review launcher, reports, br
 ```bash
 open {rel["dashboard"]}
 open {root}/app/pilot.html
+open {root}/app/gravity.html
 open {root}/app/library.html
 open {root}/app/dive.html
 open {root}/app/review.html
@@ -483,7 +484,7 @@ These pages are static files. There is no backend, account, network call, or AI 
 - A search result: `{rel["search_results"]}`.
 - A Pearl Dive report: `{rel["dive_report"]}`.
 - A project brief for agent handoff: `{rel["project_brief"]}`.
-- Static app pages for dashboard, tour, library search, Pearl Dive, Review Mode instructions, reports, briefs, and one generated detail page per Drop.
+- Static app pages for dashboard, visual Gravity Map, tour, library search, Pearl Dive, Review Mode instructions, reports, briefs, and one generated detail page per Drop.
 - A pilot checklist page and Markdown checklist: `{rel["pilot"]}`, `{root}/PILOT_README.md`.
 - A demo review-decisions file and agent finish artifacts: `{rel["decisions"]}`, `{rel["agent_plan"]}`, `{rel["agent_proposals"]}`.
 
@@ -802,6 +803,12 @@ def search_drop_item(path: Path, vault: Path) -> dict[str, object]:
     item = markdown_drop_to_filtered_review_item(path, vault)
     frontmatter, body = parse_markdown_frontmatter(path.read_text(encoding="utf-8", errors="replace"))
     item["page_description"] = str(frontmatter.get("page_description") or "")
+    item["triaged_at"] = str(frontmatter.get("triaged_at") or "")
+    item["updated_at"] = str(frontmatter.get("updated") or frontmatter.get("updated_at") or "")
+    try:
+        item["mtime"] = path.stat().st_mtime
+    except OSError:
+        item["mtime"] = 0
     item["body"] = body
     return item
 
@@ -3685,6 +3692,10 @@ def render_app_dashboard(state: dict[str, object]) -> str:
         <p>{next_action}</p>
       </div>
       <div class=\"card\">
+        <h2>Gravity Map</h2>
+        <p>Open <a href=\"gravity.html\">gravity.html</a> for a visual reef map: Shoals become colored clusters, Drops become fish, and Treasures glow with more mass.</p>
+      </div>
+      <div class=\"card\">
         <h2>Product tour</h2>
         <p>Open <a href=\"tour.html\">tour.html</a> for a guided story generated from this vault: the mess, the value, Drop detail pages, reports, briefs, review handoff, library search, and why local Markdown matters.</p>
       </div>
@@ -3751,6 +3762,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
 
 APP_NAV_ITEMS = [
     ("dashboard", "Dashboard", "index.html"),
+    ("gravity", "Gravity Map", "gravity.html"),
     ("pilot", "Pilot", "pilot.html"),
     ("tour", "Tour", "tour.html"),
     ("library", "Library", "library.html"),
@@ -3917,6 +3929,258 @@ def render_dive_page(vault: Path, root: str = "MemoReef") -> str:
 </html>
 """
 
+
+def first_label(drop: dict[str, object], keys: list[str], fallback: str = "Unsorted Drift") -> str:
+    for key in keys:
+        values = drop.get(key, [])
+        if isinstance(values, list):
+            for value in values:
+                text = str(value).strip()
+                if text and text != "[]":
+                    return text
+    return fallback
+
+
+def drop_recency_bonus(drop: dict[str, object]) -> float:
+    now = datetime.now(timezone.utc).timestamp()
+    raw_mtime = drop.get("mtime", 0)
+    try:
+        mtime = float(raw_mtime)
+    except (TypeError, ValueError):
+        return 0.0
+    if mtime <= 0:
+        return 0.0
+    age_days = max(0.0, (now - mtime) / 86400)
+    if age_days <= 7:
+        return 1.2
+    if age_days <= 30:
+        return 0.65
+    if age_days <= 90:
+        return 0.25
+    return 0.0
+
+
+def drop_gravity_mass(drop: dict[str, object]) -> float:
+    status = str(drop.get("status") or "drift")
+    mass = 1.0
+    if drop_is_treasured(drop):
+        mass += 3.0
+    if status == "reef":
+        mass += 1.4
+    elif status == "deep":
+        mass += 1.8
+    elif status == "discarded":
+        mass -= 0.55
+    elif status == "drift":
+        mass += 0.25
+    for key in ("projects", "shoals", "tags"):
+        values = drop.get(key, [])
+        if isinstance(values, list):
+            mass += min(len(values), 5) * 0.14
+    if str(drop.get("summary") or drop.get("page_description") or "").strip():
+        mass += 0.25
+    mass += drop_recency_bonus(drop)
+    return round(max(0.8, min(mass, 7.5)), 2)
+
+
+def gravity_palette(index: int) -> dict[str, str]:
+    palettes = [
+        {"name": "teal", "primary": "#75ead3", "secondary": "#1aaea3"},
+        {"name": "coral", "primary": "#ff927e", "secondary": "#ff5e7c"},
+        {"name": "violet", "primary": "#b99cff", "secondary": "#7667ff"},
+        {"name": "gold", "primary": "#f1d07a", "secondary": "#f49f42"},
+        {"name": "blue", "primary": "#7ec8ff", "secondary": "#3978ff"},
+        {"name": "kelp", "primary": "#aeea75", "secondary": "#4fb36b"},
+    ]
+    return palettes[index % len(palettes)]
+
+
+def gravity_map_payload(vault: Path, root: str = "MemoReef") -> dict[str, object]:
+    vault_path = vault.expanduser().resolve()
+    drops = app_drop_items(vault_path, root)
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for drop in drops:
+        label = first_label(drop, ["shoals", "projects", "folders"], "Unsorted Drift")
+        grouped.setdefault(label, []).append(drop)
+
+    clusters = []
+    fish = []
+    ordered_groups = sorted(grouped.items(), key=lambda item: (-sum(drop_gravity_mass(drop) for drop in item[1]), item[0]))
+    for index, (label, members) in enumerate(ordered_groups[:12]):
+        palette = gravity_palette(index)
+        total_mass = round(sum(drop_gravity_mass(drop) for drop in members), 2)
+        treasures = sum(1 for drop in members if drop_is_treasured(drop))
+        statuses: dict[str, int] = {}
+        for drop in members:
+            status = str(drop.get("status") or "drift")
+            statuses[status] = statuses.get(status, 0) + 1
+        clusters.append(
+            {
+                "id": slug_for_filename(label),
+                "label": label,
+                "count": len(members),
+                "mass": total_mass,
+                "treasures": treasures,
+                "statuses": statuses,
+                "color": palette["primary"],
+                "accent": palette["secondary"],
+            }
+        )
+        for member_index, drop in enumerate(sorted(members, key=lambda item: (-drop_gravity_mass(item), str(item.get("title") or "")))[:14]):
+            fish.append(
+                {
+                    "cluster": slug_for_filename(label),
+                    "title": str(drop.get("title") or "Untitled Drop"),
+                    "status": str(drop.get("status") or "drift"),
+                    "treasure": drop_is_treasured(drop),
+                    "mass": drop_gravity_mass(drop),
+                    "tags": review_list(drop.get("tags"))[:4],
+                    "path": str(drop.get("path") or ""),
+                    "href": drop_detail_href(drop),
+                    "color": palette["primary"],
+                    "accent": palette["secondary"],
+                    "index": member_index,
+                }
+            )
+    top_clusters = sorted(clusters, key=lambda item: (-float(str(item.get("mass", 0))), str(item.get("label", ""))))[:5]
+    return {
+        "generated_at": utc_now_iso(),
+        "root": root,
+        "counts": {"drops": len(drops), "clusters": len(clusters), "fish": len(fish), "treasures": sum(1 for drop in drops if drop_is_treasured(drop))},
+        "clusters": clusters,
+        "fish": fish,
+        "top_clusters": top_clusters,
+    }
+
+
+def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
+    vault_path = vault.expanduser().resolve()
+    payload = gravity_map_payload(vault_path, root)
+    counts = payload.get("counts", {})
+    if not isinstance(counts, dict):
+        counts = {}
+    top_clusters = payload.get("top_clusters", [])
+    if not isinstance(top_clusters, list):
+        top_clusters = []
+    top_html = "".join(
+        f'<li><span style="--dot:{html_escape(str(cluster.get("color") or "#75ead3"))}"></span><strong>{html_escape(str(cluster.get("label") or "Shoal"))}</strong> · mass {html_escape(str(cluster.get("mass") or 0))} · {html_escape(str(cluster.get("count") or 0))} Drops</li>'
+        for cluster in top_clusters
+        if isinstance(cluster, dict)
+    ) or "<li>No Shoals detected yet. Import or review Drops to seed the reef.</li>"
+
+    anchors = [(500, 320), (270, 250), (730, 250), (250, 470), (740, 470), (500, 145), (500, 540), (150, 340), (850, 340), (370, 390), (630, 390), (500, 430)]
+    clusters = [cluster for cluster in payload.get("clusters", []) if isinstance(cluster, dict)]
+    fish_items = [fish for fish in payload.get("fish", []) if isinstance(fish, dict)]
+    cluster_positions: dict[str, tuple[int, int]] = {}
+    circles = []
+    labels = []
+    for index, cluster in enumerate(clusters):
+        x, y = anchors[index % len(anchors)]
+        cluster_id = str(cluster.get("id") or "")
+        cluster_positions[cluster_id] = (x, y)
+        color = html_escape(str(cluster.get("color") or "#75ead3"))
+        try:
+            radius = max(74, min(170, 42 + float(str(cluster.get("mass", 0))) * 7))
+        except ValueError:
+            radius = 82
+        circles.append(f'<circle cx="{x}" cy="{y}" r="{radius:.1f}" fill="{color}" opacity="0.055" stroke="{color}" stroke-opacity="0.22" stroke-width="1.4" />')
+        label_x = max(18.0, min(82.0, x / 10))
+        label_y = max(6.0, min(92.0, (y - radius * 0.58) / 6.8))
+        labels.append(
+            f'<div class="cluster-label" style="left:{label_x:.2f}%; top:{label_y:.2f}%"><strong>{html_escape(str(cluster.get("label") or "Shoal"))}</strong><span>mass {html_escape(str(cluster.get("mass") or 0))} · {html_escape(str(cluster.get("count") or 0))} Drops</span></div>'
+        )
+
+    fish_html = []
+    for index, fish in enumerate(fish_items):
+        x0, y0 = cluster_positions.get(str(fish.get("cluster") or ""), (500, 340))
+        fish_index = int(fish.get("index") or 0)
+        angle_seed = (fish_index * 137 + index * 19) % 360
+        dx_lookup = [52, -68, 86, -42, 20, -95, 110, -20]
+        dy_lookup = [-24, 42, 18, -55, 66, 5, -38, 78]
+        dx = dx_lookup[index % len(dx_lookup)] + (fish_index % 3) * 12
+        dy = dy_lookup[index % len(dy_lookup)] - (fish_index % 4) * 8
+        x = max(5.0, min(95.0, (x0 + dx) / 10))
+        y = max(8.0, min(92.0, (y0 + dy) / 6.8))
+        mass = html_escape(str(fish.get("mass") or 1))
+        color = html_escape(str(fish.get("color") or "#75ead3"))
+        accent = html_escape(str(fish.get("accent") or "#1aaea3"))
+        title = html_escape(str(fish.get("title") or "Untitled Drop"))
+        status = html_escape(str(fish.get("status") or "drift"))
+        treasure = bool(fish.get("treasure"))
+        href = html_escape(str(fish.get("href") or "#"))
+        glow = 34 if treasure else 12
+        treasure_text = " · Treasure" if treasure else ""
+        fish_html.append(
+            f'<a class="fish-button" href="{href}" data-treasure="{str(treasure).lower()}" aria-label="{title}. Status {status}. Mass {mass}." style="left:{x:.2f}%; top:{y:.2f}%; --mass:{mass}; --fish:{color}; --accent:{accent}; --glow:{glow}; --duration:{7 + (index % 6)}s; --angle:{angle_seed}deg"><span class="fish-shape"></span><span class="fish-label"><strong>{title}</strong><br>mass {mass} · {status}{treasure_text}</span></a>'
+        )
+
+    return f"""<!doctype html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <title>MemoReef Gravity Map</title>
+  <style>
+    {app_common_css()}
+    main {{ width:min(1180px, calc(100% - 28px)); }}
+    .eyebrow {{ color:var(--green); text-transform:uppercase; letter-spacing:.16em; font-size:12px; font-weight:800; }}
+    .gravity-hero {{ display:grid; grid-template-columns:minmax(0, 1.15fr) minmax(280px, .85fr); gap:18px; align-items:stretch; }}
+    .reef-stage {{ position:relative; min-height:680px; overflow:hidden; border:1px solid rgba(190,242,255,.16); border-radius:18px; background:radial-gradient(circle at 50% 42%, rgba(117,234,211,.10), transparent 18rem), radial-gradient(circle at 18% 70%, rgba(255,146,126,.10), transparent 16rem), linear-gradient(180deg, #071923 0%, #082130 42%, #031018 100%); box-shadow:0 30px 100px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.05); }}
+    .reef-stage::before {{ content:\"\"; position:absolute; inset:0; background:linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px); background-size:90px 90px; mask-image:radial-gradient(circle at center, #000, transparent 76%); }}
+    .reef-stage::after {{ content:\"\"; position:absolute; left:-8%; right:-8%; bottom:-18px; height:150px; background:radial-gradient(ellipse at 10% 100%, rgba(241,208,122,.25), transparent 45%), radial-gradient(ellipse at 75% 100%, rgba(117,234,211,.18), transparent 45%), linear-gradient(180deg, transparent, rgba(4,15,19,.88)); }}
+    #gravitySvg {{ position:absolute; inset:0; width:100%; height:100%; z-index:1; }}
+    .fish-button {{ position:absolute; z-index:3; border:0; background:transparent; padding:0; transform:translate(-50%, -50%) rotate(calc(var(--angle) / 28)); cursor:pointer; filter:drop-shadow(0 9px 18px rgba(0,0,0,.28)); animation:swim var(--duration, 8s) ease-in-out infinite alternate; }}
+    .fish-shape {{ display:block; position:relative; width:calc(30px + var(--mass) * 7px); height:calc(16px + var(--mass) * 3.6px); border-radius:58% 48% 48% 58%; background:linear-gradient(135deg, var(--fish), var(--accent)); box-shadow:inset 0 1px 0 rgba(255,255,255,.32), 0 0 calc(var(--glow) * 1px) var(--fish); }}
+    .fish-shape::before {{ content:\"\"; position:absolute; right:-12px; top:50%; width:0; height:0; border-top:9px solid transparent; border-bottom:9px solid transparent; border-left:15px solid var(--accent); transform:translateY(-50%); opacity:.92; }}
+    .fish-shape::after {{ content:\"\"; position:absolute; left:24%; top:33%; width:4px; height:4px; border-radius:50%; background:#031018; box-shadow:0 0 0 1px rgba(255,255,255,.25); }}
+    .fish-button[data-treasure=\"true\"] .fish-shape {{ outline:2px solid rgba(241,208,122,.82); box-shadow:inset 0 1px 0 rgba(255,255,255,.42), 0 0 28px rgba(241,208,122,.48), 0 0 calc(var(--glow) * 1px) var(--fish); }}
+    .fish-button:focus-visible {{ outline:2px solid var(--pearl); outline-offset:8px; border-radius:24px; }}
+    .fish-label {{ position:absolute; left:50%; top:calc(100% + 8px); transform:translateX(-50%) rotate(calc(var(--angle) / -28)); min-width:120px; max-width:210px; padding:6px 8px; border:1px solid rgba(190,242,255,.14); border-radius:10px; background:rgba(3,16,24,.82); color:var(--text); font-size:12px; line-height:1.25; opacity:0; pointer-events:none; transition:opacity .18s ease; }}
+    .fish-button:hover .fish-label, .fish-button:focus-visible .fish-label {{ opacity:1; }}
+    .cluster-label {{ position:absolute; z-index:2; transform:translate(-50%, -50%); max-width:180px; padding:7px 9px; border:1px solid rgba(190,242,255,.12); border-radius:12px; background:rgba(3,16,24,.50); backdrop-filter:blur(6px); color:rgba(237,248,248,.78); text-align:center; text-shadow:0 2px 16px rgba(0,0,0,.55); pointer-events:none; }}
+    .cluster-label strong {{ display:block; font-size:18px; letter-spacing:-.03em; }}
+    .cluster-label span {{ font-size:12px; color:rgba(237,248,248,.56); }}
+    .legend-list {{ list-style:none; padding:0; margin:0; }}
+    .legend-list li {{ margin:11px 0; color:var(--muted); }}
+    .legend-list span {{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; background:var(--dot); box-shadow:0 0 18px var(--dot); }}
+    .gravity-stats {{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; margin-top:14px; }}
+    .gravity-stats div {{ padding:12px; border:1px solid rgba(190,242,255,.12); border-radius:12px; background:rgba(255,255,255,.035); }}
+    .gravity-stats strong {{ display:block; font-size:24px; }}
+    @keyframes swim {{ from {{ margin-left:-8px; margin-top:-4px; }} to {{ margin-left:10px; margin-top:6px; }} }}
+    @media (max-width:900px) {{ .gravity-hero {{ grid-template-columns:1fr; }} .reef-stage {{ min-height:620px; }} .gravity-stats {{ grid-template-columns:1fr 1fr; }} }}
+    @media (prefers-reduced-motion: reduce) {{ .fish-button {{ animation:none; }} }}
+  </style>
+</head>
+<body>
+  <main>
+    {app_nav("gravity")}
+    <header>
+      <p class=\"eyebrow\">Visual source memory</p>
+      <h1>Gravity Map</h1>
+      <p>Shoals show what your sources are about. Gravity shows what is starting to matter. Each fish is a local Markdown Drop; size is mass, glow marks Treasures, and color belongs to its Shoal.</p>
+    </header>
+    <section class=\"gravity-hero\">
+      <div class=\"reef-stage\" id=\"reefStage\" aria-label=\"MemoReef Gravity Map\">
+        <svg id=\"gravitySvg\" viewBox=\"0 0 1000 680\" role=\"img\" aria-label=\"Shoal gravity currents\">{''.join(circles)}</svg>
+        {''.join(labels)}
+        {''.join(fish_html)}
+      </div>
+      <aside class=\"card\">
+        <h2>Heaviest Shoals</h2>
+        <ul class=\"legend-list\">{top_html}</ul>
+        <div class=\"gravity-stats\">
+          <div><strong>{html_escape(str(counts.get('drops', 0)))}</strong><span>Drops</span></div>
+          <div><strong>{html_escape(str(counts.get('clusters', 0)))}</strong><span>Shoals</span></div>
+          <div><strong>{html_escape(str(counts.get('treasures', 0)))}</strong><span>Treasures</span></div>
+          <div><strong>{html_escape(str(counts.get('fish', 0)))}</strong><span>Visible fish</span></div>
+        </div>
+        <p>Mass currently comes from Treasure marks, review status, source metadata, labels, and recency. It is deliberately local and inspectable.</p>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>
+"""
 
 def render_library_page(vault: Path, root: str = "MemoReef") -> str:
     payload = latest_search_payload(vault, root)
@@ -4504,6 +4768,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
         link
         for link in [
             linked_file("Open dashboard", app_dir / "index.html", app_dir),
+            linked_file("Open Gravity Map", app_dir / "gravity.html", app_dir),
             linked_file("Open library search page", app_dir / "library.html", app_dir),
             linked_file("Open Review Mode launcher", app_dir / "review.html", app_dir),
             linked_file("Open reports page", app_dir / "reports.html", app_dir),
@@ -4608,6 +4873,7 @@ def generate_app_dashboard(vault: Path, root: str = "MemoReef") -> Path:
     path = app_dir / "index.html"
     path.write_text(render_app_dashboard(dashboard_state(vault_path, root)), encoding="utf-8")
     (app_dir / "pilot.html").write_text(render_pilot_page(vault_path, root), encoding="utf-8")
+    (app_dir / "gravity.html").write_text(render_gravity_page(vault_path, root), encoding="utf-8")
     (app_dir / "library.html").write_text(render_library_page(vault_path, root), encoding="utf-8")
     (app_dir / "dive.html").write_text(render_dive_page(vault_path, root), encoding="utf-8")
     (app_dir / "review.html").write_text(render_review_page(vault_path, root), encoding="utf-8")

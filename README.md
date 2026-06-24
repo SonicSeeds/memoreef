@@ -269,6 +269,7 @@ Run the guided local pilot:
 rm -rf /tmp/memoreef-pilot
 python3.11 -m memoreef.cli pilot --bookmarks /path/to/bookmarks.html --vault /tmp/memoreef-pilot --review-limit 25
 open /tmp/memoreef-pilot/MemoReef/app/pilot.html
+open /tmp/memoreef-pilot/MemoReef/app/gravity.html
 open /tmp/memoreef-pilot/MemoReef/app/tour.html
 ```
 
@@ -281,7 +282,7 @@ python3.11 -m memoreef.cli pilot --csv /path/to/links.csv --vault /tmp/memoreef-
 
 The pilot command imports your export, creates a review session, creates a duplicate report, generates static app pages, and writes `MemoReef/PILOT_README.md`. It is offline-only: no network calls, no AI calls, no backend, and no server.
 
-The generated pilot app pages are self-contained HTML with inline CSS. They are designed as a calm local workspace. The public cinematic landing page lives at [memoreef.de](https://memoreef.de/).
+The generated pilot app pages are self-contained HTML with inline CSS. They are designed as a calm local workspace. `gravity.html` adds a visual reef layer: Shoals become colored clusters, Drops become fish, and Treasures glow with more mass. The public cinematic landing page lives at [memoreef.de](https://memoreef.de/).
 
 Review a few items with the local app bridge:
 
@@ -426,11 +427,12 @@ Create a complete local demo vault:
 ```bash
 python3.11 -m memoreef.cli demo --output /tmp/memoreef-demo
 open /tmp/memoreef-demo/MemoReef/app/pilot.html
+open /tmp/memoreef-demo/MemoReef/app/gravity.html
 open /tmp/memoreef-demo/MemoReef/app/tour.html
 open /tmp/memoreef-demo/MemoReef/app/index.html
 ```
 
-The demo command writes fictional sample Drops and generates local review, duplicate, garden, search, Pearl Dive, project brief, agent-plan, pilot checklist, product tour, Drop detail, review launcher, reports, briefs, and static app artifacts. Open `MemoReef/app/pilot.html` first for the guided checklist, then use the tour, dashboard, library, Pearl Dive, review, reports, briefs, and example Drop detail pages. It does not use a backend, network call, AI call, or secrets.
+The demo command writes fictional sample Drops and generates local review, duplicate, garden, search, Pearl Dive, project brief, agent-plan, pilot checklist, visual Gravity Map, product tour, Drop detail, review launcher, reports, briefs, and static app artifacts. Open `MemoReef/app/pilot.html` first for the guided checklist, then use the Gravity Map, tour, dashboard, library, Pearl Dive, review, reports, briefs, and example Drop detail pages. It does not use a backend, network call, AI call, or secrets.
 
 Review Mode can export `memoreef-review-decisions.json` from the browser. The CLI can apply those decisions back to Markdown frontmatter.
 
@@ -526,6 +528,7 @@ Generate the static local app dashboard:
 ```bash
 python3.11 -m memoreef.cli app --vault /tmp/memoreef-vault
 open /tmp/memoreef-vault/MemoReef/app/tour.html
+open /tmp/memoreef-vault/MemoReef/app/gravity.html
 open /tmp/memoreef-vault/MemoReef/app/pilot.html
 open /tmp/memoreef-vault/MemoReef/app/index.html
 open /tmp/memoreef-vault/MemoReef/app/library.html
@@ -534,7 +537,7 @@ open /tmp/memoreef-vault/MemoReef/app/reports.html
 open /tmp/memoreef-vault/MemoReef/app/briefs.html
 ```
 
-The app command writes `index.html`, `pilot.html`, `tour.html`, `library.html`, `review.html`, `reports.html`, `briefs.html`, and one generated Drop detail page under `app/drops/` for each local Drop. The pilot page gives early users a guided local checklist; the tour page is generated from local vault data and explains the product story: messy saves, Treasures, retrieved Pearls, clutter reports, agent handoff artifacts, project briefs, library search, Drop detail pages, and why local Markdown matters. The dashboard summarizes Drop counts, shows the latest local review/agent/search/brief artifacts, links to the expanded app pages, and points to the next recommended workflow step. It is static HTML and does not start a backend.
+The app command writes `index.html`, `gravity.html`, `pilot.html`, `tour.html`, `library.html`, `review.html`, `reports.html`, `briefs.html`, and one generated Drop detail page under `app/drops/` for each local Drop. The Gravity Map turns Shoals into colored clusters and Drops into fish, with mass based on Treasure marks, review status, metadata, labels, and recency. The pilot page gives early users a guided local checklist; the tour page is generated from local vault data and explains the product story: messy saves, Treasures, retrieved Pearls, clutter reports, agent handoff artifacts, project briefs, library search, Drop detail pages, and why local Markdown matters. The dashboard summarizes Drop counts, shows the latest local review/agent/search/brief artifacts, links to the expanded app pages, and points to the next recommended workflow step. It is static HTML and does not start a backend.
 
 The static site prototypes use inline sample data. The generated local app pages are created from real vault files and local JSON artifacts. None of them start a backend.
 

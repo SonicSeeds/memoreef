@@ -1424,9 +1424,13 @@ endstream endobj
 
             app_dir = vault_path / "MemoReef" / "app"
             index = (app_dir / "index.html").read_text(encoding="utf-8")
+            gravity = (app_dir / "gravity.html").read_text(encoding="utf-8")
             tour = (app_dir / "tour.html").read_text(encoding="utf-8")
             pilot = (app_dir / "pilot.html").read_text(encoding="utf-8")
             self.assertEqual(result, 0)
+            self.assertIn("gravity.html", index)
+            self.assertIn("Gravity Map", gravity)
+            self.assertIn("fish-shape", gravity)
             self.assertIn("pilot.html", index)
             self.assertIn("pilot.html", tour)
             self.assertIn("Pilot checklist", pilot)
@@ -2254,6 +2258,7 @@ endstream endobj
                 result = main(["app", "--vault", str(vault_path)])
 
             dashboard = vault_path / "MemoReef" / "app" / "index.html"
+            gravity = vault_path / "MemoReef" / "app" / "gravity.html"
             tour = vault_path / "MemoReef" / "app" / "tour.html"
             review = vault_path / "MemoReef" / "app" / "review.html"
             reports = vault_path / "MemoReef" / "app" / "reports.html"
@@ -2262,12 +2267,14 @@ endstream endobj
             tour_html = tour.read_text(encoding="utf-8")
             self.assertEqual(result, 0)
             self.assertTrue(dashboard.exists())
+            self.assertTrue(gravity.exists())
             self.assertTrue(tour.exists())
             self.assertTrue(review.exists())
             self.assertTrue(reports.exists())
             self.assertTrue(briefs.exists())
             self.assertTrue(list((vault_path / "MemoReef" / "app" / "drops").glob("*.html")))
             self.assertIn("MemoReef local app", html)
+            self.assertIn("gravity.html", html)
             self.assertIn("tour.html", html)
             self.assertIn("review.html", html)
             self.assertIn("reports.html", html)
@@ -2276,6 +2283,11 @@ endstream endobj
             self.assertIn("Drift", html)
             self.assertIn("Review Mode", html)
             self.assertIn("Agent proposals", html)
+            gravity_html = gravity.read_text(encoding="utf-8")
+            self.assertIn("Gravity Map", gravity_html)
+            self.assertIn("Shoals show what your sources are about", gravity_html)
+            self.assertIn("fish-shape", gravity_html)
+            self.assertIn("data-treasure=\"true\"", gravity_html)
             self.assertIn("Why local Markdown matters", tour_html)
             self.assertIn("Messy saves become source memory", tour_html)
             self.assertIn("review.html", tour_html)
@@ -2309,6 +2321,7 @@ endstream endobj
             drops = sorted((root / "Drops").glob("*.md"))
             readme = root / "DEMO_README.md"
             dashboard = root / "app" / "index.html"
+            gravity = root / "app" / "gravity.html"
             library = root / "app" / "library.html"
             tour = root / "app" / "tour.html"
             review = root / "app" / "review.html"
@@ -2341,6 +2354,7 @@ endstream endobj
             self.assertGreaterEqual(treasures, 2)
             self.assertTrue(readme.exists())
             self.assertTrue(dashboard.exists())
+            self.assertTrue(gravity.exists())
             self.assertTrue(library.exists())
             self.assertTrue(tour.exists())
             self.assertTrue(review.exists())
@@ -2366,6 +2380,7 @@ endstream endobj
             readme_text = readme.read_text(encoding="utf-8")
             tour_html = tour.read_text(encoding="utf-8")
             self.assertIn("app/tour.html", readme_text)
+            self.assertIn("app/gravity.html", readme_text)
             self.assertIn("app/pilot.html", readme_text)
             self.assertIn("app/review.html", readme_text)
             self.assertIn("app/reports.html", readme_text)

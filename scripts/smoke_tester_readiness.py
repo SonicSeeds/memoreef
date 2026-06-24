@@ -113,6 +113,7 @@ def main() -> int:
         run(cli + ["pilot", "--bookmarks", str(bookmarks), "--vault", str(vault), "--review-limit", "3"], ROOT, "create sample pilot vault")
         root = vault / "MemoReef"
         require(root / "app" / "pilot.html", "pilot page")
+        require(root / "app" / "gravity.html", "Gravity Map page")
         require(root / "app" / "index.html", "local app dashboard")
         require(root / "PILOT_README.md", "pilot readme")
         drops = root / "Drops"
