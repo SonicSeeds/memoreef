@@ -2,7 +2,7 @@
 
 **Save sources. Let ideas surface.**
 
-MemoReef is local-first research memory for humans and AI agents. It turns saved links, notes, and web sources into a private Markdown source library, so you and your agents can review, connect, cite, and build from trusted context instead of starting from the open web every time.
+MemoReef turns saved links, documents, and notes into a local source memory for humans and AI agents. Review what matters, surface connections, and let agents learn from the reef.
 
 It is not trying to be another bookmark manager. MemoReef is for people with messy saved research, half-forgotten sources, and projects that need grounded memory.
 
@@ -148,9 +148,14 @@ MemoReef is a private source memory layer, not a generic bookmark manager:
 - **Drift**: unsorted inbox state for new Drops.
 - **Reef**: the living research memory in Markdown/Obsidian.
 - **Deep**: long-term archive state for saved sources.
-- **Pearls**: high-value sources worth citing or using in emerging projects.
+- **Treasures**: high-value Drops worth citing or using in emerging projects.
 - **Shoals**: related source clusters.
-- **Pearl Dive**: agents search the reef for cited Pearls and nuggets of wisdom from saved Drops.
+- **Pearls**: distilled insights surfaced from Treasures and Shoals — the essence the octopus retrieves.
+- **Pearl Dive**: agents search the reef for Treasures and return cited Pearls, source paths, and gaps.
+
+## For agents
+
+MemoReef is built for humans who read and agents who learn. Reviewed Drops, Treasures, Shoals, and Pearls can become grounded context for AI agents — from project handoffs to future Hermes `/learn` workflows that crystallize source material into reusable skills.
 
 ## Current MVP
 
@@ -398,14 +403,14 @@ python3.11 -m memoreef.cli search-library --vault /tmp/memoreef-vault --query "a
 
 Library search is local-only and read-only. It searches Markdown Drops and writes JSON results under `MemoReef/search` unless `--output` is provided.
 
-Run a Pearl Dive to retrieve cited nuggets for a question:
+Run a Pearl Dive to retrieve cited Pearls for a question:
 
 ```bash
 python3.11 -m memoreef.cli dive "agent workflow" --vault /tmp/memoreef-vault
 python3.11 -m memoreef.cli dive "research" --vault /tmp/memoreef-vault --treasure-only --limit 5
 ```
 
-Pearl Dive is local-only and read-only against Drops. It writes a Markdown Dive Report under `MemoReef/answers/*-dive-report.md` unless `--output` is provided, includes Retrieved Pearls with source URLs and Drop paths, and names Uncharted Gaps when the local reef cannot support an answer.
+Pearl Dive is local-only and read-only against Drops. It writes a Markdown Dive Report under `MemoReef/answers/*-dive-report.md` unless `--output` is provided, includes retrieved Pearls with source URLs and Drop paths, and names Uncharted Gaps when the local reef cannot support an answer.
 
 Export selected Drops into a Markdown project brief:
 
@@ -529,7 +534,7 @@ open /tmp/memoreef-vault/MemoReef/app/reports.html
 open /tmp/memoreef-vault/MemoReef/app/briefs.html
 ```
 
-The app command writes `index.html`, `pilot.html`, `tour.html`, `library.html`, `review.html`, `reports.html`, `briefs.html`, and one generated Drop detail page under `app/drops/` for each local Drop. The pilot page gives early users a guided local checklist; the tour page is generated from local vault data and explains the product story: messy saves, useful Pearls, clutter reports, agent handoff artifacts, project briefs, library search, Drop detail pages, and why local Markdown matters. The dashboard summarizes Drop counts, shows the latest local review/agent/search/brief artifacts, links to the expanded app pages, and points to the next recommended workflow step. It is static HTML and does not start a backend.
+The app command writes `index.html`, `pilot.html`, `tour.html`, `library.html`, `review.html`, `reports.html`, `briefs.html`, and one generated Drop detail page under `app/drops/` for each local Drop. The pilot page gives early users a guided local checklist; the tour page is generated from local vault data and explains the product story: messy saves, Treasures, retrieved Pearls, clutter reports, agent handoff artifacts, project briefs, library search, Drop detail pages, and why local Markdown matters. The dashboard summarizes Drop counts, shows the latest local review/agent/search/brief artifacts, links to the expanded app pages, and points to the next recommended workflow step. It is static HTML and does not start a backend.
 
 The static site prototypes use inline sample data. The generated local app pages are created from real vault files and local JSON artifacts. None of them start a backend.
 
@@ -538,7 +543,7 @@ The static site prototypes use inline sample data. The generated local app pages
 1. Robust browser bookmark import across Chrome/Brave/Arc/Firefox/Safari exports.
 2. Broader dedupe controls and duplicate reporting across importer types.
 3. `enrich` command for title refresh, metadata, summary placeholder, and dead-link checks.
-4. Review Mode data model: sink/keep/pearl, let agents finish remaining, and continue sorting later.
+4. Review Mode data model: sink/keep/treasure, let agents finish remaining, and continue sorting later.
 5. Obsidian folder conventions and Dataview-friendly frontmatter.
 6. Agent handoff format: project briefings generated from selected Drops/Shoals.
 7. Optional UI: local web app or Tauri app for Drift triage.
