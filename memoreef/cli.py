@@ -4109,6 +4109,7 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
         y = max(8.0, min(92.0, (y0 + dy) / 6.8))
         mass = html_escape(str(fish.get("mass") or 1))
         cursor_angle = ((angle_seed % 120) - 60) / 4
+        label_angle = -cursor_angle
         color = html_escape(str(fish.get("color") or "#75ead3"))
         accent = html_escape(str(fish.get("accent") or "#1aaea3"))
         title = html_escape(str(fish.get("title") or "Untitled Drop"))
@@ -4118,7 +4119,7 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
         glow = 34 if treasure else 12
         treasure_text = " · Treasure" if treasure else ""
         fish_html.append(
-            f'<a class="fish-button" href="{href}" data-treasure="{str(treasure).lower()}" aria-label="{title}. Status {status}. Mass {mass}." style="left:{x:.2f}%; top:{y:.2f}%; --mass:{mass}; --fish:{color}; --accent:{accent}; --glow:{glow}; --duration:{7 + (index % 6)}s; --angle:{angle_seed}deg; --cursor-angle:{cursor_angle:.2f}deg"><span class="fish-shape"></span><span class="fish-label"><strong>{title}</strong><br>mass {mass} · {status}{treasure_text}</span></a>'
+            f'<a class="fish-button" href="{href}" data-treasure="{str(treasure).lower()}" aria-label="{title}. Status {status}. Mass {mass}." style="left:{x:.2f}%; top:{y:.2f}%; --mass:{mass}; --fish:{color}; --accent:{accent}; --glow:{glow}; --duration:{7 + (index % 6)}s; --angle:{angle_seed}deg; --cursor-angle:{cursor_angle:.2f}deg; --label-angle:{label_angle:.2f}deg"><span class="fish-shape"></span><span class="fish-label"><strong>{title}</strong><br>mass {mass} · {status}{treasure_text}</span></a>'
         )
 
     return f"""<!doctype html>
@@ -4142,7 +4143,7 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
     .fish-shape::after {{ content:""; position:absolute; left:23%; top:32%; width:4px; height:4px; border-radius:50%; background:#031018; box-shadow:0 0 0 1px rgba(255,255,255,.25); }}
     .fish-button[data-treasure=\"true\"] .fish-shape {{ outline:2px solid rgba(241,208,122,.82); box-shadow:inset 0 1px 0 rgba(255,255,255,.42), 0 0 28px rgba(241,208,122,.48), 0 0 calc(var(--glow) * 1px) var(--fish); }}
     .fish-button:focus-visible {{ outline:2px solid var(--pearl); outline-offset:8px; border-radius:24px; }}
-    .fish-label {{ position:absolute; left:50%; top:calc(100% + 8px); transform:translateX(-50%) rotate(calc(var(--angle) / -28)); min-width:120px; max-width:210px; padding:6px 8px; border:1px solid rgba(190,242,255,.14); border-radius:10px; background:rgba(3,16,24,.82); color:var(--text); font-size:12px; line-height:1.25; opacity:0; pointer-events:none; transition:opacity .18s ease; }}
+    .fish-label {{ position:absolute; left:50%; top:calc(100% + 8px); transform:translateX(-50%) rotate(var(--label-angle, 0deg)); transform-origin:50% -18px; min-width:120px; max-width:210px; padding:6px 8px; border:1px solid rgba(190,242,255,.14); border-radius:10px; background:rgba(3,16,24,.82); color:var(--text); font-size:12px; line-height:1.25; opacity:0; pointer-events:none; transition:opacity .18s ease; }}
     .fish-button:hover .fish-label, .fish-button:focus-visible .fish-label {{ opacity:1; }}
     .cluster-label {{ position:absolute; z-index:2; transform:translate(-50%, -50%); max-width:180px; padding:7px 9px; border:1px solid rgba(190,242,255,.12); border-radius:12px; background:rgba(3,16,24,.50); backdrop-filter:blur(6px); color:rgba(237,248,248,.78); text-align:center; text-shadow:0 2px 16px rgba(0,0,0,.55); pointer-events:none; }}
     .cluster-label strong {{ display:block; font-size:18px; letter-spacing:-.03em; }}
@@ -4191,6 +4192,7 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
       if (!stage || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       const fish = Array.from(stage.querySelectorAll('.fish-button'));
       const homeAngles = new Map(fish.map((node) => [node, node.style.getPropertyValue('--cursor-angle') || '0deg']));
+      const homeLabelAngles = new Map(fish.map((node) => [node, node.style.getPropertyValue('--label-angle') || '0deg']));
       let lastEvent = null;
       let ticking = false;
       const turnFish = () => {{
@@ -4202,6 +4204,7 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
           const cy = box.top + box.height / 2;
           const angle = Math.atan2(lastEvent.clientY - cy, lastEvent.clientX - cx) * 180 / Math.PI + 180;
           node.style.setProperty('--cursor-angle', `${{angle.toFixed(2)}}deg`);
+          node.style.setProperty('--label-angle', `${{(-angle).toFixed(2)}}deg`);
         }}
       }};
       stage.addEventListener('pointermove', (event) => {{
@@ -4213,7 +4216,10 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
       }});
       stage.addEventListener('pointerleave', () => {{
         lastEvent = null;
-        for (const node of fish) node.style.setProperty('--cursor-angle', homeAngles.get(node) || '0deg');
+        for (const node of fish) {{
+          node.style.setProperty('--cursor-angle', homeAngles.get(node) || '0deg');
+          node.style.setProperty('--label-angle', homeLabelAngles.get(node) || '0deg');
+        }}
       }});
     }})();
   </script>
