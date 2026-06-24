@@ -3991,6 +3991,12 @@ def gravity_palette(index: int) -> dict[str, str]:
         {"name": "gold", "primary": "#f1d07a", "secondary": "#f49f42"},
         {"name": "blue", "primary": "#7ec8ff", "secondary": "#3978ff"},
         {"name": "kelp", "primary": "#aeea75", "secondary": "#4fb36b"},
+        {"name": "lagoon", "primary": "#86f7ff", "secondary": "#2ab7d6"},
+        {"name": "orange", "primary": "#ffb36b", "secondary": "#ff7a45"},
+        {"name": "rose", "primary": "#ff9fcf", "secondary": "#e85aa5"},
+        {"name": "indigo", "primary": "#9eb0ff", "secondary": "#5668d9"},
+        {"name": "lime", "primary": "#d7f97c", "secondary": "#84bd3a"},
+        {"name": "pearl", "primary": "#f1e6cc", "secondary": "#c9ab73"},
     ]
     return palettes[index % len(palettes)]
 
@@ -4068,7 +4074,7 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
         if isinstance(cluster, dict)
     ) or "<li>No Shoals detected yet. Import or review Drops to seed the reef.</li>"
 
-    anchors = [(500, 320), (270, 250), (730, 250), (250, 470), (740, 470), (500, 145), (500, 540), (150, 340), (850, 340), (370, 390), (630, 390), (500, 430)]
+    anchors = [(360, 310), (690, 310), (760, 170), (300, 520), (760, 515), (500, 140), (500, 570), (175, 360), (855, 350), (260, 185), (640, 120), (575, 445)]
     clusters = [cluster for cluster in payload.get("clusters", []) if isinstance(cluster, dict)]
     fish_items = [fish for fish in payload.get("fish", []) if isinstance(fish, dict)]
     cluster_positions: dict[str, tuple[int, int]] = {}
@@ -4095,11 +4101,11 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
         x0, y0 = cluster_positions.get(str(fish.get("cluster") or ""), (500, 340))
         fish_index = int(fish.get("index") or 0)
         angle_seed = (fish_index * 137 + index * 19) % 360
-        dx_lookup = [52, -68, 86, -42, 20, -95, 110, -20]
-        dy_lookup = [-24, 42, 18, -55, 66, 5, -38, 78]
-        dx = dx_lookup[index % len(dx_lookup)] + (fish_index % 3) * 12
-        dy = dy_lookup[index % len(dy_lookup)] - (fish_index % 4) * 8
-        x = max(5.0, min(95.0, (x0 + dx) / 10))
+        dx_lookup = [72, -86, 106, -54, 28, -118, 132, -22, 94, -98, 44, -138]
+        dy_lookup = [-36, 52, 28, -72, 78, 2, -54, 96, -2, 112, -104, 40]
+        dx = dx_lookup[fish_index % len(dx_lookup)] + ((index % 3) - 1) * 10
+        dy = dy_lookup[fish_index % len(dy_lookup)] + ((index % 4) - 1.5) * 8
+        x = max(8.0, min(92.0, (x0 + dx) / 10))
         y = max(8.0, min(92.0, (y0 + dy) / 6.8))
         mass = html_escape(str(fish.get("mass") or 1))
         color = html_escape(str(fish.get("color") or "#75ead3"))
@@ -4130,9 +4136,9 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
     .reef-stage::after {{ content:\"\"; position:absolute; left:-8%; right:-8%; bottom:-18px; height:150px; background:radial-gradient(ellipse at 10% 100%, rgba(241,208,122,.25), transparent 45%), radial-gradient(ellipse at 75% 100%, rgba(117,234,211,.18), transparent 45%), linear-gradient(180deg, transparent, rgba(4,15,19,.88)); }}
     #gravitySvg {{ position:absolute; inset:0; width:100%; height:100%; z-index:1; }}
     .fish-button {{ position:absolute; z-index:3; border:0; background:transparent; padding:0; transform:translate(-50%, -50%) rotate(calc(var(--angle) / 28)); cursor:pointer; filter:drop-shadow(0 9px 18px rgba(0,0,0,.28)); animation:swim var(--duration, 8s) ease-in-out infinite alternate; }}
-    .fish-shape {{ display:block; position:relative; width:calc(30px + var(--mass) * 7px); height:calc(16px + var(--mass) * 3.6px); border-radius:58% 48% 48% 58%; background:linear-gradient(135deg, var(--fish), var(--accent)); box-shadow:inset 0 1px 0 rgba(255,255,255,.32), 0 0 calc(var(--glow) * 1px) var(--fish); }}
-    .fish-shape::before {{ content:\"\"; position:absolute; right:-12px; top:50%; width:0; height:0; border-top:9px solid transparent; border-bottom:9px solid transparent; border-left:15px solid var(--accent); transform:translateY(-50%); opacity:.92; }}
-    .fish-shape::after {{ content:\"\"; position:absolute; left:24%; top:33%; width:4px; height:4px; border-radius:50%; background:#031018; box-shadow:0 0 0 1px rgba(255,255,255,.25); }}
+    .fish-shape {{ display:block; position:relative; width:48px; height:24px; border-radius:62% 44% 44% 62% / 54% 50% 50% 54%; background:linear-gradient(135deg, var(--fish), var(--accent)); box-shadow:inset 0 1px 0 rgba(255,255,255,.32), 0 0 calc(var(--glow) * 1px) var(--fish); }}
+    .fish-shape::before {{ content:""; position:absolute; right:-17px; top:50%; width:22px; height:26px; background:linear-gradient(135deg, var(--accent), var(--fish)); clip-path:polygon(0 50%, 100% 0, 72% 50%, 100% 100%); transform:translateY(-50%); opacity:.95; filter:drop-shadow(0 0 10px var(--fish)); }}
+    .fish-shape::after {{ content:""; position:absolute; left:23%; top:32%; width:4px; height:4px; border-radius:50%; background:#031018; box-shadow:0 0 0 1px rgba(255,255,255,.25); }}
     .fish-button[data-treasure=\"true\"] .fish-shape {{ outline:2px solid rgba(241,208,122,.82); box-shadow:inset 0 1px 0 rgba(255,255,255,.42), 0 0 28px rgba(241,208,122,.48), 0 0 calc(var(--glow) * 1px) var(--fish); }}
     .fish-button:focus-visible {{ outline:2px solid var(--pearl); outline-offset:8px; border-radius:24px; }}
     .fish-label {{ position:absolute; left:50%; top:calc(100% + 8px); transform:translateX(-50%) rotate(calc(var(--angle) / -28)); min-width:120px; max-width:210px; padding:6px 8px; border:1px solid rgba(190,242,255,.14); border-radius:10px; background:rgba(3,16,24,.82); color:var(--text); font-size:12px; line-height:1.25; opacity:0; pointer-events:none; transition:opacity .18s ease; }}
