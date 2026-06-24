@@ -2411,10 +2411,13 @@ endstream endobj
             app_dir = vault_path / "MemoReef" / "app"
             for page in app_dir.rglob("*.html"):
                 html = page.read_text(encoding="utf-8").lower()
-                self.assertNotIn("<script", html)
+                if page.name == "gravity.html":
+                    self.assertIn("<script>", html)
+                    self.assertNotIn("<script src=", html)
+                else:
+                    self.assertNotIn("<script", html)
                 self.assertNotIn("rel=\"stylesheet\"", html)
                 self.assertNotIn("<link", html)
-                self.assertNotIn("<script src=", html)
                 self.assertNotIn("@import", html)
                 self.assertNotIn("url(", html)
                 self.assertNotIn("cdn", html)

@@ -4108,6 +4108,7 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
         x = max(8.0, min(92.0, (x0 + dx) / 10))
         y = max(8.0, min(92.0, (y0 + dy) / 6.8))
         mass = html_escape(str(fish.get("mass") or 1))
+        cursor_angle = ((angle_seed % 120) - 60) / 4
         color = html_escape(str(fish.get("color") or "#75ead3"))
         accent = html_escape(str(fish.get("accent") or "#1aaea3"))
         title = html_escape(str(fish.get("title") or "Untitled Drop"))
@@ -4117,7 +4118,7 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
         glow = 34 if treasure else 12
         treasure_text = " · Treasure" if treasure else ""
         fish_html.append(
-            f'<a class="fish-button" href="{href}" data-treasure="{str(treasure).lower()}" aria-label="{title}. Status {status}. Mass {mass}." style="left:{x:.2f}%; top:{y:.2f}%; --mass:{mass}; --fish:{color}; --accent:{accent}; --glow:{glow}; --duration:{7 + (index % 6)}s; --angle:{angle_seed}deg"><span class="fish-shape"></span><span class="fish-label"><strong>{title}</strong><br>mass {mass} · {status}{treasure_text}</span></a>'
+            f'<a class="fish-button" href="{href}" data-treasure="{str(treasure).lower()}" aria-label="{title}. Status {status}. Mass {mass}." style="left:{x:.2f}%; top:{y:.2f}%; --mass:{mass}; --fish:{color}; --accent:{accent}; --glow:{glow}; --duration:{7 + (index % 6)}s; --angle:{angle_seed}deg; --cursor-angle:{cursor_angle:.2f}deg"><span class="fish-shape"></span><span class="fish-label"><strong>{title}</strong><br>mass {mass} · {status}{treasure_text}</span></a>'
         )
 
     return f"""<!doctype html>
@@ -4135,7 +4136,7 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
     .reef-stage::before {{ content:\"\"; position:absolute; inset:0; background:linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px); background-size:90px 90px; mask-image:radial-gradient(circle at center, #000, transparent 76%); }}
     .reef-stage::after {{ content:\"\"; position:absolute; left:-8%; right:-8%; bottom:-18px; height:150px; background:radial-gradient(ellipse at 10% 100%, rgba(241,208,122,.25), transparent 45%), radial-gradient(ellipse at 75% 100%, rgba(117,234,211,.18), transparent 45%), linear-gradient(180deg, transparent, rgba(4,15,19,.88)); }}
     #gravitySvg {{ position:absolute; inset:0; width:100%; height:100%; z-index:1; }}
-    .fish-button {{ position:absolute; z-index:3; border:0; background:transparent; padding:0; transform:translate(-50%, -50%) rotate(calc(var(--angle) / 28)); cursor:pointer; filter:drop-shadow(0 9px 18px rgba(0,0,0,.28)); animation:swim var(--duration, 8s) ease-in-out infinite alternate; }}
+    .fish-button {{ position:absolute; z-index:3; border:0; background:transparent; padding:0; transform:translate(-50%, -50%) rotate(var(--cursor-angle, calc(var(--angle) / 28))); cursor:pointer; filter:drop-shadow(0 9px 18px rgba(0,0,0,.28)); animation:swim var(--duration, 8s) ease-in-out infinite alternate; transition:transform .18s ease, filter .18s ease; }}
     .fish-shape {{ display:block; position:relative; width:48px; height:24px; border-radius:62% 44% 44% 62% / 54% 50% 50% 54%; background:linear-gradient(135deg, var(--fish), var(--accent)); box-shadow:inset 0 1px 0 rgba(255,255,255,.32), 0 0 calc(var(--glow) * 1px) var(--fish); }}
     .fish-shape::before {{ content:""; position:absolute; right:-17px; top:50%; width:22px; height:26px; background:linear-gradient(135deg, var(--accent), var(--fish)); clip-path:polygon(0 50%, 100% 0, 72% 50%, 100% 100%); transform:translateY(-50%); opacity:.95; filter:drop-shadow(0 0 10px var(--fish)); }}
     .fish-shape::after {{ content:""; position:absolute; left:23%; top:32%; width:4px; height:4px; border-radius:50%; background:#031018; box-shadow:0 0 0 1px rgba(255,255,255,.25); }}
@@ -4163,7 +4164,7 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
     <header>
       <p class=\"eyebrow\">Visual source memory</p>
       <h1>Gravity Map</h1>
-      <p>Shoals show what your sources are about. Gravity shows what is starting to matter. Each fish is a local Markdown Drop; size is mass, glow marks Treasures, and color belongs to its Shoal.</p>
+      <p>Shoals show what your sources are about. Gravity shows what is starting to matter. Each fish is a local Markdown Drop; color belongs to its Shoal, glow marks Treasures, and mass is visible in the shoal stats.</p>
     </header>
     <section class=\"gravity-hero\">
       <div class=\"reef-stage\" id=\"reefStage\" aria-label=\"MemoReef Gravity Map\">
@@ -4184,6 +4185,38 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
       </aside>
     </section>
   </main>
+  <script>
+    (() => {{
+      const stage = document.getElementById('reefStage');
+      if (!stage || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const fish = Array.from(stage.querySelectorAll('.fish-button'));
+      const homeAngles = new Map(fish.map((node) => [node, node.style.getPropertyValue('--cursor-angle') || '0deg']));
+      let lastEvent = null;
+      let ticking = false;
+      const turnFish = () => {{
+        ticking = false;
+        if (!lastEvent) return;
+        for (const node of fish) {{
+          const box = node.getBoundingClientRect();
+          const cx = box.left + box.width / 2;
+          const cy = box.top + box.height / 2;
+          const angle = Math.atan2(lastEvent.clientY - cy, lastEvent.clientX - cx) * 180 / Math.PI + 180;
+          node.style.setProperty('--cursor-angle', `${{angle.toFixed(2)}}deg`);
+        }}
+      }};
+      stage.addEventListener('pointermove', (event) => {{
+        lastEvent = event;
+        if (!ticking) {{
+          ticking = true;
+          requestAnimationFrame(turnFish);
+        }}
+      }});
+      stage.addEventListener('pointerleave', () => {{
+        lastEvent = null;
+        for (const node of fish) node.style.setProperty('--cursor-angle', homeAngles.get(node) || '0deg');
+      }});
+    }})();
+  </script>
 </body>
 </html>
 """
