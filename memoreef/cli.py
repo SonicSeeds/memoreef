@@ -4198,8 +4198,14 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
         const homeY = bounds.height * (parseFloat(node.style.top) || 50) / 100;
         node.style.left = `${{homeX.toFixed(2)}}px`;
         node.style.top = `${{homeY.toFixed(2)}}px`;
-        return {{ node, homeX, homeY, x: homeX, y: homeY, vx: ((index % 3) - 1) * 0.22, vy: (((index + 1) % 3) - 1) * 0.22, phase: index * 1.73 }};
+        return {{ node, homeX, homeY, x: homeX, y: homeY, vx: ((index % 3) - 1) * 0.22, vy: (((index + 1) % 3) - 1) * 0.22, phase: index * 1.73, locked: false }};
       }});
+      for (const state of states) {{
+        state.node.addEventListener('pointerenter', () => {{ state.locked = true; }});
+        state.node.addEventListener('pointerleave', () => {{ state.locked = false; }});
+        state.node.addEventListener('focus', () => {{ state.locked = true; }});
+        state.node.addEventListener('blur', () => {{ state.locked = false; }});
+      }}
       const face = (state, angle) => {{
         state.node.style.setProperty('--cursor-angle', `${{angle.toFixed(2)}}deg`);
         state.node.style.setProperty('--label-angle', `${{(-angle).toFixed(2)}}deg`);
@@ -4211,25 +4217,23 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
           let fy = (state.homeY - state.y) * 0.004;
           fx += Math.sin(time * 0.0012 + state.phase) * 0.052;
           fy += Math.cos(time * 0.0010 + state.phase * 1.4) * 0.052;
-          if (pointer) {{
-            const dx = state.x - pointer.x;
-            const dy = state.y - pointer.y;
-            const dist = Math.hypot(dx, dy) || 1;
-            if (dist < 140) {{
-              const force = (140 - dist) / 140 * 0.42;
-              fx += dx / dist * force;
-              fy += dy / dist * force;
-            }}
+          if (state.locked) {{
+            fx = 0;
+            fy = 0;
+            state.vx *= 0.55;
+            state.vy *= 0.55;
           }}
-          for (const other of states) {{
-            if (other === state) continue;
-            const dx = state.x - other.x;
-            const dy = state.y - other.y;
-            const dist = Math.hypot(dx, dy) || 1;
-            if (dist < 58) {{
-              const force = (58 - dist) / 58 * 0.035;
-              fx += dx / dist * force;
-              fy += dy / dist * force;
+          if (!state.locked) {{
+            for (const other of states) {{
+              if (other === state) continue;
+              const dx = state.x - other.x;
+              const dy = state.y - other.y;
+              const dist = Math.hypot(dx, dy) || 1;
+              if (dist < 58) {{
+                const force = (58 - dist) / 58 * 0.035;
+                fx += dx / dist * force;
+                fy += dy / dist * force;
+              }}
             }}
           }}
           state.vx = (state.vx + fx) * 0.925;
