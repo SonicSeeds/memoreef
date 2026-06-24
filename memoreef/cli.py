@@ -4137,7 +4137,7 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
     .reef-stage::before {{ content:\"\"; position:absolute; inset:0; background:linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px); background-size:90px 90px; mask-image:radial-gradient(circle at center, #000, transparent 76%); }}
     .reef-stage::after {{ content:\"\"; position:absolute; left:-8%; right:-8%; bottom:-18px; height:150px; background:radial-gradient(ellipse at 10% 100%, rgba(241,208,122,.25), transparent 45%), radial-gradient(ellipse at 75% 100%, rgba(117,234,211,.18), transparent 45%), linear-gradient(180deg, transparent, rgba(4,15,19,.88)); }}
     #gravitySvg {{ position:absolute; inset:0; width:100%; height:100%; z-index:1; }}
-    .fish-button {{ position:absolute; z-index:3; border:0; background:transparent; padding:0; transform:translate(-50%, -50%) rotate(var(--cursor-angle, calc(var(--angle) / 28))); cursor:pointer; filter:drop-shadow(0 9px 18px rgba(0,0,0,.28)); animation:swim var(--duration, 8s) ease-in-out infinite alternate; transition:transform .18s ease, filter .18s ease; }}
+    .fish-button {{ position:absolute; z-index:3; border:0; background:transparent; padding:0; transform:translate(-50%, -50%) rotate(var(--cursor-angle, calc(var(--angle) / 28))); cursor:pointer; filter:drop-shadow(0 9px 18px rgba(0,0,0,.28)); transition:filter .18s ease; }}
     .fish-shape {{ display:block; position:relative; width:48px; height:24px; border-radius:62% 44% 44% 62% / 54% 50% 50% 54%; background:linear-gradient(135deg, var(--fish), var(--accent)); box-shadow:inset 0 1px 0 rgba(255,255,255,.32), 0 0 calc(var(--glow) * 1px) var(--fish); }}
     .fish-shape::before {{ content:""; position:absolute; right:-17px; top:50%; width:22px; height:26px; background:linear-gradient(135deg, var(--accent), var(--fish)); clip-path:polygon(0 50%, 100% 0, 72% 50%, 100% 100%); transform:translateY(-50%); opacity:.95; filter:drop-shadow(0 0 10px var(--fish)); }}
     .fish-shape::after {{ content:""; position:absolute; left:23%; top:32%; width:4px; height:4px; border-radius:50%; background:#031018; box-shadow:0 0 0 1px rgba(255,255,255,.25); }}
@@ -4154,9 +4154,8 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
     .gravity-stats {{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; margin-top:14px; }}
     .gravity-stats div {{ padding:12px; border:1px solid rgba(190,242,255,.12); border-radius:12px; background:rgba(255,255,255,.035); }}
     .gravity-stats strong {{ display:block; font-size:24px; }}
-    @keyframes swim {{ from {{ margin-left:-8px; margin-top:-4px; }} to {{ margin-left:10px; margin-top:6px; }} }}
     @media (max-width:900px) {{ .gravity-hero {{ grid-template-columns:1fr; }} .reef-stage {{ min-height:620px; }} .gravity-stats {{ grid-template-columns:1fr 1fr; }} }}
-    @media (prefers-reduced-motion: reduce) {{ .fish-button {{ animation:none; }} }}
+    @media (prefers-reduced-motion: reduce) {{ .fish-button {{ transition:none; }} }}
   </style>
 </head>
 <body>
@@ -4190,37 +4189,69 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
     (() => {{
       const stage = document.getElementById('reefStage');
       if (!stage || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      const fish = Array.from(stage.querySelectorAll('.fish-button'));
-      const homeAngles = new Map(fish.map((node) => [node, node.style.getPropertyValue('--cursor-angle') || '0deg']));
-      const homeLabelAngles = new Map(fish.map((node) => [node, node.style.getPropertyValue('--label-angle') || '0deg']));
-      let lastEvent = null;
-      let ticking = false;
-      const turnFish = () => {{
-        ticking = false;
-        if (!lastEvent) return;
-        for (const node of fish) {{
-          const box = node.getBoundingClientRect();
-          const cx = box.left + box.width / 2;
-          const cy = box.top + box.height / 2;
-          const angle = Math.atan2(lastEvent.clientY - cy, lastEvent.clientX - cx) * 180 / Math.PI + 180;
-          node.style.setProperty('--cursor-angle', `${{angle.toFixed(2)}}deg`);
-          node.style.setProperty('--label-angle', `${{(-angle).toFixed(2)}}deg`);
+      const nodes = Array.from(stage.querySelectorAll('.fish-button'));
+      const rect = () => stage.getBoundingClientRect();
+      const bounds = rect();
+      let pointer = null;
+      const states = nodes.map((node, index) => {{
+        const homeX = bounds.width * (parseFloat(node.style.left) || 50) / 100;
+        const homeY = bounds.height * (parseFloat(node.style.top) || 50) / 100;
+        node.style.left = `${{homeX.toFixed(2)}}px`;
+        node.style.top = `${{homeY.toFixed(2)}}px`;
+        return {{ node, homeX, homeY, x: homeX, y: homeY, vx: ((index % 3) - 1) * 0.22, vy: (((index + 1) % 3) - 1) * 0.22, phase: index * 1.73 }};
+      }});
+      const face = (state, angle) => {{
+        state.node.style.setProperty('--cursor-angle', `${{angle.toFixed(2)}}deg`);
+        state.node.style.setProperty('--label-angle', `${{(-angle).toFixed(2)}}deg`);
+      }};
+      const frame = (time) => {{
+        const box = rect();
+        for (const state of states) {{
+          let fx = (state.homeX - state.x) * 0.004;
+          let fy = (state.homeY - state.y) * 0.004;
+          fx += Math.sin(time * 0.0012 + state.phase) * 0.052;
+          fy += Math.cos(time * 0.0010 + state.phase * 1.4) * 0.052;
+          if (pointer) {{
+            const dx = state.x - pointer.x;
+            const dy = state.y - pointer.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            if (dist < 140) {{
+              const force = (140 - dist) / 140 * 0.42;
+              fx += dx / dist * force;
+              fy += dy / dist * force;
+            }}
+          }}
+          for (const other of states) {{
+            if (other === state) continue;
+            const dx = state.x - other.x;
+            const dy = state.y - other.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            if (dist < 58) {{
+              const force = (58 - dist) / 58 * 0.035;
+              fx += dx / dist * force;
+              fy += dy / dist * force;
+            }}
+          }}
+          state.vx = (state.vx + fx) * 0.925;
+          state.vy = (state.vy + fy) * 0.925;
+          state.x = Math.max(38, Math.min(box.width - 38, state.x + state.vx));
+          state.y = Math.max(30, Math.min(box.height - 54, state.y + state.vy));
+          state.node.style.left = `${{state.x.toFixed(2)}}px`;
+          state.node.style.top = `${{state.y.toFixed(2)}}px`;
+          if (pointer) {{
+            face(state, Math.atan2(pointer.y - state.y, pointer.x - state.x) * 180 / Math.PI + 180);
+          }} else if (Math.abs(state.vx) + Math.abs(state.vy) > 0.03) {{
+            face(state, Math.atan2(state.vy, state.vx) * 180 / Math.PI + 180);
+          }}
         }}
+        requestAnimationFrame(frame);
       }};
       stage.addEventListener('pointermove', (event) => {{
-        lastEvent = event;
-        if (!ticking) {{
-          ticking = true;
-          requestAnimationFrame(turnFish);
-        }}
+        const box = rect();
+        pointer = {{ x: event.clientX - box.left, y: event.clientY - box.top }};
       }});
-      stage.addEventListener('pointerleave', () => {{
-        lastEvent = null;
-        for (const node of fish) {{
-          node.style.setProperty('--cursor-angle', homeAngles.get(node) || '0deg');
-          node.style.setProperty('--label-angle', homeLabelAngles.get(node) || '0deg');
-        }}
-      }});
+      stage.addEventListener('pointerleave', () => {{ pointer = null; }});
+      requestAnimationFrame(frame);
     }})();
   </script>
 </body>
