@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import importlib.metadata
+import importlib.util
 from pathlib import Path
 from typing import Any
 import csv
@@ -21,12 +23,24 @@ from .bookmarks import Bookmark
 TEXT_DOCUMENT_SUFFIXES = {".txt", ".md", ".markdown"}
 IMAGE_DOCUMENT_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp"}
 SUPPORTED_DOCUMENT_SUFFIXES = {".pdf", ".docx", *TEXT_DOCUMENT_SUFFIXES, *IMAGE_DOCUMENT_SUFFIXES}
+DOCUMENT_EXTRACTION_ENGINES = {"builtin", "auto", "docling"}
 
 
 @dataclass
 class DocumentImportResult:
     bookmark: Bookmark
     warning: str | None = None
+
+
+@dataclass
+class DocumentExtraction:
+    text: str
+    visual_analysis: str | None = None
+    numeric_analysis: str | None = None
+    warnings: list[str] = field(default_factory=list)
+    engine: str = "builtin"
+    engine_version: str | None = None
+    metadata: dict[str, str] = field(default_factory=dict)
 
 
 PDF_VISION_MAX_PAGES = 25
@@ -51,11 +65,19 @@ def parse_documents(
     ocr_lang: str | None = None,
     vision_command: str | None = None,
     vision_page_limit: int = 10,
+    engine: str = "builtin",
 ) -> tuple[list[Bookmark], list[str]]:
     bookmarks: list[Bookmark] = []
     warnings: list[str] = []
     for path in paths:
-        result = parse_document(path, ocr=ocr, ocr_lang=ocr_lang, vision_command=vision_command, vision_page_limit=vision_page_limit)
+        result = parse_document(
+            path,
+            ocr=ocr,
+            ocr_lang=ocr_lang,
+            vision_command=vision_command,
+            vision_page_limit=vision_page_limit,
+            engine=engine,
+        )
         bookmarks.append(result.bookmark)
         if result.warning:
             warnings.append(result.warning)
@@ -68,42 +90,20 @@ def parse_document(
     ocr_lang: str | None = None,
     vision_command: str | None = None,
     vision_page_limit: int = 10,
+    engine: str = "builtin",
 ) -> DocumentImportResult:
     source = path.expanduser().resolve()
     suffix = source.suffix.lower()
+    engine = normalize_document_engine(engine)
     if suffix not in SUPPORTED_DOCUMENT_SUFFIXES:
         supported = ", ".join(sorted(SUPPORTED_DOCUMENT_SUFFIXES))
         raise ValueError(f"Unsupported document type for {source.name}. Supported: {supported}")
     if not source.exists() or not source.is_file():
         raise FileNotFoundError(f"Document not found: {source}")
 
-    warning: str | None = None
-    visual_analysis: str | None = None
-    numeric_analysis: str | None = None
-    visual_warnings: list[str] = []
-    if suffix == ".docx":
-        text = extract_docx_text(source)
-    elif suffix == ".pdf":
-        text = extract_pdf_text(source)
-        if not text.strip() and ocr:
-            text, warning = extract_pdf_ocr_text(source, lang=ocr_lang)
-        elif not text.strip():
-            warning = f"{source.name}: no extractable PDF text found; run import-docs --ocr after installing tesseract and pdftoppm/poppler for scanned/image PDFs."
-        visual_analysis, visual_warnings = extract_pdf_visual_analysis(source, text, vision_command=vision_command, page_limit=vision_page_limit)
-    elif suffix in IMAGE_DOCUMENT_SUFFIXES:
-        if ocr:
-            text, warning = extract_image_ocr_text(source, lang=ocr_lang)
-        else:
-            text = ""
-            warning = f"{source.name}: image files need OCR; rerun with --ocr after installing tesseract."
-    else:
-        text = source.read_text(encoding="utf-8", errors="replace")
-
-    text = normalize_document_text(text)
-    if suffix == ".pdf":
-        numeric_analysis = extract_pdf_numeric_analysis(text, visual_analysis)
-    if visual_warnings:
-        warning = "; ".join([part for part in [warning, *visual_warnings] if part])
+    extraction = extract_document(source, engine=engine, ocr=ocr, ocr_lang=ocr_lang, vision_command=vision_command, vision_page_limit=vision_page_limit)
+    text = normalize_document_text(extraction.text)
+    warning = "; ".join(extraction.warnings) if extraction.warnings else None
     title = source.stem.replace("_", " ").replace("-", " ").strip() or source.name
     tags = ["document", suffix.lstrip(".")]
     if ocr and suffix in IMAGE_DOCUMENT_SUFFIXES | {".pdf"}:
@@ -114,12 +114,144 @@ def parse_document(
         source="document-import",
         tags=tags,
         document_text=text,
-        document_visual_analysis=visual_analysis,
-        document_numeric_analysis=numeric_analysis,
+        document_visual_analysis=extraction.visual_analysis,
+        document_numeric_analysis=extraction.numeric_analysis,
         document_type=suffix.lstrip("."),
         original_file=str(source),
+        document_extraction_engine=extraction.engine,
+        document_extraction_engine_version=extraction.engine_version,
     )
     return DocumentImportResult(bookmark=bookmark, warning=warning)
+
+
+def normalize_document_engine(engine: str | None) -> str:
+    normalized = (engine or "builtin").strip().lower()
+    if normalized not in DOCUMENT_EXTRACTION_ENGINES:
+        choices = ", ".join(sorted(DOCUMENT_EXTRACTION_ENGINES))
+        raise ValueError(f"Unsupported document extraction engine: {engine}. Supported: {choices}")
+    return normalized
+
+
+def extract_document(
+    path: Path,
+    engine: str = "builtin",
+    ocr: bool = False,
+    ocr_lang: str | None = None,
+    vision_command: str | None = None,
+    vision_page_limit: int = 10,
+) -> DocumentExtraction:
+    engine = normalize_document_engine(engine)
+    if engine == "auto":
+        if docling_available():
+            extraction = extract_document_with_docling(path, requested_engine="auto")
+            if extraction is not None:
+                return enrich_pdf_extraction(path, extraction, vision_command=vision_command, vision_page_limit=vision_page_limit)
+        extraction = extract_document_builtin(path, ocr=ocr, ocr_lang=ocr_lang, vision_command=vision_command, vision_page_limit=vision_page_limit)
+        extraction.warnings.insert(0, f"{path.name}: --engine auto used builtin extraction; no supported optional local extraction engine produced output.")
+        return extraction
+    if engine == "docling":
+        extraction = extract_document_with_docling(path, requested_engine="docling")
+        if extraction is not None:
+            return enrich_pdf_extraction(path, extraction, vision_command=vision_command, vision_page_limit=vision_page_limit)
+        fallback = extract_document_builtin(path, ocr=ocr, ocr_lang=ocr_lang, vision_command=vision_command, vision_page_limit=vision_page_limit)
+        fallback.warnings.insert(0, f"{path.name}: Docling extraction requested but docling is not installed or failed; used builtin extraction.")
+        return fallback
+    return extract_document_builtin(path, ocr=ocr, ocr_lang=ocr_lang, vision_command=vision_command, vision_page_limit=vision_page_limit)
+
+
+def extract_document_builtin(
+    path: Path,
+    ocr: bool = False,
+    ocr_lang: str | None = None,
+    vision_command: str | None = None,
+    vision_page_limit: int = 10,
+) -> DocumentExtraction:
+    suffix = path.suffix.lower()
+    warnings: list[str] = []
+    visual_analysis: str | None = None
+    numeric_analysis: str | None = None
+    if suffix == ".docx":
+        text = extract_docx_text(path)
+    elif suffix == ".pdf":
+        text = extract_pdf_text(path)
+        if not text.strip() and ocr:
+            text, warning = extract_pdf_ocr_text(path, lang=ocr_lang)
+            if warning:
+                warnings.append(warning)
+        elif not text.strip():
+            warnings.append(f"{path.name}: no extractable PDF text found; run import-docs --ocr after installing tesseract and pdftoppm/poppler for scanned/image PDFs.")
+        visual_analysis, visual_warnings = extract_pdf_visual_analysis(path, text, vision_command=vision_command, page_limit=vision_page_limit)
+        warnings.extend(visual_warnings)
+        numeric_analysis = extract_pdf_numeric_analysis(text, visual_analysis)
+    elif suffix in IMAGE_DOCUMENT_SUFFIXES:
+        if ocr:
+            text, warning = extract_image_ocr_text(path, lang=ocr_lang)
+            if warning:
+                warnings.append(warning)
+        else:
+            text = ""
+            warnings.append(f"{path.name}: image files need OCR; rerun with --ocr after installing tesseract.")
+    else:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    return DocumentExtraction(
+        text=normalize_document_text(text),
+        visual_analysis=visual_analysis,
+        numeric_analysis=numeric_analysis,
+        warnings=warnings,
+        engine="builtin",
+    )
+
+
+def docling_available() -> bool:
+    try:
+        return importlib.util.find_spec("docling.document_converter") is not None
+    except ModuleNotFoundError:
+        return False
+
+
+def package_version(package: str) -> str | None:
+    try:
+        return importlib.metadata.version(package)
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
+def extract_document_with_docling(path: Path, requested_engine: str) -> DocumentExtraction | None:
+    if not docling_available():
+        return None
+    try:
+        from docling.document_converter import DocumentConverter  # type: ignore[import-not-found]
+
+        result = DocumentConverter().convert(str(path))
+        document = getattr(result, "document", None)
+        if document is None or not hasattr(document, "export_to_markdown"):
+            return None
+        text = document.export_to_markdown()
+    except Exception:
+        return None
+    if not isinstance(text, str) or not text.strip():
+        return None
+    return DocumentExtraction(
+        text=normalize_document_text(text),
+        warnings=[] if requested_engine == "docling" else [f"{path.name}: --engine auto used Docling extraction."],
+        engine="docling",
+        engine_version=package_version("docling"),
+    )
+
+
+def enrich_pdf_extraction(
+    path: Path,
+    extraction: DocumentExtraction,
+    vision_command: str | None = None,
+    vision_page_limit: int = 10,
+) -> DocumentExtraction:
+    if path.suffix.lower() != ".pdf":
+        return extraction
+    visual_analysis, visual_warnings = extract_pdf_visual_analysis(path, extraction.text, vision_command=vision_command, page_limit=vision_page_limit)
+    extraction.visual_analysis = visual_analysis
+    extraction.numeric_analysis = extract_pdf_numeric_analysis(extraction.text, visual_analysis)
+    extraction.warnings.extend(visual_warnings)
+    return extraction
 
 
 def extract_docx_text(path: Path) -> str:

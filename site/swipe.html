@@ -986,6 +986,12 @@
           <option value="deu">German</option>
           <option value="deu+eng" selected>German + English</option>
         </select>
+        <label for="importEngine">Engine</label>
+        <select id="importEngine" aria-label="Document extraction engine">
+          <option value="builtin" selected>Built-in local</option>
+          <option value="docling">Docling optional</option>
+          <option value="auto">Auto local fallback</option>
+        </select>
       </div>
       <button class="import-action local-only" id="importDocsButton" type="button" disabled>Import documents</button>
       <div class="import-status" id="importStatus">Static mode: imports use the CLI until the localhost server is running.</div>
@@ -1162,6 +1168,7 @@
       importDocsButton: document.getElementById('importDocsButton'),
       importOcrInput: document.getElementById('importOcrInput'),
       importOcrLang: document.getElementById('importOcrLang'),
+      importEngine: document.getElementById('importEngine'),
       importStatus: document.getElementById('importStatus'),
       sampleNotice: document.querySelector('.sample-notice'),
       localStatus: document.getElementById('localStatus')
@@ -1214,6 +1221,7 @@
       selectedImportFiles.forEach(file => form.append('documents', file, file.name));
       form.append('ocr', els.importOcrInput && els.importOcrInput.checked ? 'true' : 'false');
       if (els.importOcrLang && els.importOcrLang.value) form.append('ocr_lang', els.importOcrLang.value);
+      if (els.importEngine && els.importEngine.value) form.append('engine', els.importEngine.value);
       isImportingDocs = true;
       els.importDocsButton.disabled = true;
       els.importDocsButton.textContent = 'Importing...';
@@ -1223,7 +1231,8 @@
         const data = await response.json();
         if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
         const warningText = Array.isArray(data.warnings) && data.warnings.length ? ` · ${data.warnings.length} warning${data.warnings.length === 1 ? '' : 's'}` : '';
-        setImportStatus(`Imported ${data.imported || 0} document Drop${data.imported === 1 ? '' : 's'}${warningText}`);
+        const engineText = data.engine ? ` · ${data.engine}` : '';
+        setImportStatus(`Imported ${data.imported || 0} document Drop${data.imported === 1 ? '' : 's'}${engineText}${warningText}`);
         showToast(`Imported ${data.imported || 0} document Drops. The reef accepts offerings.`);
         selectedImportFiles = [];
         if (els.importDocsInput) els.importDocsInput.value = '';
@@ -1649,8 +1658,8 @@
       hideNotice();
       const root = status && status.root ? `/${status.root}` : '';
       setLocalStatus(`Connected to local vault${root} · loading Drift Drops...`);
-      if (els.importDockHint) els.importDockHint.textContent = `Drop documents into the local vault${root}. OCR uses local tools only.`;
-      setImportStatus('Local Import Dock ready · PDFs, DOCX, TXT, Markdown, and images');
+      if (els.importDockHint) els.importDockHint.textContent = `Drop documents into the local vault${root}. OCR and optional engines run locally; unavailable engines fall back with warnings.`;
+      setImportStatus('Local Import Dock ready · PDFs, DOCX, TXT, Markdown, images · built-in engine default');
       setImportFiles(selectedImportFiles);
       loadLocalReviewSession();
     }

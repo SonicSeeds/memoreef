@@ -50,7 +50,7 @@ from .bookmarks import (
     update_markdown_frontmatter,
     write_bookmarks_to_vault,
 )
-from .documents import parse_documents
+from .documents import DOCUMENT_EXTRACTION_ENGINES, parse_documents
 
 
 def top_level_folder_counts(bookmarks: list[Bookmark]) -> dict[str, int]:
@@ -4990,6 +4990,7 @@ def build_parser() -> argparse.ArgumentParser:
     import_docs_cmd.add_argument("documents", type=Path, nargs="+", help="Document files to import (.pdf, .docx, .txt, .md, images).")
     import_docs_cmd.add_argument("--ocr", action="store_true", help="Use local OCR for image files and scanned PDFs when tesseract/pdftoppm are installed.")
     import_docs_cmd.add_argument("--ocr-lang", default=None, help="Optional Tesseract language code, e.g. eng, deu, or deu+eng.")
+    import_docs_cmd.add_argument("--engine", choices=sorted(DOCUMENT_EXTRACTION_ENGINES), default="builtin", help="Document extraction engine. Default: builtin. Optional engines fall back to builtin when unavailable.")
     import_docs_cmd.add_argument("--vision-command", default=None, help="Optional command template for PDF page image analysis. Supports {image}, {page}, and {prompt} placeholders.")
     import_docs_cmd.add_argument("--vision-page-limit", type=bounded_vision_page_limit, default=10, help="Maximum PDF pages to render for --vision-command, 1-25. Default: 10.")
     add_vault_import_options(import_docs_cmd)
@@ -5212,6 +5213,7 @@ def main(argv: list[str] | None = None) -> int:
                 ocr_lang=args.ocr_lang,
                 vision_command=args.vision_command,
                 vision_page_limit=args.vision_page_limit,
+                engine=args.engine,
             )
         except (FileNotFoundError, ValueError) as error:
             print(str(error))
@@ -5226,6 +5228,7 @@ def main(argv: list[str] | None = None) -> int:
                 "vault": args.vault.expanduser().resolve(),
                 "root": args.root,
                 "documents": len(args.documents),
+                "document_engine": args.engine,
                 "allow_duplicates": args.allow_duplicates,
             },
             len(bookmarks),

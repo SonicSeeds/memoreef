@@ -32,6 +32,8 @@ class Bookmark:
     document_type: str | None = None
     original_file: str | None = None
     document_numeric_analysis: str | None = None
+    document_extraction_engine: str | None = None
+    document_extraction_engine_version: str | None = None
 
     def __post_init__(self) -> None:
         if self.pearl:
@@ -358,6 +360,10 @@ def bookmark_to_markdown(bookmark: Bookmark) -> str:
         lines.append(f"document_type: {yaml_quote(bookmark.document_type)}")
     if bookmark.original_file:
         lines.append(f"original_file: {yaml_quote(bookmark.original_file)}")
+    if bookmark.document_extraction_engine:
+        lines.append(f"document_extraction_engine: {yaml_quote(bookmark.document_extraction_engine)}")
+    if bookmark.document_extraction_engine_version:
+        lines.append(f"document_extraction_engine_version: {yaml_quote(bookmark.document_extraction_engine_version)}")
     if bookmark.projects:
         lines.append("projects:")
         for project in bookmark.projects:

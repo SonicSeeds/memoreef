@@ -319,9 +319,52 @@ class BookmarkImportTests(unittest.TestCase):
         self.assertEqual(len(logs), 1)
         self.assertEqual(frontmatter["has_document_text"], True)
         self.assertEqual(frontmatter["document_type"], "txt")
+        self.assertEqual(frontmatter["document_extraction_engine"], "builtin")
         self.assertIn("## Document text", content)
         self.assertIn("NotebookLM-style input", content)
         self.assertIn("Markdown memory output", content)
+
+    def test_import_docs_docling_engine_falls_back_when_unavailable(self):
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            doc_path = Path(tmp) / "Research Note.txt"
+            vault_path = Path(tmp) / "vault"
+            doc_path.write_text("Docling optional fallback text", encoding="utf-8")
+
+            with patch("memoreef.documents.docling_available", return_value=False):
+                with redirect_stdout(stdout):
+                    result = main(["import-docs", str(doc_path), "--vault", str(vault_path), "--engine", "docling"])
+
+            content = next((vault_path / "MemoReef" / "Drops").glob("*.md")).read_text(encoding="utf-8")
+            frontmatter, _body = parse_markdown_frontmatter(content)
+            output = stdout.getvalue()
+
+        self.assertEqual(result, 0)
+        self.assertEqual(frontmatter["document_extraction_engine"], "builtin")
+        self.assertIn("Docling optional fallback text", content)
+        self.assertIn("Docling extraction requested", output)
+
+    def test_import_docs_auto_engine_falls_back_to_builtin_when_no_optional_engine(self):
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            doc_path = Path(tmp) / "Auto Engine.md"
+            vault_path = Path(tmp) / "vault"
+            doc_path.write_text("Auto engine builtin fallback", encoding="utf-8")
+
+            with patch("memoreef.documents.docling_available", return_value=False):
+                with redirect_stdout(stdout):
+                    result = main(["import-docs", str(doc_path), "--vault", str(vault_path), "--engine", "auto"])
+
+            content = next((vault_path / "MemoReef" / "Drops").glob("*.md")).read_text(encoding="utf-8")
+            frontmatter, _body = parse_markdown_frontmatter(content)
+            output = stdout.getvalue()
+
+        self.assertEqual(result, 0)
+        self.assertEqual(frontmatter["document_extraction_engine"], "builtin")
+        self.assertIn("Auto engine builtin fallback", content)
+        self.assertIn("--engine auto used builtin extraction", output)
 
     def test_import_docs_extracts_docx_text(self):
         import zipfile
@@ -1719,6 +1762,8 @@ endstream endobj
 
         self.assertIn("Import Dock", page)
         self.assertIn("/api/import-docs", page)
+        self.assertIn("Document extraction engine", page)
+        self.assertIn("Docling optional", page)
 
     def test_local_server_import_docs_endpoint_writes_uploaded_document(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1734,6 +1779,9 @@ endstream endobj
                 f"--{boundary}\r\n"
                 'Content-Disposition: form-data; name="ocr"\r\n\r\n'
                 "false\r\n"
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="engine"\r\n\r\n'
+                "builtin\r\n"
                 f"--{boundary}\r\n"
                 'Content-Disposition: form-data; name="documents"; filename="Research Note.txt"\r\n'
                 "Content-Type: text/plain\r\n\r\n"
@@ -1761,6 +1809,7 @@ endstream endobj
         self.assertEqual(status_code, 200)
         self.assertEqual(payload["ok"], True)
         self.assertEqual(payload["imported"], 1)
+        self.assertEqual(payload["engine"], "builtin")
         self.assertEqual(payload["warnings"], [])
         self.assertIn("Imported through Import Dock", content)
         self.assertIn('import_source: "document-import"', content)

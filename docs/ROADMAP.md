@@ -53,6 +53,7 @@ Current capabilities:
 
 - Best-effort web article extraction into `## Article text` with status/error metadata.
 - Document text extraction.
+- Optional `--engine docling` adapter for complex local document extraction, with built-in fallback.
 - Visual artifacts from captions/table-like text.
 - Optional bounded `--vision-command` for PDF page/crop analysis.
 - Numeric artifacts from extracted table candidates.
@@ -63,7 +64,7 @@ Next acceptance criteria:
 
 - Easier first-run controls for article extraction from imported URL/bookmark Drops.
 - Source quote extraction with stable anchors where possible.
-- Better table structure recovery for PDFs with multi-column/merged cells.
+- Benchmark Docling on simple, scanned, and table/formula-heavy PDFs before making it part of `--engine auto`.
 - Chart digitization beyond simple vertical bars only after calibration rules are safe.
 - Per-artifact confidence/limits visible in generated Drop pages.
 

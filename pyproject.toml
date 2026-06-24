@@ -22,6 +22,7 @@ classifiers = [
 
 [project.optional-dependencies]
 visual = ["Pillow>=10"]
+docling = ["docling>=2"]
 
 [project.scripts]
 memoreef = "memoreef.cli:main"

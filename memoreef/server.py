@@ -144,6 +144,7 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
         files: list[Path] = []
         ocr = False
         ocr_lang: str | None = None
+        engine = "builtin"
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_dir = Path(tmp)
@@ -164,12 +165,15 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
                 elif name == "ocr_lang":
                     raw_lang = value.decode("utf-8", errors="ignore").strip()
                     ocr_lang = raw_lang or None
+                elif name == "engine":
+                    raw_engine = value.decode("utf-8", errors="ignore").strip().lower()
+                    engine = raw_engine or "builtin"
 
             if not files:
                 self.send_error_json(400, "No documents uploaded")
                 return
             try:
-                bookmarks, warnings = parse_documents(files, ocr=ocr, ocr_lang=ocr_lang)
+                bookmarks, warnings = parse_documents(files, ocr=ocr, ocr_lang=ocr_lang, engine=engine)
             except (FileNotFoundError, ValueError) as error:
                 self.send_error_json(400, str(error))
                 return
@@ -183,6 +187,7 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
                 "warnings": warnings,
                 "ocr": ocr,
                 "ocr_lang": ocr_lang or "",
+                "engine": engine,
             }
         )
 
