@@ -5137,25 +5137,56 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
   <title>MemoReef Product Tour</title>
   <style>
     {app_common_css()}
-    .lede {{ max-width:760px; font-size:18px; }}
-    .stats {{ display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:12px; margin:24px 0; }}
-    .stat, section {{ border:1px solid var(--line); background:linear-gradient(180deg, var(--panel), var(--panel2)); border-radius:8px; box-shadow:0 22px 70px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.045); }}
-    .stat {{ padding:16px; }}
+    main {{ width:min(1160px, calc(100% - 32px)); }}
+    .tour-hero {{ position:relative; overflow:hidden; min-height:430px; display:grid; align-items:end; margin-bottom:18px; border:1px solid var(--line); border-radius:18px; background:linear-gradient(180deg, var(--panel), var(--panel2)); box-shadow:0 22px 70px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.045); }}
+    .tour-hero::before {{ content:""; position:absolute; inset:0; z-index:1; background:linear-gradient(90deg, rgba(3,12,19,.58), rgba(3,12,19,.28) 46%, rgba(3,12,19,.02)), linear-gradient(180deg, rgba(3,12,19,.06), rgba(3,12,19,.42)); }}
+    .hero-bg {{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:right bottom; }}
+    .hero-copy, .stat, section {{ border:1px solid var(--line); background:linear-gradient(180deg, var(--panel), var(--panel2)); border-radius:16px; box-shadow:0 22px 70px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.045); }}
+    .hero-copy {{ position:relative; z-index:2; max-width:760px; margin:28px; padding:28px; border:0; border-radius:0; background:transparent; box-shadow:none; backdrop-filter:none; text-shadow:0 2px 18px rgba(0,0,0,.78); }}
+    .hero-copy h1 {{ max-width:720px; }}
+    .lede {{ max-width:680px; font-size:18px; }}
+    .vault-note {{ color:var(--dim); font-size:13px; margin-top:22px; }}
+    .stats {{ display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:12px; margin:18px 0; }}
+    .stat {{ padding:16px; border-radius:14px; }}
     .stat strong {{ display:block; font-size:34px; }}
     .stat span {{ color:var(--muted); font-size:13px; }}
-    .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }}
-    section {{ padding:22px; }}
+    .journey {{ display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:10px; margin:18px 0 24px; }}
+    .journey-card {{ border:1px solid rgba(190,242,255,.12); border-radius:14px; padding:14px; background:rgba(255,255,255,.035); }}
+    .journey-card b {{ display:block; color:var(--text); margin-bottom:4px; }}
+    .journey-card span {{ display:block; color:var(--muted); font-size:13px; line-height:1.4; }}
+    .grid {{ display:grid; grid-template-columns:1.05fr .95fr; gap:16px; align-items:start; }}
+    section {{ padding:22px; border-radius:16px; }}
+    .tour-card {{ height:430px; overflow:auto; }}
+    section.visual {{ background:radial-gradient(circle at 96% 0%, rgba(117,234,211,.12), transparent 12rem), linear-gradient(180deg, var(--panel), var(--panel2)); }}
+    section.compact ul {{ columns:2; column-gap:28px; }}
     ul {{ margin:10px 0 0; padding-left:20px; }}
+    li {{ break-inside:avoid; margin-bottom:7px; }}
     .wide {{ grid-column:1 / -1; }}
-    @media (max-width:780px) {{ .stats, .grid {{ grid-template-columns:1fr; }} .wide {{ grid-column:auto; }} }}
+    .artifact-grid {{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }}
+    .artifact-grid p {{ margin:0; }}
+    .artifact-grid a {{ display:block; min-height:100%; padding:12px 14px; border:1px solid rgba(190,242,255,.1); border-radius:12px; background:rgba(255,255,255,.03); text-decoration:none; }}
+    @media (max-width:900px) {{ .tour-hero, .stats, .journey, .grid, .artifact-grid {{ grid-template-columns:1fr; }} .tour-card {{ height:auto; overflow:visible; }} .wide {{ grid-column:auto; }} section.compact ul {{ columns:1; }} }}
   </style>
 </head>
 <body>
   <main>
     {app_nav("tour")}
-    <h1>Messy saves become source memory.</h1>
-    <p class="lede">This static tour was generated from the current vault. It shows why MemoReef exists: scattered saves become reviewed local Markdown, useful Treasures, clutter reports, agent handoff plans, and searchable source memory.</p>
-    <p>Vault: <code>{html_escape(str(vault_path))}</code> · Root: <code>{html_escape(root)}</code></p>
+    <div class="tour-hero">
+      <img class="hero-bg" src="tour-octopus-hero.png" alt="" aria-hidden="true" />
+      <section class="hero-copy">
+        <h1>Messy saves become source memory.</h1>
+        <p class="lede">MemoReef turns scattered links into reviewed local Markdown, visible reef patterns, cited Pearls, and bounded agent handoffs.</p>
+        <p class="vault-note">Vault: <code>{html_escape(str(vault_path))}</code> · Root: <code>{html_escape(root)}</code></p>
+      </section>
+    </div>
+
+    <div class="journey" aria-label="MemoReef product path">
+      <div class="journey-card"><b>Capture</b><span>Links and documents become local Drops.</span></div>
+      <div class="journey-card"><b>Triage</b><span>Keep, sink, or mark Treasures fast.</span></div>
+      <div class="journey-card"><b>See currents</b><span>Shoals reveal what is pulling attention.</span></div>
+      <div class="journey-card"><b>Dive</b><span>Pearl Dive retrieves cited nuggets.</span></div>
+      <div class="journey-card"><b>Hand off</b><span>Agents get bounded, labeled context.</span></div>
+    </div>
 
     <div class="stats">
       <div class="stat"><strong>{html_escape(str(counts.get('total', 0)))}</strong><span>Total Drops</span></div>
@@ -5166,12 +5197,12 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
     </div>
 
     <div class="grid">
-      <section>
+      <section class="tour-card visual compact">
         <h2>The mess</h2>
         <p>MemoReef starts with the honest state of a saved-link backlog.</p>
         {html_list(mess_signals)}
       </section>
-      <section>
+      <section class="tour-card compact">
         <h2>The value</h2>
         <p>Useful saves become a Reef with Treasures, projects, and shoals.</p>
         {html_list(value_signals)}
@@ -5179,24 +5210,24 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
         <p>Detail pages: {', '.join(detail_examples) if detail_examples else 'none yet'}.</p>
         <p>Treasured or curated examples include: {html_escape(', '.join(treasure_titles or reef_titles) if (treasure_titles or reef_titles) else 'none yet')}.</p>
       </section>
-      <section>
+      <section class="tour-card compact">
         <h2>The handoff</h2>
         <p>Review sessions and agent artifacts turn human taste into a finish plan.</p>
         {html_list(review_lines) if review_lines else '<p>No review or agent handoff artifacts were detected yet.</p>'}
       </section>
-      <section>
+      <section class="tour-card visual compact">
         <h2>The library</h2>
         <p>The same Markdown Drops can be searched locally and opened as files.</p>
         {html_list(library_lines)}
         <p>Library path: <code>{html_escape((root_path / 'Drops').as_posix())}</code></p>
       </section>
-      <section class="wide">
+      <section class="wide visual">
         <h2>Why local Markdown matters</h2>
         <p>Files remain readable, private, inspectable, and agent-ready. A Drop is not trapped behind a service: it is a Markdown file with frontmatter, source URL, review state, notes, and enough context for a person or local agent to understand what it is for.</p>
       </section>
       <section class="wide">
         <h2>Open local artifacts</h2>
-        {artifact_links or '<p>No linked local artifacts were detected yet.</p>'}
+        <div class="artifact-grid">{artifact_links or '<p>No linked local artifacts were detected yet.</p>'}</div>
       </section>
     </div>
   </main>
@@ -5209,6 +5240,9 @@ def generate_app_dashboard(vault: Path, root: str = "MemoReef") -> Path:
     vault_path = vault.expanduser().resolve()
     app_dir = vault_path / root / "app"
     app_dir.mkdir(parents=True, exist_ok=True)
+    tour_asset_source = Path(__file__).resolve().parent.parent / "site" / "img" / "tour-octopus-eye-hero.png"
+    if tour_asset_source.exists():
+        (app_dir / "tour-octopus-hero.png").write_bytes(tour_asset_source.read_bytes())
     drops_dir = app_dir / "drops"
     drops_dir.mkdir(parents=True, exist_ok=True)
     path = app_dir / "index.html"
