@@ -73,6 +73,8 @@ class BookmarkImportTests(unittest.TestCase):
         content = bookmark_to_markdown(Bookmark("Example", "https://example.com"))
 
         self.assertIn("status: drift", content)
+        self.assertIn("agent_ready: true", content)
+        self.assertIn("ai_export: local_only", content)
         self.assertIn("treasure: false", content)
 
     def test_explicit_status_and_pearl_are_written(self):
@@ -1347,6 +1349,54 @@ endstream endobj
             self.assertEqual(result, 0)
             self.assertIn("Read Only Source", text)
             self.assertEqual(before, {path: path.read_text(encoding="utf-8") for path in written})
+
+    def export_agent_context(self, vault_path: Path, *args: str):
+        stdout = io.StringIO()
+        output_dir = vault_path.parent / "agent-context"
+        with redirect_stdout(stdout):
+            result = main(["export-agent-context", "--vault", str(vault_path), "--output-dir", str(output_dir), *args])
+        manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+        return result, stdout.getvalue(), output_dir, manifest
+
+    def test_export_agent_context_respects_ai_export_labels(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([
+                Bookmark("Private Source", "https://private.example", projects=["AI Agents"], status="reef", clipped_selection="private full quote"),
+                Bookmark("Redacted Source", "https://redacted.example", projects=["AI Agents"], status="reef", clipped_selection="redacted source evidence that should be shortened"),
+                Bookmark("Shareable Source", "https://shareable.example", projects=["AI Agents"], status="reef", clipped_selection="shareable full quote"),
+            ], vault_path, allow_duplicates=True)
+            self.update_drop_frontmatter(written[1], {"ai_export": "redacted"})
+            self.update_drop_frontmatter(written[2], {"ai_export": "shareable", "treasure": True})
+
+            result, output, output_dir, manifest = self.export_agent_context(vault_path, "--project", "AI Agents")
+
+            self.assertEqual(result, 0)
+            self.assertIn("- exported sources: 2", output)
+            self.assertIn("- excluded local-only: 1", output)
+            self.assertEqual(manifest["summary"]["exported"], 2)
+            self.assertEqual(manifest["summary"]["excluded_local_only"], 1)
+            labels = {source["title"]: source["ai_export"] for source in manifest["sources"]}
+            self.assertEqual(labels["Redacted Source"], "redacted")
+            self.assertEqual(labels["Shareable Source"], "shareable")
+            self.assertNotIn("Private Source", labels)
+            readme = (output_dir / "README.md").read_text(encoding="utf-8")
+            self.assertIn("Source contract", readme)
+            redacted_file = output_dir / next(source["bundle_file"] for source in manifest["sources"] if source["title"] == "Redacted Source")
+            shareable_file = output_dir / next(source["bundle_file"] for source in manifest["sources"] if source["title"] == "Shareable Source")
+            self.assertIn("Redaction note", redacted_file.read_text(encoding="utf-8"))
+            self.assertIn("shareable full quote", shareable_file.read_text(encoding="utf-8"))
+
+    def test_export_agent_context_can_deliberately_include_local_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            write_bookmarks_to_vault([Bookmark("Private Source", "https://private.example", projects=["AI Agents"], status="reef")], vault_path)
+
+            result, _output, _output_dir, manifest = self.export_agent_context(vault_path, "--project", "AI Agents", "--include-local-only")
+
+            self.assertEqual(result, 0)
+            self.assertEqual(manifest["summary"]["exported"], 1)
+            self.assertEqual(manifest["sources"][0]["ai_export"], "local_only")
 
     def test_app_writes_library_page_and_dashboard_mentions_library_search(self):
         with tempfile.TemporaryDirectory() as tmp:

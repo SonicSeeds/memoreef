@@ -341,6 +341,7 @@ def bookmark_to_markdown(bookmark: Bookmark) -> str:
         "type: drop",
         f"status: {bookmark.status}",
         "agent_ready: true",
+        "ai_export: local_only",
         f"treasure: {'true' if bookmark.treasure else 'false'}",
     ]
     if bookmark.add_date:

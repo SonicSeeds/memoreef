@@ -336,6 +336,14 @@ def replace_markdown_section(body: str, heading: str, replacement: str) -> str:
     return pattern.sub(rf"\1\n{replacement.strip()}\n\n", body)
 
 
+def demo_ai_export_label(title: str) -> str:
+    if "pricing research spreadsheet" in title.casefold():
+        return "local_only"
+    if "checklist" in title.casefold() or "notes" in title.casefold():
+        return "redacted"
+    return "shareable"
+
+
 def enrich_demo_drop(path: Path, vault: Path) -> None:
     content = path.read_text(encoding="utf-8", errors="replace")
     frontmatter, body = parse_markdown_frontmatter(content)
@@ -344,6 +352,7 @@ def enrich_demo_drop(path: Path, vault: Path) -> None:
         "demo": True,
         "metadata_status": "demo",
         "metadata_refreshed_at": DEMO_REVIEWED_AT,
+        "ai_export": demo_ai_export_label(title),
     }
     updates.update(DEMO_METADATA.get(title, {}))
     summary = DEMO_SUMMARIES.get(title, "A sample saved link in the MemoReef demo vault.")
@@ -422,6 +431,7 @@ def cleanup_previous_demo_files(vault: Path, root: str) -> None:
         root_path / "reports" / "demo-garden-suggestions.json",
         root_path / "search" / "demo-search-results.json",
         root_path / "briefs" / "demo-ai-agents-project-brief.md",
+        root_path / "agent-context" / "demo-ai-agents-context" / "manifest.json",
         root_path / "agent-plans" / "demo-agent-finish-plan.json",
         root_path / "agent-plans" / "demo-agent-proposals.json",
         vault / "memoreef-demo-review-decisions.json",
@@ -433,6 +443,14 @@ def cleanup_previous_demo_files(vault: Path, root: str) -> None:
     if app_drops.exists():
         for path in sorted(app_drops.glob("*.html")):
             path.unlink()
+    demo_context = root_path / "agent-context" / "demo-ai-agents-context"
+    if demo_context.exists():
+        for path in sorted(demo_context.rglob("*"), key=lambda item: len(item.parts), reverse=True):
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                path.rmdir()
+        demo_context.rmdir()
 
 
 def demo_readme_text(vault: Path, root: str, artifacts: dict[str, Path]) -> str:
@@ -484,6 +502,7 @@ These pages are static files. There is no backend, account, network call, or AI 
 - A search result: `{rel["search_results"]}`.
 - A Pearl Dive report: `{rel["dive_report"]}`.
 - A project brief for agent handoff: `{rel["project_brief"]}`.
+- A privacy-labeled agent context bundle manifest: `{rel["agent_context"]}`.
 - Static app pages for dashboard, visual Gravity Map, tour, library search, Pearl Dive, Review Mode instructions, reports, briefs, and one generated detail page per Drop.
 - A pilot checklist page and Markdown checklist: `{rel["pilot"]}`, `{root}/PILOT_README.md`.
 - A demo review-decisions file and agent finish artifacts: `{rel["decisions"]}`, `{rel["agent_plan"]}`, `{rel["agent_proposals"]}`.
@@ -545,6 +564,12 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
         root_path / "briefs" / "demo-ai-agents-project-brief.md",
         filters=default_review_filters(project=["AI Agents"], limit=8),
     )
+    agent_context, context_payload = create_agent_context_bundle(
+        vault,
+        root,
+        root_path / "agent-context" / "demo-ai-agents-context",
+        filters=default_review_filters(project=["AI Agents"], limit=8),
+    )
     decisions = write_demo_decisions(vault, root, review_session)
     agent_plan, plan_payload, _plan_warnings = build_agent_finish_plan(
         vault,
@@ -591,6 +616,7 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
         "search_results": search_results,
         "dive_report": dive_report,
         "project_brief": project_brief,
+        "agent_context": agent_context / "manifest.json",
         "decisions": decisions,
         "agent_plan": agent_plan,
         "agent_proposals": agent_proposals,
@@ -611,6 +637,7 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
         "search_matches": search_payload["summary"]["matches"],
         "dive_pearls": dive_pearls,
         "brief_sources": brief_payload["summary"]["sources"],
+        "agent_context_sources": context_payload["summary"]["exported"],
         "agent_proposals": proposals_payload["summary"]["proposed"],
         "dashboard": dashboard,
         "tour": tour,
@@ -1201,6 +1228,231 @@ def create_project_brief(
         "items": drops,
     }
     return output, payload
+
+
+AI_EXPORT_LABELS = {"local_only", "redacted", "shareable"}
+
+
+def normalize_ai_export_label(value: object) -> str:
+    label = str(value or "local_only").strip().lower().replace("-", "_")
+    return label if label in AI_EXPORT_LABELS else "local_only"
+
+
+def redacted_section(section: str, max_chars: int = 900) -> str:
+    text = compact_text(section)
+    if not text:
+        return ""
+    return text[:max_chars].rstrip() + ("…" if len(text) > max_chars else "")
+
+
+def agent_context_source_item(path: Path, vault: Path) -> dict[str, object]:
+    item = brief_item_from_drop(path, vault)
+    frontmatter, body = parse_markdown_frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+    item["ai_export"] = normalize_ai_export_label(frontmatter.get("ai_export"))
+    item["body"] = body
+    item["frontmatter"] = frontmatter
+    return item
+
+
+def render_context_source_markdown(drop: dict[str, object], mode: str) -> str:
+    title = str(drop.get("title") or "Untitled")
+    url = str(drop.get("url") or "")
+    summary = str(drop.get("summary") or "").strip() or str(drop.get("page_description") or "").strip() or "No summary found."
+    notes = str(drop.get("notes") or "").strip()
+    agent_brief = str(drop.get("agent_brief") or "").strip()
+    body = str(drop.get("body") or "")
+    frontmatter = drop.get("frontmatter") if isinstance(drop.get("frontmatter"), dict) else {}
+    article_text = markdown_section(body, "Article text")
+    document_text = markdown_section(body, "Document text")
+    visual_artifacts = markdown_section(body, "Visual artifacts")
+    numeric_artifacts = markdown_section(body, "Numeric artifacts")
+    clipped_selection = markdown_section(body, "Clipped selection")
+
+    lines = [
+        f"# {title}",
+        "",
+        f"- Source URL: {url or 'none'}",
+        f"- Drop path: `{drop.get('path') or ''}`",
+        f"- Status: {drop.get('status') or 'drift'}",
+        f"- Treasure: {'yes' if drop_is_treasured(drop) else 'no'}",
+        f"- AI export label: {mode}",
+        f"- Tags: {brief_list(drop.get('tags'))}",
+        f"- Projects: {brief_list(drop.get('projects'))}",
+        f"- Shoals: {brief_list(drop.get('shoals'))}",
+        "",
+        "## Summary",
+        "",
+        summary,
+        "",
+    ]
+    if notes:
+        lines.extend(["## Notes", "", notes, ""])
+    if agent_brief:
+        lines.extend(["## Drop agent brief", "", agent_brief, ""])
+
+    if mode == "shareable":
+        for heading, section in [
+            ("Clipped selection", clipped_selection),
+            ("Article text", article_text),
+            ("Document text", document_text),
+            ("Numeric artifacts", numeric_artifacts),
+            ("Visual artifacts", visual_artifacts),
+        ]:
+            if section:
+                lines.extend([f"## {heading}", "", section.strip(), ""])
+    elif mode == "redacted":
+        lines.extend([
+            "## Redaction note",
+            "",
+            "This source was exported in redacted mode: source identity, summary, labels, and short evidence snippets are preserved; full article/document/highlight text is not copied.",
+            "",
+        ])
+        snippets: list[str] = []
+        for section in [clipped_selection, article_text, document_text, numeric_artifacts, visual_artifacts]:
+            snippet = redacted_section(section)
+            if snippet:
+                snippets.append(snippet)
+        if snippets:
+            lines.extend(["## Redacted evidence snippets", ""])
+            for snippet in snippets[:5]:
+                lines.extend([f"> {snippet}", ""])
+    else:
+        lines.extend(["## Local-only note", "", "This source is local-only and should not be copied into cloud or external-agent context unless explicitly included by the user.", ""])
+
+    if isinstance(frontmatter, dict) and frontmatter.get("metadata_error"):
+        lines.extend(["## Extraction warning", "", str(frontmatter.get("metadata_error")), ""])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_context_bundle_readme(vault: Path, root: str, filters: dict[str, object], selected: list[dict[str, object]], excluded: list[dict[str, object]]) -> str:
+    counts: dict[str, int] = {label: 0 for label in sorted(AI_EXPORT_LABELS)}
+    for drop in selected:
+        counts[normalize_ai_export_label(drop.get("ai_export"))] += 1
+    lines = [
+        "# MemoReef Agent Context Bundle",
+        "",
+        f"- Generated: {utc_now_iso()}",
+        f"- Vault: `{vault}`",
+        f"- Source: `{root}/Drops`",
+        f"- Applied filters: {review_filter_summary(filters)}",
+        f"- Exported sources: {len(selected)}",
+        f"- Excluded local-only sources: {len(excluded)}",
+        f"- Labels: local_only={counts.get('local_only', 0)}, redacted={counts.get('redacted', 0)}, shareable={counts.get('shareable', 0)}",
+        "",
+        "## Source contract",
+        "",
+        "- Use this bundle as bounded project context, not as permission to browse or invent beyond it.",
+        "- Cite `Drop path` and source URL when making factual claims.",
+        "- Treat `redacted` sources as limited evidence; ask for the full local source before quoting beyond exported snippets.",
+        "- Treat `local_only` sources as private. They are excluded unless the export command explicitly included them.",
+        "- If the bundle is too thin, say so and request more reviewed Drops instead of filling gaps from memory.",
+        "",
+        "## Included sources",
+        "",
+    ]
+    if not selected:
+        lines.append("No sources were exported.")
+    for index, drop in enumerate(selected, start=1):
+        lines.extend([
+            f"### {index}. {drop.get('title') or 'Untitled'}",
+            "",
+            f"- Drop path: `{drop.get('path') or ''}`",
+            f"- URL: {drop.get('url') or 'none'}",
+            f"- Label: {normalize_ai_export_label(drop.get('ai_export'))}",
+            f"- Status: {drop.get('status') or 'drift'}",
+            f"- Treasure: {'yes' if drop_is_treasured(drop) else 'no'}",
+            "",
+        ])
+    if excluded:
+        lines.extend(["## Excluded local-only sources", ""])
+        for drop in excluded[:50]:
+            lines.append(f"- `{drop.get('path') or ''}` — {drop.get('title') or 'Untitled'}")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def create_agent_context_bundle(
+    vault: Path,
+    root: str = "MemoReef",
+    output_dir: Path | None = None,
+    filters: dict[str, object] | None = None,
+    include_local_only: bool = False,
+) -> tuple[Path, dict[str, object]]:
+    vault_path = vault.expanduser().resolve()
+    drops_dir = vault_path / root / "Drops"
+    filters = filters or default_review_filters(limit=12)
+    candidates: list[dict[str, object]] = []
+    if drops_dir.exists():
+        for path in sorted(drops_dir.rglob("*.md")):
+            drop = agent_context_source_item(path, vault_path)
+            if review_item_matches_filters(drop, filters):
+                candidates.append(drop)
+    candidates.sort(key=lambda drop: (not drop_is_treasured(drop), str(drop.get("status") or "") == "discarded", str(drop.get("path") or "")))
+    limit = filters.get("limit")
+    if isinstance(limit, int) and limit >= 0:
+        candidates = candidates[:limit]
+
+    selected: list[dict[str, object]] = []
+    excluded: list[dict[str, object]] = []
+    for drop in candidates:
+        label = normalize_ai_export_label(drop.get("ai_export"))
+        if label == "local_only" and not include_local_only:
+            excluded.append(drop)
+            continue
+        selected.append(drop)
+
+    if output_dir is None:
+        output_dir = vault_path / root / "agent-context" / timestamp_for_filename()
+    output_dir = output_dir.expanduser().resolve()
+    sources_dir = output_dir / "sources"
+    sources_dir.mkdir(parents=True, exist_ok=True)
+
+    source_entries: list[dict[str, object]] = []
+    for index, drop in enumerate(selected, start=1):
+        label = normalize_ai_export_label(drop.get("ai_export"))
+        source_name = f"{index:02d}-{slug_for_filename(str(drop.get('title') or 'source'))}.md"
+        source_path = sources_dir / source_name
+        source_path.write_text(render_context_source_markdown(drop, label), encoding="utf-8")
+        source_entries.append({
+            "title": drop.get("title") or "Untitled",
+            "path": drop.get("path") or "",
+            "url": drop.get("url") or "",
+            "status": drop.get("status") or "drift",
+            "treasure": drop_is_treasured(drop),
+            "ai_export": label,
+            "bundle_file": source_path.relative_to(output_dir).as_posix(),
+        })
+
+    readme = output_dir / "README.md"
+    readme.write_text(render_context_bundle_readme(vault_path, root, filters, selected, excluded), encoding="utf-8")
+    manifest = {
+        "version": 1,
+        "created_at": utc_now_iso(),
+        "vault": str(vault_path),
+        "source": f"{root}/Drops",
+        "filters": filters,
+        "include_local_only": include_local_only,
+        "summary": {
+            "candidates": len(candidates),
+            "exported": len(selected),
+            "excluded_local_only": len(excluded),
+            "redacted": sum(1 for item in source_entries if item["ai_export"] == "redacted"),
+            "shareable": sum(1 for item in source_entries if item["ai_export"] == "shareable"),
+            "local_only": sum(1 for item in source_entries if item["ai_export"] == "local_only"),
+        },
+        "sources": source_entries,
+        "excluded": [
+            {"title": drop.get("title") or "Untitled", "path": drop.get("path") or "", "ai_export": normalize_ai_export_label(drop.get("ai_export"))}
+            for drop in excluded
+        ],
+        "source_contract": [
+            "Use only bundled sources for factual claims.",
+            "Cite Drop path and source URL.",
+            "Do not quote beyond redacted snippets.",
+            "Ask for more local sources when evidence is insufficient.",
+        ],
+    }
+    (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return output_dir, manifest
 
 
 def export_review_session(
@@ -3536,6 +3788,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
     latest_review_decisions = latest_matching_file(vault_path, ["*review-decisions*.json"])
     latest_agent_plan = latest_matching_file(root_path / "agent-plans", ["*-agent-finish-plan.json"])
     latest_agent_proposals = latest_matching_file(root_path / "agent-plans", ["*-agent-proposals.json"])
+    latest_agent_context = latest_matching_file(root_path / "agent-context", ["manifest.json"])
     latest_duplicate_report = latest_matching_file(root_path / "reports", ["*-duplicate-report.json"])
     latest_link_check_report = latest_matching_file(root_path / "reports", ["*-link-check-report.json"])
     latest_garden_suggestions = latest_matching_file(root_path / "reports", ["*-garden-suggestions.json"])
@@ -3560,6 +3813,7 @@ def dashboard_state(vault: Path, root: str = "MemoReef") -> dict[str, object]:
         "latest_review_decisions": latest_review_decisions,
         "latest_agent_plan": latest_agent_plan,
         "latest_agent_proposals": latest_agent_proposals,
+        "latest_agent_context": latest_agent_context,
         "latest_duplicate_report": latest_duplicate_report,
         "latest_link_check_report": latest_link_check_report,
         "latest_garden_suggestions": latest_garden_suggestions,
@@ -3631,6 +3885,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
     latest_review_decisions = relative_or_none(state.get("latest_review_decisions"), vault)
     latest_agent_plan = relative_or_none(state.get("latest_agent_plan"), vault)
     latest_agent_proposals = relative_or_none(state.get("latest_agent_proposals"), vault)
+    latest_agent_context = relative_or_none(state.get("latest_agent_context"), vault)
     latest_duplicate_report = relative_or_none(state.get("latest_duplicate_report"), vault)
     latest_link_check_report = relative_or_none(state.get("latest_link_check_report"), vault)
     latest_garden_suggestions = relative_or_none(state.get("latest_garden_suggestions"), vault)
@@ -3706,6 +3961,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <dt>Review decisions JSON</dt><dd>{html_escape(latest_review_decisions)}</dd>
           <dt>Agent finish plan</dt><dd>{html_escape(latest_agent_plan)}</dd>
           <dt>Agent proposals</dt><dd>{html_escape(latest_agent_proposals)}</dd>
+          <dt>Agent context bundle</dt><dd>{html_escape(latest_agent_context)}</dd>
           <dt>Duplicate report</dt><dd>{html_escape(latest_duplicate_report)}</dd>
           <dt>Link check report</dt><dd>{html_escape(latest_link_check_report)}</dd>
           <dt>Garden suggestions</dt><dd>{html_escape(latest_garden_suggestions)}</dd>
@@ -3730,6 +3986,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
           <li>Run <code>search-library</code> to search the local Library, then open <code>library.html</code>.</li>
           <li>Run <code>dive "question"</code> to send agents into the reef for cited Pearls and nuggets, then open <code>dive.html</code>.</li>
           <li>Run <code>brief --project "AI Agents"</code> to export selected Drops into an agent-ready Markdown project brief.</li>
+          <li>Run <code>export-agent-context --project "AI Agents"</code> to create a privacy-labeled bundle for an external agent.</li>
           <li>Run <code>hub-map</code> to create Obsidian map notes and Drop-to-hub graph links.</li>
           <li>Open <code>briefs.html</code> and <code>reports.html</code> to inspect generated handoff Markdown and local report JSON.</li>
           <li>Run <code>export-review-session</code> with optional filtered review queues like <code>--project</code>, <code>--shoal</code>, or <code>--treasure-only</code>, then open <code>site/swipe.html</code> for Review Mode.</li>
@@ -4758,6 +5015,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
     search_payload = read_json_object(state.get("latest_search_results"))
     latest_project_brief = state.get("latest_project_brief")
     latest_dive_report = state.get("latest_dive_report")
+    latest_agent_context = state.get("latest_agent_context")
     latest_hub_map = state.get("latest_hub_map")
 
     mess_signals = [
@@ -4823,6 +5081,8 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
             review_lines.append(f"Agent proposals: {summary.get('proposed', 0)} drafted, {summary.get('needs_review', 0)} needing review.")
     if isinstance(latest_project_brief, Path):
         review_lines.append("Latest project brief detected for agent or human handoff.")
+    if isinstance(latest_agent_context, Path):
+        review_lines.append("Latest privacy-labeled agent context bundle detected.")
 
     library_lines: list[str] = []
     if search_payload is not None:
@@ -4860,6 +5120,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
             linked_file("Latest search results JSON", state.get("latest_search_results"), app_dir),
             linked_file("Latest Pearl Dive report Markdown", latest_dive_report, app_dir),
             linked_file("Latest project brief Markdown", state.get("latest_project_brief"), app_dir),
+            linked_file("Latest agent context manifest", latest_agent_context, app_dir),
             linked_file("Latest hub map Markdown", latest_hub_map, app_dir),
             linked_file("Latest agent finish plan JSON", state.get("latest_agent_plan"), app_dir),
             linked_file("Latest agent proposals JSON", state.get("latest_agent_proposals"), app_dir),
@@ -5065,6 +5326,22 @@ def build_parser() -> argparse.ArgumentParser:
     brief_cmd.add_argument("--treasure-only", action="store_true", help="Include only Treasured Drops.")
     brief_cmd.add_argument("--pearl-only", action="store_true", help=argparse.SUPPRESS)
     brief_cmd.add_argument("--limit", type=int, default=None, help="Cap exported sources after sorting and filtering.")
+
+    context_cmd = sub.add_parser("export-agent-context", help="Export a privacy-labeled source bundle for agents.")
+    context_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
+    context_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    context_cmd.add_argument("--output-dir", type=Path, default=None, help="Output folder. Defaults inside the vault under MemoReef/agent-context/.")
+    context_cmd.add_argument("--project", action="append", default=[], help="Export Drops with a matching project. Repeatable.")
+    context_cmd.add_argument("--shoal", action="append", default=[], help="Export Drops with a matching shoal. Repeatable.")
+    context_cmd.add_argument("--status", action="append", default=[], help="Export Drops with a matching status. Repeatable.")
+    context_cmd.add_argument("--tag", action="append", default=[], help="Export Drops with a matching tag. Repeatable.")
+    context_cmd.add_argument("--folder", action="append", default=[], help="Export Drops with a matching folder. Repeatable.")
+    context_cmd.add_argument("--hostname", action="append", default=[], help="Export Drops with a matching hostname. Repeatable.")
+    context_cmd.add_argument("--treasure-only", action="store_true", help="Export only Treasured Drops.")
+    context_cmd.add_argument("--pearl-only", action="store_true", help=argparse.SUPPRESS)
+    context_cmd.add_argument("--exclude-status", action="append", default=[], help="Exclude Drops with a matching status. Repeatable.")
+    context_cmd.add_argument("--limit", type=int, default=12, help="Cap candidate Drops after sorting and filtering. Default: 12")
+    context_cmd.add_argument("--include-local-only", action="store_true", help="Deliberately include Drops labeled ai_export: local_only in the bundle.")
 
     apply_cmd = sub.add_parser("apply-review-decisions", help="Apply Review Mode decision JSON to Markdown Drops.")
     apply_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -5362,6 +5639,36 @@ def main(argv: list[str] | None = None) -> int:
         sources = summary.get("sources", 0) if isinstance(summary, dict) else 0
         print("Exported project brief:")
         print(f"- sources: {sources}")
+        print(f"- output: {output}")
+        print(f"- filters: {review_filter_summary(filters)}")
+        return 0
+
+    if args.command == "export-agent-context":
+        filters = default_review_filters(
+            project=args.project,
+            shoal=args.shoal,
+            status=args.status,
+            tag=args.tag,
+            folder=args.folder,
+            hostname=args.hostname,
+            pearl_only=args.pearl_only,
+            treasure_only=args.treasure_only,
+            exclude_status=args.exclude_status,
+            limit=args.limit,
+        )
+        output, manifest = create_agent_context_bundle(
+            args.vault,
+            args.root,
+            args.output_dir,
+            filters,
+            args.include_local_only,
+        )
+        summary = manifest.get("summary", {})
+        exported = summary.get("exported", 0) if isinstance(summary, dict) else 0
+        excluded = summary.get("excluded_local_only", 0) if isinstance(summary, dict) else 0
+        print("Exported agent context bundle:")
+        print(f"- exported sources: {exported}")
+        print(f"- excluded local-only: {excluded}")
         print(f"- output: {output}")
         print(f"- filters: {review_filter_summary(filters)}")
         return 0
@@ -5717,6 +6024,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- search matches: {summary['search_matches']}")
         print(f"- dive pearls: {summary['dive_pearls']}")
         print(f"- brief sources: {summary['brief_sources']}")
+        print(f"- agent context sources: {summary['agent_context_sources']}")
         print(f"- agent proposals: {summary['agent_proposals']}")
         print(f"- dashboard: {summary['dashboard']}")
         print(f"- readme: {summary['readme']}")

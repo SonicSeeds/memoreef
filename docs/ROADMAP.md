@@ -101,6 +101,7 @@ Current capabilities:
 
 Next acceptance criteria:
 
+- Dogfood the current retrieval flow on Nika’s real source set before adding more mechanics.
 - Agent-assisted answer synthesis from Dive Reports only, with source files/URLs cited.
 - No answer from unsourced memory unless explicitly labeled.
 - Clear distinction between quote, summary, estimate, and missing evidence.
@@ -115,10 +116,11 @@ Current capabilities:
 - Deterministic proposal drafts.
 - Apply accepted proposals with safety checks.
 - Agent-ready Markdown Drops and reports.
+- Privacy-labeled agent context bundles with `ai_export: local_only | redacted | shareable`.
 
 Next acceptance criteria:
 
-- Export bundle for external agents: task, relevant Drops, citations, gaps.
+- Batch relabeling and preview for context exports before copying files.
 - Import agent outputs as proposals, not silent mutations.
 - Source-contract text embedded in handoff bundles.
 - Regression tests for unsafe proposal paths and stale source references.

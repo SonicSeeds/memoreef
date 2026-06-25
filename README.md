@@ -2,9 +2,9 @@
 
 **Save sources. Let ideas surface.**
 
-MemoReef turns saved links, documents, and notes into a local source memory for humans and AI agents. Review what matters, surface connections, and let agents learn from the reef.
+MemoReef turns saved links, documents, and notes into a local source memory for humans and AI agents. Review what matters, surface connections, and export bounded context without giving a cloud tool your whole archive.
 
-It is not trying to be another bookmark manager. MemoReef is for people with messy saved research, half-forgotten sources, and projects that need grounded memory.
+It is not trying to be another bookmark manager. MemoReef is for people with messy saved research, half-forgotten sources, and projects that need grounded memory. The angle is simple: your context belongs to you; agents may learn from it only through explicit local, redacted, or shareable exports.
 
 Want the Obsidian-specific walkthrough? See [Use MemoReef with Obsidian](https://memoreef.de/obsidian.html).
 
@@ -155,6 +155,7 @@ MemoReef is a private source memory layer, not a generic bookmark manager:
 - **Shoals**: related source clusters.
 - **Pearls**: distilled insights surfaced from Treasures and Shoals — the essence the octopus retrieves.
 - **Pearl Dive**: agents search the reef for Treasures and return cited Pearls, source paths, and gaps.
+- **AI export labels**: `ai_export: local_only`, `redacted`, or `shareable` tells MemoReef what can leave the vault when you create an agent context bundle.
 
 ## For agents
 
@@ -175,10 +176,11 @@ Implemented:
 - Preserve folder path as Markdown frontmatter.
 - Write one Markdown file per bookmark.
 - Store files in an Obsidian-ready folder structure.
-- Mark imported items as `status: drift`, `agent_ready: true`, and triage-ready Drop frontmatter.
+- Mark imported items as `status: drift`, `agent_ready: true`, `ai_export: local_only`, and triage-ready Drop frontmatter.
 - Export and apply local Review Mode decisions.
 - Serve local Review Mode with direct vault autosave for decisions.
 - Generate agent finish plans, deterministic proposal drafts, and local agent tags for kept or Treasured Drops.
+- Export privacy-labeled agent context bundles with a source contract, manifest, and redacted/shareable source files.
 - Generate Obsidian hub map notes and Drop-to-hub `[[links]]` so reviewed Drops form visible graph clusters.
 - Create duplicate, dead-link, metadata, garden suggestion, and library search reports.
 - Generate a refined static local app with dashboard, pilot, tour, library, Pearl Dive, review, reports, briefs, and Drop detail pages.
@@ -216,6 +218,7 @@ url: "https://example.com/local-agents"
 type: drop
 status: drift
 agent_ready: true
+ai_export: local_only
 treasure: false
 folders:
   - "AI Agents"
@@ -425,6 +428,18 @@ python3.11 -m memoreef.cli brief --vault /tmp/memoreef-vault --project "AI Agent
 
 Project briefs are local-only and read-only against Drops. They write Markdown under `MemoReef/briefs/*-project-brief.md` unless `--output` is provided, include source URLs and Drop metadata, and add an Agent handoff section that tells an agent to use only listed sources, cite URLs, note gaps, and avoid invented claims.
 
+Export a bounded agent context bundle:
+
+```bash
+# Default: only Drops labeled ai_export: redacted or shareable are copied into the bundle.
+python3.11 -m memoreef.cli export-agent-context --vault /tmp/memoreef-vault --project "AI Agents"
+
+# Deliberate override when you personally want local-only Drops included too.
+python3.11 -m memoreef.cli export-agent-context --vault /tmp/memoreef-vault --project "AI Agents" --include-local-only
+```
+
+Every new Drop starts with `ai_export: local_only`. Change individual Drops to `ai_export: redacted` or `ai_export: shareable` before exporting context to another agent. The command writes `MemoReef/agent-context/<timestamp>/README.md`, `manifest.json`, and source Markdown files. The README contains the source contract; the manifest records exported vs excluded sources; redacted files keep titles, URLs, labels, summaries, and short evidence snippets without copying the full article/document/highlight text. This is the current private-AI-context lane: export the minimum useful context, not the whole reef.
+
 Create a complete local demo vault:
 
 ```bash
@@ -546,13 +561,12 @@ The static site prototypes use inline sample data. The generated local app pages
 
 ## Near-term roadmap
 
-1. Robust browser bookmark import across Chrome/Brave/Arc/Firefox/Safari exports.
-2. Broader dedupe controls and duplicate reporting across importer types.
-3. `enrich` command for title refresh, metadata, summary placeholder, and dead-link checks.
-4. Review Mode data model: sink/keep/treasure, let agents finish remaining, and continue sorting later.
-5. Obsidian folder conventions and Dataview-friendly frontmatter.
-6. Agent handoff format: project briefings generated from selected Drops/Shoals.
-7. Optional UI: local web app or Tauri app for Drift triage.
+1. Dogfood the current local server with Nika’s own real sources: import, Review Mode, Import Dock, Pearl Dive, and one agent-context bundle.
+2. Make first-run setup calmer: one guided command, clearer empty states, and easier bookmarklet setup.
+3. Improve privacy controls around context export: batch relabeling, bundle preview, and clearer redaction boundaries.
+4. Add richer source anchors and quote extraction for articles/documents so agents can distinguish quotes, summaries, estimates, and missing evidence.
+5. Surface duplicate/dead-link/garden suggestions directly inside the app, not only as JSON reports.
+6. Keep website/demo copy aligned with the shipped local app before broader tester outreach.
 
 ## License
 
