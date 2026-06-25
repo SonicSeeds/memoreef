@@ -205,9 +205,9 @@ For common questions about local-first storage, Obsidian support, agent use, and
 
 ![MemoReef full landing page from surface to octopus reef](docs/screenshots/landing-page-octopus-pearls.png)
 
-| Review Mode local app: autosaves to vault | Mobile app mockup: visual only |
+| Review Mode local app: autosaves to vault | Product tour: octopus hero |
 | --- | --- |
-| ![MemoReef Review Mode local app with vault autosave](docs/screenshots/review-mode-swipe.png) | ![MemoReef mobile app prototype](docs/screenshots/mobile-app-prototype.png) |
+| ![MemoReef Review Mode local app with vault autosave](docs/screenshots/review-mode-swipe.png) | ![MemoReef product tour with octopus hero](docs/screenshots/tour-octopus-eye-bottom-aligned.png) |
 
 ## Example output
 
