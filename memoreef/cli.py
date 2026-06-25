@@ -503,7 +503,7 @@ These pages are static files. There is no backend, account, network call, or AI 
 - A Pearl Dive report: `{rel["dive_report"]}`.
 - A project brief for agent handoff: `{rel["project_brief"]}`.
 - A privacy-labeled agent context bundle manifest: `{rel["agent_context"]}`.
-- Static app pages for dashboard, visual Gravity Map, tour, library search, Pearl Dive, Review Mode instructions, reports, briefs, and one generated detail page per Drop.
+- Static app pages for dashboard, visual Reef Current, tour, library search, Pearl Dive, Review Mode instructions, reports, briefs, and one generated detail page per Drop.
 - A pilot checklist page and Markdown checklist: `{rel["pilot"]}`, `{root}/PILOT_README.md`.
 - A demo review-decisions file and agent finish artifacts: `{rel["decisions"]}`, `{rel["agent_plan"]}`, `{rel["agent_proposals"]}`.
 
@@ -3947,8 +3947,8 @@ def render_app_dashboard(state: dict[str, object]) -> str:
         <p>{next_action}</p>
       </div>
       <div class=\"card\">
-        <h2>Gravity Map</h2>
-        <p>Open <a href=\"gravity.html\">gravity.html</a> for a visual reef map: Shoals become colored clusters, Drops become fish, and Treasures glow with more mass.</p>
+        <h2>Reef Current</h2>
+        <p>Open <a href=\"gravity.html\">gravity.html</a> for the living reef view: Shoals become colored currents, Drops become fish, and Treasures glow with more mass.</p>
       </div>
       <div class=\"card\">
         <h2>Product tour</h2>
@@ -4019,7 +4019,7 @@ def render_app_dashboard(state: dict[str, object]) -> str:
 
 APP_NAV_ITEMS = [
     ("dashboard", "Dashboard", "index.html"),
-    ("gravity", "Gravity Map", "gravity.html"),
+    ("gravity", "Reef Current", "gravity.html"),
     ("pilot", "Pilot", "pilot.html"),
     ("tour", "Tour", "tour.html"),
     ("library", "Library", "library.html"),
@@ -4384,7 +4384,7 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
 <head>
   <meta charset=\"utf-8\" />
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-  <title>MemoReef Gravity Map</title>
+  <title>MemoReef Reef Current</title>
   <style>
     {app_common_css()}
     main {{ width:min(1180px, calc(100% - 28px)); }}
@@ -4420,17 +4420,17 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
     {app_nav("gravity")}
     <header>
       <p class=\"eyebrow\">Visual source memory</p>
-      <h1>Gravity Map</h1>
-      <p>Shoals show what your sources are about. Gravity shows what is starting to matter. Each fish is a local Markdown Drop; color belongs to its Shoal, glow marks Treasures, and mass is visible in the shoal stats.</p>
+      <h1>Reef Current</h1>
+      <p>Shoals show what your sources are about. Currents show what is starting to pull attention. Each fish is a local Markdown Drop; color belongs to its Shoal, glow marks Treasures, and mass is visible in the current stats.</p>
     </header>
     <section class=\"gravity-hero\">
-      <div class=\"reef-stage\" id=\"reefStage\" aria-label=\"MemoReef Gravity Map\">
-        <svg id=\"gravitySvg\" viewBox=\"0 0 1000 680\" role=\"img\" aria-label=\"Shoal gravity currents\">{''.join(circles)}</svg>
+      <div class=\"reef-stage\" id=\"reefStage\" aria-label=\"MemoReef Reef Current\">
+        <svg id=\"gravitySvg\" viewBox=\"0 0 1000 680\" role=\"img\" aria-label=\"Shoal reef currents\">{''.join(circles)}</svg>
         {''.join(labels)}
         {''.join(fish_html)}
       </div>
       <aside class=\"card\">
-        <h2>Heaviest Shoals</h2>
+        <h2>Strongest Currents</h2>
         <ul class=\"legend-list\">{top_html}</ul>
         <div class=\"gravity-stats\">
           <div><strong>{html_escape(str(counts.get('drops', 0)))}</strong><span>Drops</span></div>
@@ -4438,7 +4438,7 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
           <div><strong>{html_escape(str(counts.get('treasures', 0)))}</strong><span>Treasures</span></div>
           <div><strong>{html_escape(str(counts.get('fish', 0)))}</strong><span>Visible fish</span></div>
         </div>
-        <p>Mass currently comes from Treasure marks, review status, source metadata, labels, and recency. It is deliberately local and inspectable.</p>
+        <p>Current strength comes from Treasure marks, review status, source metadata, labels, and recency. It is deliberately local and inspectable.</p>
       </aside>
     </section>
   </main>
@@ -5108,7 +5108,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
         link
         for link in [
             linked_file("Open dashboard", app_dir / "index.html", app_dir),
-            linked_file("Open Gravity Map", app_dir / "gravity.html", app_dir),
+            linked_file("Open Reef Current", app_dir / "gravity.html", app_dir),
             linked_file("Open library search page", app_dir / "library.html", app_dir),
             linked_file("Open Review Mode launcher", app_dir / "review.html", app_dir),
             linked_file("Open reports page", app_dir / "reports.html", app_dir),
