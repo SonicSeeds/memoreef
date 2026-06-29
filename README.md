@@ -175,7 +175,8 @@ Implemented:
 - Import plain text URL lists.
 - Import CSV files with title, URL, source provenance, and tags.
 - Import Tokwise short-form video archives (`videos.jsonl`) as local transcript/classification Drops.
-- Capture URLs from Telegram/Discord/iMessage-style messages into local source Drops.
+- Capture URLs from Telegram/Discord/WhatsApp/iMessage-style messages into local source Drops.
+- Drop pages/highlighted text from the browser through a bookmarklet or bundled Chromium extension.
 - Extract readable article text from saved HTTP/HTTPS web pages into `## Article text` sections with honest status/error metadata.
 - Import local PDF, DOCX, text, Markdown, and OCR-assisted image/scanned-PDF files into source-memory Drops.
 - Extract PDF numeric table rows into Numeric artifacts for exact-number answers.
@@ -317,7 +318,7 @@ Start the local MemoReef server against the vault you want to write to:
 memoreef serve --vault /path/to/vault
 ```
 
-Then create a browser bookmark named `Clip to Reef` and paste this bookmarklet as the bookmark URL:
+Then create a browser bookmark named `Drop to Reef` and paste this bookmarklet as the bookmark URL:
 
 ```text
 javascript:(function(){const d={url:window.location.href,title:document.title,selection:String(window.getSelection())};fetch('http://127.0.0.1:8765/api/drop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(r=>{if(!r.ok)throw new Error();return r.json();}).then(j=>alert(j.clipped?'💧 Highlight clipped to Reef!':'💧 Page dropped to Reef!')).catch(()=>alert('❌ MemoReef local server is not running on http://127.0.0.1:8765.'));})();
@@ -327,7 +328,15 @@ Highlight useful text on any webpage, click `Clip to Reef`, and MemoReef saves t
 
 If nothing is highlighted, the same bookmarklet still saves the current page title and URL as a normal Drop.
 
-This is a localhost-only bridge to your own running `memoreef serve` process, not a browser extension, hosted sync service, database, or cloud capture tool.
+For a clickable browser-button version, load the bundled Chromium extension from `extensions/drop-to-reef`:
+
+```text
+chrome://extensions → Developer mode → Load unpacked → extensions/drop-to-reef
+```
+
+The extension uses the same local `/api/drop` endpoint. It saves the current page and includes highlighted text when present, so the browser bookmark button becomes “drop to reef” instead of “save to bookmarks.”
+
+This is a localhost-only bridge to your own running `memoreef serve` process, not a hosted sync service, database, or cloud capture tool.
 
 ## Capture from Telegram, Discord, WhatsApp, or iMessage gateways
 

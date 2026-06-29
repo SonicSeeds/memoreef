@@ -289,6 +289,23 @@ class BookmarkImportTests(unittest.TestCase):
         self.assertIn("capture-whatsapp", bookmarks[0].tags)
         self.assertIn("- Channel: whatsapp", bookmarks[0].document_text or "")
 
+    def test_browser_extension_files_target_local_drop_endpoint(self):
+        extension_dir = Path("extensions/drop-to-reef")
+        manifest = json.loads((extension_dir / "manifest.json").read_text(encoding="utf-8"))
+        popup_html = (extension_dir / "popup.html").read_text(encoding="utf-8")
+        popup_js = (extension_dir / "popup.js").read_text(encoding="utf-8")
+
+        self.assertEqual(manifest["manifest_version"], 3)
+        self.assertEqual(manifest["action"]["default_popup"], "popup.html")
+        self.assertIn("activeTab", manifest["permissions"])
+        self.assertIn("scripting", manifest["permissions"])
+        self.assertIn("http://127.0.0.1:8765/*", manifest["host_permissions"])
+        self.assertIn("Drop current page", popup_html)
+        self.assertIn("http://127.0.0.1:8765/api/drop", popup_js)
+        self.assertIn("chrome.tabs.query", popup_js)
+        self.assertIn("chrome.scripting.executeScript", popup_js)
+        self.assertIn("selection", popup_js)
+
     def test_capture_command_writes_channel_drop(self):
         stdout = io.StringIO()
         with tempfile.TemporaryDirectory() as tmp:

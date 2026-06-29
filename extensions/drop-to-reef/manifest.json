@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Drop to Reef",
+  "version": "0.1.0",
+  "description": "Save the current page or highlighted text into a local MemoReef vault.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["http://127.0.0.1:8765/*", "http://localhost:8765/*"],
+  "action": {
+    "default_title": "Drop to Reef",
+    "default_popup": "popup.html"
+  }
+}
