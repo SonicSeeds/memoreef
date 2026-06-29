@@ -212,7 +212,7 @@ For common questions about local-first storage, Obsidian support, agent use, and
 
 ## Screenshots
 
-![MemoReef full landing page from surface to octopus reef](docs/screenshots/landing-page-octopus-pearls.png)
+![MemoReef landing page Pearls section with octopus and shell](docs/screenshots/landing-page-octopus-pearls.png)
 
 ![MemoReef Reef Current fish and shoal visualization](docs/screenshots/reef-current-fish-shoals.png)
 
