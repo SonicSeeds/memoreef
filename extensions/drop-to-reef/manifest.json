@@ -3,10 +3,22 @@
   "name": "Drop to Reef",
   "version": "0.1.0",
   "description": "Save the current page or highlighted text into a local MemoReef vault.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["http://*/*"],
   "action": {
     "default_title": "Drop to Reef",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    },
     "default_popup": "popup.html"
   },
   "browser_specific_settings": {

@@ -296,7 +296,9 @@ class BookmarkImportTests(unittest.TestCase):
         popup_js = (extension_dir / "popup.js").read_text(encoding="utf-8")
 
         self.assertEqual(manifest["manifest_version"], 3)
+        self.assertEqual(manifest["icons"]["128"], "icons/icon-128.png")
         self.assertEqual(manifest["action"]["default_popup"], "popup.html")
+        self.assertEqual(manifest["action"]["default_icon"]["48"], "icons/icon-48.png")
         self.assertEqual(manifest["browser_specific_settings"]["gecko"]["id"], "drop-to-reef@memoreef.local")
         self.assertIn("activeTab", manifest["permissions"])
         self.assertIn("scripting", manifest["permissions"])
@@ -313,6 +315,10 @@ class BookmarkImportTests(unittest.TestCase):
         self.assertIn("globalThis.browser || globalThis.chrome", popup_js)
         self.assertIn("extensionApi.tabs.query", popup_js)
         self.assertIn("extensionApi.scripting.executeScript", popup_js)
+        for size in (16, 32, 48, 128):
+            icon_path = extension_dir / "icons" / f"icon-{size}.png"
+            self.assertTrue(icon_path.exists())
+            self.assertGreater(icon_path.stat().st_size, 0)
         self.assertIn("selection", popup_js)
 
     def test_capture_command_writes_channel_drop(self):
