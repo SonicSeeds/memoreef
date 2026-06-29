@@ -1,6 +1,6 @@
 # Drop to Reef browser extension
 
-Tiny Chromium-compatible extension for saving the current page into a local MemoReef vault.
+Tiny WebExtension for saving the current page into a local MemoReef vault.
 
 It posts to the existing local endpoint:
 
@@ -24,6 +24,18 @@ memoreef serve --vault /path/to/vault
 ```text
 extensions/drop-to-reef
 ```
+
+## Install temporarily in Firefox
+
+1. Open `about:debugging#/runtime/this-firefox`.
+2. Click **Load Temporary Add-on…**.
+3. Select this file:
+
+```text
+extensions/drop-to-reef/manifest.json
+```
+
+Temporary Firefox add-ons are removed when Firefox restarts. For persistent everyday Firefox use, the extension should be packaged and signed through Mozilla Add-ons or self-distribution.
 
 ## Use
 

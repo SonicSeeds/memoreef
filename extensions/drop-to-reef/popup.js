@@ -1,4 +1,5 @@
 const ENDPOINT = 'http://127.0.0.1:8765/api/drop';
+const extensionApi = globalThis.browser || globalThis.chrome;
 
 const button = document.getElementById('drop-button');
 const statusBox = document.getElementById('status');
@@ -8,8 +9,26 @@ function setStatus(message, kind = '') {
   statusBox.dataset.kind = kind;
 }
 
+function callExtensionApi(fn, ...args) {
+  const value = fn(...args);
+  if (value && typeof value.then === 'function') {
+    return value;
+  }
+  return new Promise((resolve, reject) => {
+    fn(...args, result => {
+      const runtimeError = extensionApi.runtime && extensionApi.runtime.lastError;
+      if (runtimeError) {
+        reject(new Error(runtimeError.message));
+        return;
+      }
+      resolve(result);
+    });
+  });
+}
+
 async function getActiveTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tabs = await callExtensionApi(extensionApi.tabs.query, { active: true, currentWindow: true });
+  const tab = tabs && tabs[0];
   if (!tab || !tab.id || !tab.url) {
     throw new Error('No active browser tab found.');
   }
@@ -20,10 +39,11 @@ async function getActiveTab() {
 }
 
 async function getSelection(tabId) {
-  const [result] = await chrome.scripting.executeScript({
+  const results = await callExtensionApi(extensionApi.scripting.executeScript, {
     target: { tabId },
     func: () => String(window.getSelection ? window.getSelection() : '').trim(),
   });
+  const result = results && results[0];
   return String(result && result.result ? result.result : '').slice(0, 12000);
 }
 
@@ -31,6 +51,9 @@ async function dropCurrentPage() {
   button.disabled = true;
   setStatus('Dropping into Reef…');
   try {
+    if (!extensionApi || !extensionApi.tabs || !extensionApi.scripting) {
+      throw new Error('Browser extension APIs are unavailable.');
+    }
     const tab = await getActiveTab();
     const selection = await getSelection(tab.id);
     const response = await fetch(ENDPOINT, {

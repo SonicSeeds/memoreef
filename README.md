@@ -328,10 +328,18 @@ Highlight useful text on any webpage, click `Clip to Reef`, and MemoReef saves t
 
 If nothing is highlighted, the same bookmarklet still saves the current page title and URL as a normal Drop.
 
-For a clickable browser-button version, load the bundled Chromium extension from `extensions/drop-to-reef`:
+For a clickable browser-button version, load the bundled WebExtension from `extensions/drop-to-reef`.
+
+Chromium browsers:
 
 ```text
 chrome://extensions → Developer mode → Load unpacked → extensions/drop-to-reef
+```
+
+Firefox temporary install:
+
+```text
+about:debugging#/runtime/this-firefox → Load Temporary Add-on… → extensions/drop-to-reef/manifest.json
 ```
 
 The extension uses the same local `/api/drop` endpoint. It saves the current page and includes highlighted text when present, so the browser bookmark button becomes “drop to reef” instead of “save to bookmarks.”

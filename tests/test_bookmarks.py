@@ -297,13 +297,15 @@ class BookmarkImportTests(unittest.TestCase):
 
         self.assertEqual(manifest["manifest_version"], 3)
         self.assertEqual(manifest["action"]["default_popup"], "popup.html")
+        self.assertEqual(manifest["browser_specific_settings"]["gecko"]["id"], "drop-to-reef@memoreef.local")
         self.assertIn("activeTab", manifest["permissions"])
         self.assertIn("scripting", manifest["permissions"])
         self.assertIn("http://127.0.0.1:8765/*", manifest["host_permissions"])
         self.assertIn("Drop current page", popup_html)
         self.assertIn("http://127.0.0.1:8765/api/drop", popup_js)
-        self.assertIn("chrome.tabs.query", popup_js)
-        self.assertIn("chrome.scripting.executeScript", popup_js)
+        self.assertIn("globalThis.browser || globalThis.chrome", popup_js)
+        self.assertIn("extensionApi.tabs.query", popup_js)
+        self.assertIn("extensionApi.scripting.executeScript", popup_js)
         self.assertIn("selection", popup_js)
 
     def test_capture_command_writes_channel_drop(self):
