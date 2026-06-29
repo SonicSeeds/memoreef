@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 import urllib.error
 import urllib.request
 from urllib.parse import urljoin, urlsplit
@@ -51,6 +52,7 @@ from .bookmarks import (
     update_markdown_frontmatter,
     write_bookmarks_to_vault,
 )
+from .capture import capture_text_to_bookmarks
 from .documents import DOCUMENT_EXTRACTION_ENGINES, parse_documents
 
 
@@ -5286,6 +5288,13 @@ def build_parser() -> argparse.ArgumentParser:
     import_tokwise_cmd.add_argument("jsonl", type=Path, help="Tokwise videos.jsonl file, usually ~/.tokwise/videos/videos.jsonl.")
     add_vault_import_options(import_tokwise_cmd)
 
+    capture_cmd = sub.add_parser("capture", help="Capture URLs from a Telegram/Discord/iMessage-style message into Drops.")
+    capture_cmd.add_argument("message", nargs="?", default=None, help="Message text, e.g. 'reef: https://example.com'. Reads stdin when omitted.")
+    capture_cmd.add_argument("--channel", default="manual", help="Source channel label, e.g. telegram, discord, imessage. Default: manual")
+    capture_cmd.add_argument("--sender", default=None, help="Optional sender label stored in the captured message metadata.")
+    capture_cmd.add_argument("--title", default=None, help="Optional title for a single captured URL.")
+    add_vault_import_options(capture_cmd)
+
     import_docs_cmd = sub.add_parser("import-docs", help="Import PDF, DOCX, text, image, or Markdown documents into local Markdown Drops.")
     import_docs_cmd.add_argument("documents", type=Path, nargs="+", help="Document files to import (.pdf, .docx, .txt, .md, images).")
     import_docs_cmd.add_argument("--ocr", action="store_true", help="Use local OCR for image files and scanned PDFs when tesseract/pdftoppm are installed.")
@@ -5529,6 +5538,18 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         written = import_bookmarks(bookmarks, args.jsonl, args.vault, args.root, args.allow_duplicates)
         print(f"Imported {len(written)} Tokwise Drops into {Path(args.vault).expanduser().resolve() / args.root}")
+        if written:
+            print(f"First Drop: {written[0]}")
+        return 0
+
+    if args.command == "capture":
+        message = args.message if args.message is not None else sys.stdin.read()
+        bookmarks = capture_text_to_bookmarks(message, channel=args.channel, sender=args.sender, title=args.title)
+        if not bookmarks:
+            print("Capture message must include at least one http(s) URL.")
+            return 1
+        written = write_bookmarks_to_vault(bookmarks, args.vault, args.root, allow_duplicates=args.allow_duplicates)
+        print(f"Captured {len(written)} Drops from {args.channel} into {Path(args.vault).expanduser().resolve() / args.root}")
         if written:
             print(f"First Drop: {written[0]}")
         return 0

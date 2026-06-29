@@ -13,6 +13,7 @@ import urllib.request
 from unittest.mock import patch
 
 from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, parse_markdown_frontmatter, parse_tokwise_jsonl, update_markdown_frontmatter, write_bookmarks_to_vault
+from memoreef.capture import capture_text_to_bookmarks, parse_capture_text
 from memoreef.cli import main
 from memoreef.documents import detect_visual_region_boxes, extract_pdf_numeric_analysis, pdf_page_count, pdf_rendered_page_number, pdf_visual_size_warnings
 from memoreef.server import create_server, is_loopback_bind, review_mode_urls
@@ -251,6 +252,54 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("- Parsed bookmark count: 2", log_content)
             self.assertIn("- Written Drop count: 1", log_content)
             self.assertIn("- Skipped duplicate count: 1", log_content)
+
+    def test_capture_text_parses_channel_commands_and_urls(self):
+        intent = parse_capture_text(
+            "signal: This belongs in MemoReef https://example.com/tool and https://youtu.be/demo.",
+            channel="telegram",
+            sender="Nika",
+        )
+        bookmarks = capture_text_to_bookmarks(intent.raw_text, channel=intent.channel, sender=intent.sender)
+
+        self.assertEqual(intent.command, "signal")
+        self.assertEqual(intent.channel, "telegram")
+        self.assertEqual(intent.sender, "Nika")
+        self.assertEqual(intent.urls, ["https://example.com/tool", "https://youtu.be/demo"])
+        self.assertEqual(len(bookmarks), 2)
+        self.assertEqual(bookmarks[0].source, "channel-telegram")
+        self.assertEqual(bookmarks[0].folders, ["Signals", "telegram"])
+        self.assertIn("capture-telegram", bookmarks[0].tags)
+        self.assertIn("signal", bookmarks[0].tags)
+        self.assertIn("### Capture message", bookmarks[0].document_text or "")
+        self.assertEqual(bookmarks[0].document_type, "channel-capture")
+
+    def test_capture_command_writes_channel_drop(self):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            with redirect_stdout(stdout):
+                result = main([
+                    "capture",
+                    "reef: Save this from Discord https://example.com/discord-link",
+                    "--channel",
+                    "discord",
+                    "--sender",
+                    "nika",
+                    "--vault",
+                    str(vault_path),
+                ])
+            drops = list((vault_path / "MemoReef" / "Drops").glob("*.md"))
+            content = drops[0].read_text(encoding="utf-8") if drops else ""
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(drops), 1)
+        self.assertIn('import_source: "channel-discord"', content)
+        self.assertIn('document_type: "channel-capture"', content)
+        self.assertIn('document_extraction_engine: "memoreef-capture"', content)
+        self.assertIn('  - "capture-discord"', content)
+        self.assertIn("- Channel: discord", content)
+        self.assertIn("- Sender: nika", content)
+        self.assertIn("Captured 1 Drops from discord", stdout.getvalue())
 
     def test_parse_tokwise_jsonl_preserves_transcript_and_classification(self):
         video = {
@@ -1932,6 +1981,48 @@ endstream endobj
         self.assertEqual(payload["warnings"], [])
         self.assertIn("Imported through Import Dock", content)
         self.assertIn('import_source: "document-import"', content)
+
+    def test_local_server_capture_endpoint_writes_channel_drops(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            try:
+                server = create_server(vault_path, host="127.0.0.1", port=0, limit=50)
+            except PermissionError as error:
+                self.skipTest(f"localhost socket binding unavailable: {error}")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/capture",
+                    data=json.dumps({
+                        "text": "signal: Agent gateway link https://example.com/gateway",
+                        "channel": "telegram",
+                        "sender": "Nika",
+                    }).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    status_code = response.status
+                    payload = json.loads(response.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+            written = Path(payload["written"][0])
+            content = written.read_text(encoding="utf-8")
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["ok"], True)
+        self.assertEqual(payload["captured"], 1)
+        self.assertIn('import_source: "channel-telegram"', content)
+        self.assertIn('  - "signal"', content)
+        self.assertIn('  - "capture-telegram"', content)
+        self.assertIn('  - "Signals"', content)
+        self.assertIn('  - "telegram"', content)
+        self.assertIn("Agent gateway link", content)
+        self.assertIn("- Sender: Nika", content)
 
     def test_local_server_drop_endpoint_writes_url_and_title(self):
         with tempfile.TemporaryDirectory() as tmp:

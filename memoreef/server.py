@@ -11,6 +11,7 @@ from email.parser import BytesParser
 from email.policy import default as email_policy
 
 from .bookmarks import Bookmark, write_bookmarks_to_vault
+from .capture import capture_text_to_bookmarks
 from .cli import apply_review_decision_payload, build_review_session_payload, default_review_filters, tag_reviewed_drops
 from .documents import parse_documents
 
@@ -64,7 +65,7 @@ class MemoReefHTTPServer(ThreadingHTTPServer):
 
 class MemoReefRequestHandler(BaseHTTPRequestHandler):
     server: MemoReefHTTPServer
-    cors_api_paths = {"/api/drop"}
+    cors_api_paths = {"/api/drop", "/api/capture"}
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -113,10 +114,32 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/drop":
             self.handle_drop()
             return
+        if parsed.path == "/api/capture":
+            self.handle_capture()
+            return
         if parsed.path == "/api/import-docs":
             self.handle_import_docs()
             return
         self.send_error_json(404, "Not found")
+
+    def handle_capture(self) -> None:
+        payload = self.read_json_object_body()
+        if payload is None:
+            return
+
+        text = str(payload.get("text") or payload.get("message") or "").strip()
+        if not text:
+            self.send_error_json(400, "text is required")
+            return
+        channel = str(payload.get("channel") or "gateway").strip() or "gateway"
+        sender = str(payload.get("sender") or "").strip() or None
+        title = str(payload.get("title") or "").strip() or None
+        bookmarks = capture_text_to_bookmarks(text, channel=channel, sender=sender, title=title)
+        if not bookmarks:
+            self.send_error_json(400, "capture text must include at least one http(s) URL")
+            return
+        written = write_bookmarks_to_vault(bookmarks, self.server.vault, self.server.root, allow_duplicates=True)
+        self.send_json({"ok": True, "captured": len(written), "written": [str(path) for path in written]})
 
     def handle_import_docs(self) -> None:
         content_type = self.headers.get("Content-Type", "")
