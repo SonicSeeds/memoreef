@@ -273,6 +273,22 @@ class BookmarkImportTests(unittest.TestCase):
         self.assertIn("### Capture message", bookmarks[0].document_text or "")
         self.assertEqual(bookmarks[0].document_type, "channel-capture")
 
+    def test_capture_text_accepts_whatsapp_slash_command(self):
+        intent = parse_capture_text(
+            "/reef save for later https://example.com/whatsapp",
+            channel="whatsapp",
+            sender="Nika",
+        )
+        bookmarks = capture_text_to_bookmarks(intent.raw_text, channel=intent.channel, sender=intent.sender)
+
+        self.assertEqual(intent.command, "reef")
+        self.assertEqual(intent.channel, "whatsapp")
+        self.assertEqual(intent.urls, ["https://example.com/whatsapp"])
+        self.assertEqual(bookmarks[0].source, "channel-whatsapp")
+        self.assertEqual(bookmarks[0].folders, ["Inbox", "whatsapp"])
+        self.assertIn("capture-whatsapp", bookmarks[0].tags)
+        self.assertIn("- Channel: whatsapp", bookmarks[0].document_text or "")
+
     def test_capture_command_writes_channel_drop(self):
         stdout = io.StringIO()
         with tempfile.TemporaryDirectory() as tmp:

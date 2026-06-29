@@ -127,7 +127,7 @@ memoreef import-docs /path/to/complex-paper.pdf --vault /tmp/memoreef-vault --en
 
 `import-tokwise` imports a local Tokwise `videos.jsonl` export — usually created by `tokwise auth from-browser && tw sync` — into short-form-video Drops. It preserves the TikTok URL, author/collection context, Tokwise classification, hashtags, stats, and transcript in local Markdown. MemoReef only reads the already-created JSONL file; it does not read browser cookies or contact TikTok itself.
 
-`capture` turns Telegram/Discord/iMessage-style messages into local Drops. It understands lightweight commands such as `reef:`, `drop:`, `signal:`, `youtube:`, and `x:` and stores the original message, source channel, sender label, and extracted URLs in Markdown. This gives dedicated-agent-machine setups a low-friction bridge from the channels where people already send links to the computer that owns the vault.
+`capture` turns Telegram/Discord/WhatsApp/iMessage-style messages into local Drops. It understands lightweight commands such as `/reef`, `/drop`, `reef:`, `drop:`, `signal:`, `youtube:`, and `x:` and stores the original message, source channel, sender label, and extracted URLs in Markdown. This gives dedicated-agent-machine setups a low-friction bridge from the channels where people already send links to the computer that owns the vault.
 
 `import-docs` turns PDFs, DOCX files, text files, Markdown files, and image files into local Markdown Drops with source-file metadata and a `## Document text` section. It is useful for NotebookLM-style source collection when you want the durable output to stay in your own Markdown/Obsidian memory instead of a hosted notebook. Text-based PDFs work directly. Scanned/image PDFs and image files need `--ocr` plus local OCR tools (`tesseract`; scanned PDFs also need `pdftoppm`/Poppler). Use `--ocr-lang` for non-English documents, for example `deu+eng`.
 
@@ -329,13 +329,14 @@ If nothing is highlighted, the same bookmarklet still saves the current page tit
 
 This is a localhost-only bridge to your own running `memoreef serve` process, not a browser extension, hosted sync service, database, or cloud capture tool.
 
-## Capture from Telegram, Discord, or iMessage gateways
+## Capture from Telegram, Discord, WhatsApp, or iMessage gateways
 
 Dedicated-agent-machine setups often split capture and memory across devices: the human is on a MacBook or phone, while the agent and Obsidian vault live on a Mac mini, server, or VPS. MemoReef's channel capture path is the bridge.
 
 For direct CLI capture:
 
 ```bash
+memoreef capture "/reef https://example.com/useful-source" --channel whatsapp --vault /path/to/vault
 memoreef capture "reef: https://example.com/useful-source" --channel telegram --vault /path/to/vault
 memoreef capture "signal: agent gateway pattern https://example.com/thread" --channel discord --sender nika --vault /path/to/vault
 ```
@@ -348,7 +349,7 @@ curl -X POST http://127.0.0.1:8765/api/capture \
   -d '{"channel":"telegram","sender":"nika","text":"signal: https://example.com/thread"}'
 ```
 
-The endpoint accepts `text` or `message`, extracts every `http(s)` URL, and writes one Drop per URL. Supported command prefixes are `reef:`, `drop:`, `signal:`, `youtube:`, and `x:`. Real Telegram/Discord/iMessage bots should stay as thin adapters: receive message, pass `{channel, sender, text}` to the local MemoReef server, and let MemoReef write the vault.
+The endpoint accepts `text` or `message`, extracts every `http(s)` URL, and writes one Drop per URL. Supported command prefixes are `/reef`, `/drop`, `reef:`, `drop:`, `signal:`, `youtube:`, and `x:`. Real Telegram/Discord/WhatsApp/iMessage bots should stay as thin adapters: receive message, pass `{channel, sender, text}` to the local MemoReef server, and let MemoReef write the vault.
 
 Phone/LAN/Tailscale mode uses the same real Review Mode and the same local Markdown writes. Each user runs this on their own computer against their own vault:
 
