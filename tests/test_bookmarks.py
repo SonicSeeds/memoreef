@@ -300,6 +300,7 @@ class BookmarkImportTests(unittest.TestCase):
         self.assertEqual(manifest["action"]["default_popup"], "popup.html")
         self.assertEqual(manifest["action"]["default_icon"]["48"], "icons/icon-48.png")
         self.assertEqual(manifest["browser_specific_settings"]["gecko"]["id"], "drop-to-reef@memoreef.local")
+        self.assertIn('fill="#010810"', Path("site/img/logo-symbol.svg").read_text(encoding="utf-8"))
         self.assertIn("activeTab", manifest["permissions"])
         self.assertIn("scripting", manifest["permissions"])
         self.assertIn("storage", manifest["permissions"])
