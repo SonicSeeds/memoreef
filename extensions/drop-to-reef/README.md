@@ -42,7 +42,10 @@ Temporary Firefox add-ons are removed when Firefox restarts. For persistent ever
 1. Open a normal `http://` or `https://` page.
 2. Optionally highlight text.
 3. Click **Drop to Reef**.
-4. Click **Drop current page**.
+4. Set **MemoReef server URL**:
+   - same computer: `http://127.0.0.1:8765`
+   - Mac Mini from another computer: use the `http://...:8765` URL printed by `memoreef serve --lan` or `memoreef phone`
+5. Click **Drop current page**.
 
 If text is highlighted, MemoReef saves it as a clipped selection. If nothing is highlighted, MemoReef saves the page URL/title as a normal Drop.
 

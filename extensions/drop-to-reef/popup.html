@@ -16,7 +16,7 @@
       }
 
       body {
-        width: 280px;
+        width: 310px;
         margin: 0;
         padding: 14px;
         font: 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -33,6 +33,27 @@
       p {
         margin: 0 0 12px;
         color: var(--reef-muted);
+      }
+
+      label {
+        display: block;
+        margin: 0 0 6px;
+        color: var(--reef-muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      input {
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0 0 10px;
+        border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 10px;
+        padding: 9px 10px;
+        color: var(--reef-ink);
+        background: rgba(255,255,255,0.07);
       }
 
       button {
@@ -70,8 +91,10 @@
   <body>
     <h1>Drop to Reef</h1>
     <p>Save this page, including highlighted text, into your local MemoReef vault.</p>
+    <label for="server-url">MemoReef server URL</label>
+    <input id="server-url" type="url" value="http://127.0.0.1:8765" spellcheck="false">
     <button id="drop-button" type="button">Drop current page</button>
-    <div id="status" class="status">Requires <code>memoreef serve</code> on localhost:8765.</div>
+    <div id="status" class="status">Use localhost when MemoReef runs on this computer, or the Mac Mini LAN/Tailscale URL when dropping from another device.</div>
     <script src="popup.js"></script>
   </body>
 </html>

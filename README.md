@@ -344,6 +344,8 @@ about:debugging#/runtime/this-firefox → Load Temporary Add-on… → extension
 
 The extension uses the same local `/api/drop` endpoint. It saves the current page and includes highlighted text when present, so the browser bookmark button becomes “drop to reef” instead of “save to bookmarks.”
 
+When the extension runs on another computer than MemoReef, set its **MemoReef server URL** to the LAN/Tailscale URL printed by `memoreef serve --lan` or `memoreef phone`, for example `http://100.x.x.x:8765`.
+
 This is a localhost-only bridge to your own running `memoreef serve` process, not a hosted sync service, database, or cloud capture tool.
 
 ## Capture from Telegram, Discord, WhatsApp, or iMessage gateways
