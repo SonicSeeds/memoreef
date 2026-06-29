@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 from unittest.mock import patch
 
-from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, parse_markdown_frontmatter, update_markdown_frontmatter, write_bookmarks_to_vault
+from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, parse_markdown_frontmatter, parse_tokwise_jsonl, update_markdown_frontmatter, write_bookmarks_to_vault
 from memoreef.cli import main
 from memoreef.documents import detect_visual_region_boxes, extract_pdf_numeric_analysis, pdf_page_count, pdf_rendered_page_number, pdf_visual_size_warnings
 from memoreef.server import create_server, is_loopback_bind, review_mode_urls
@@ -251,6 +251,75 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertIn("- Parsed bookmark count: 2", log_content)
             self.assertIn("- Written Drop count: 1", log_content)
             self.assertIn("- Skipped duplicate count: 1", log_content)
+
+    def test_parse_tokwise_jsonl_preserves_transcript_and_classification(self):
+        video = {
+            "id": "7350000000000000000",
+            "url": "https://www.tiktok.com/@garden/video/7350000000000000000?utm_source=copy",
+            "canonicalUrl": "https://www.tiktok.com/@garden/video/7350000000000000000",
+            "description": "Tiny greenhouse workflow for agent research",
+            "savedAt": "2026-06-29T10:00:00.000Z",
+            "collection": {"name": "AI ideas"},
+            "author": {"username": "garden"},
+            "hashtags": ["AI", "workflow"],
+            "classification": {
+                "category": "creative research",
+                "domain": "agents",
+                "topics": ["TikTok bookmarks", "source memory"],
+                "summary": "A useful short-form signal for local source memory.",
+            },
+            "stats": {"plays": 1200, "likes": 88},
+            "transcript": {"text": "This is the transcript from Tokwise."},
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            jsonl_path = Path(tmp) / "videos.jsonl"
+            jsonl_path.write_text(json.dumps(video) + "\n", encoding="utf-8")
+            bookmarks = parse_tokwise_jsonl(jsonl_path)
+
+        self.assertEqual(len(bookmarks), 1)
+        bookmark = bookmarks[0]
+        self.assertEqual(bookmark.title, "Tiny greenhouse workflow for agent research")
+        self.assertEqual(bookmark.source, "tokwise")
+        self.assertEqual(bookmark.folders, ["Tokwise", "AI ideas"])
+        self.assertIn("short-form-video", bookmark.tags)
+        self.assertIn("creative-research", bookmark.tags)
+        self.assertIn("source-memory", bookmark.tags)
+        self.assertEqual(bookmark.document_type, "short-form-video")
+        self.assertEqual(bookmark.document_extraction_engine, "tokwise")
+        self.assertIn("### Tokwise summary", bookmark.document_text or "")
+        self.assertIn("This is the transcript from Tokwise.", bookmark.document_text or "")
+
+    def test_import_tokwise_command_writes_video_drop(self):
+        stdout = io.StringIO()
+        video = {
+            "url": "https://www.tiktok.com/@reef/video/1",
+            "description": "Short-form source signal",
+            "author": {"username": "reef"},
+            "transcript": {"text": "A tiny transcript."},
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            jsonl_path = Path(tmp) / "videos.jsonl"
+            vault_path = Path(tmp) / "vault"
+            jsonl_path.write_text(json.dumps(video) + "\n", encoding="utf-8")
+
+            with redirect_stdout(stdout):
+                result = main(["import-tokwise", str(jsonl_path), "--vault", str(vault_path)])
+
+            drops = list((vault_path / "MemoReef" / "Drops").glob("*.md"))
+            logs = list((vault_path / "MemoReef" / "imports").glob("*-import.md"))
+            content = drops[0].read_text(encoding="utf-8") if drops else ""
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(drops), 1)
+        self.assertEqual(len(logs), 1)
+        self.assertIn('import_source: "tokwise"', content)
+        self.assertIn('document_type: "short-form-video"', content)
+        self.assertIn('document_extraction_engine: "tokwise"', content)
+        self.assertIn("## Document text", content)
+        self.assertIn("A tiny transcript.", content)
+        self.assertIn("Imported 1 Tokwise Drops", stdout.getvalue())
 
     def test_import_csv_omits_import_source_when_source_is_empty(self):
         stdout = io.StringIO()

@@ -47,6 +47,7 @@ from .bookmarks import (
     parse_bookmarks_html,
     parse_links_csv,
     parse_links_text,
+    parse_tokwise_jsonl,
     update_markdown_frontmatter,
     write_bookmarks_to_vault,
 )
@@ -5281,6 +5282,10 @@ def build_parser() -> argparse.ArgumentParser:
     import_csv_cmd.add_argument("csv", type=Path, help="CSV file with title,url,source,tags columns.")
     add_vault_import_options(import_csv_cmd)
 
+    import_tokwise_cmd = sub.add_parser("import-tokwise", help="Import Tokwise videos.jsonl into short-form-video Drops.")
+    import_tokwise_cmd.add_argument("jsonl", type=Path, help="Tokwise videos.jsonl file, usually ~/.tokwise/videos/videos.jsonl.")
+    add_vault_import_options(import_tokwise_cmd)
+
     import_docs_cmd = sub.add_parser("import-docs", help="Import PDF, DOCX, text, image, or Markdown documents into local Markdown Drops.")
     import_docs_cmd.add_argument("documents", type=Path, nargs="+", help="Document files to import (.pdf, .docx, .txt, .md, images).")
     import_docs_cmd.add_argument("--ocr", action="store_true", help="Use local OCR for image files and scanned PDFs when tesseract/pdftoppm are installed.")
@@ -5512,6 +5517,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "import-csv":
         written = import_bookmarks(parse_links_csv(args.csv), args.csv, args.vault, args.root, args.allow_duplicates)
         print(f"Imported {len(written)} Drops into {Path(args.vault).expanduser().resolve() / args.root}")
+        if written:
+            print(f"First Drop: {written[0]}")
+        return 0
+
+    if args.command == "import-tokwise":
+        try:
+            bookmarks = parse_tokwise_jsonl(args.jsonl)
+        except ValueError as error:
+            print(str(error))
+            return 1
+        written = import_bookmarks(bookmarks, args.jsonl, args.vault, args.root, args.allow_duplicates)
+        print(f"Imported {len(written)} Tokwise Drops into {Path(args.vault).expanduser().resolve() / args.root}")
         if written:
             print(f"First Drop: {written[0]}")
         return 0

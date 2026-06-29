@@ -114,6 +114,7 @@ Import your own browser bookmarks, URL lists, CSV files with `title,url,source,t
 memoreef import /path/to/bookmarks.html --vault /tmp/memoreef-vault
 memoreef import-links /path/to/links.txt --vault /tmp/memoreef-vault
 memoreef import-csv /path/to/links.csv --vault /tmp/memoreef-vault
+memoreef import-tokwise ~/.tokwise/videos/videos.jsonl --vault /tmp/memoreef-vault
 memoreef extract-articles --vault /tmp/memoreef-vault --limit 25
 memoreef import-docs /path/to/research.pdf /path/to/brief.docx --vault /tmp/memoreef-vault
 memoreef import-docs --ocr /path/to/scanned.pdf /path/to/diagram.png --vault /tmp/memoreef-vault
@@ -122,6 +123,8 @@ memoreef import-docs /path/to/complex-paper.pdf --vault /tmp/memoreef-vault --en
 ```
 
 `extract-articles` fetches saved HTTP/HTTPS URLs directly and writes the readable main page content into a `## Article text` section on each Drop. It records `article_extraction_status`, final/canonical URL, extraction time, and errors in frontmatter. Paywalls, blocked pages, JavaScript-only pages, non-HTML files, and pages without enough readable text are marked honestly instead of faked.
+
+`import-tokwise` imports a local Tokwise `videos.jsonl` export — usually created by `tokwise auth from-browser && tw sync` — into short-form-video Drops. It preserves the TikTok URL, author/collection context, Tokwise classification, hashtags, stats, and transcript in local Markdown. MemoReef only reads the already-created JSONL file; it does not read browser cookies or contact TikTok itself.
 
 `import-docs` turns PDFs, DOCX files, text files, Markdown files, and image files into local Markdown Drops with source-file metadata and a `## Document text` section. It is useful for NotebookLM-style source collection when you want the durable output to stay in your own Markdown/Obsidian memory instead of a hosted notebook. Text-based PDFs work directly. Scanned/image PDFs and image files need `--ocr` plus local OCR tools (`tesseract`; scanned PDFs also need `pdftoppm`/Poppler). Use `--ocr-lang` for non-English documents, for example `deu+eng`.
 
@@ -168,6 +171,7 @@ Implemented:
 - Parse Netscape-style browser bookmark HTML exports.
 - Import plain text URL lists.
 - Import CSV files with title, URL, source provenance, and tags.
+- Import Tokwise short-form video archives (`videos.jsonl`) as local transcript/classification Drops.
 - Extract readable article text from saved HTTP/HTTPS web pages into `## Article text` sections with honest status/error metadata.
 - Import local PDF, DOCX, text, Markdown, and OCR-assisted image/scanned-PDF files into source-memory Drops.
 - Extract PDF numeric table rows into Numeric artifacts for exact-number answers.

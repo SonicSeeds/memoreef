@@ -5,6 +5,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 import csv
 import html
+import json
 import re
 from typing import Iterable
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -144,6 +145,132 @@ def parse_links_csv(path: str | Path) -> list[Bookmark]:
             source = clean_text(row.get("source") or "") or None
             bookmarks.append(Bookmark(title=title, url=url, source=source, tags=parse_tag_list(row.get("tags") or "")))
     return bookmarks
+
+
+def parse_tokwise_jsonl(path: str | Path) -> list[Bookmark]:
+    """Parse Tokwise videos.jsonl into MemoReef short-form-video Drops.
+
+    Tokwise stores one normalized TikTok/short-form video record per line. MemoReef
+    imports the local transcript/classification as source memory without calling
+    TikTok or reading browser cookies.
+    """
+    bookmarks: list[Bookmark] = []
+    for line_number, line in enumerate(Path(path).read_text(encoding="utf-8", errors="replace").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            video = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ValueError(f"Invalid Tokwise JSONL on line {line_number}: {error.msg}") from error
+        if not isinstance(video, dict):
+            raise ValueError(f"Invalid Tokwise JSONL on line {line_number}: expected an object")
+        bookmark = tokwise_video_to_bookmark(video)
+        if bookmark is not None:
+            bookmarks.append(bookmark)
+    return bookmarks
+
+
+def tokwise_video_to_bookmark(video: dict[str, object]) -> Bookmark | None:
+    url = clean_text(str(video.get("canonicalUrl") or video.get("url") or ""))
+    if not url:
+        return None
+
+    author = video.get("author") if isinstance(video.get("author"), dict) else {}
+    author_username = clean_text(str(author.get("username") or "")) if isinstance(author, dict) else ""
+    description = clean_text(str(video.get("description") or ""))
+    title = description or (f"TikTok by @{author_username}" if author_username else url)
+
+    classification = video.get("classification") if isinstance(video.get("classification"), dict) else {}
+    category = clean_text(str(classification.get("category") or "")) if isinstance(classification, dict) else ""
+    domain = clean_text(str(classification.get("domain") or "")) if isinstance(classification, dict) else ""
+    summary = clean_text(str(classification.get("summary") or "")) if isinstance(classification, dict) else ""
+    topics = list_of_clean_strings(classification.get("topics") if isinstance(classification, dict) else None)
+    hashtags = list_of_clean_strings(video.get("hashtags"))
+
+    folders = ["Tokwise"]
+    collection = video.get("collection") if isinstance(video.get("collection"), dict) else {}
+    collection_name = clean_text(str(collection.get("name") or "")) if isinstance(collection, dict) else ""
+    if collection_name:
+        folders.append(collection_name)
+
+    tags = ["short-form-video"]
+    for value in [category, domain, *topics, *hashtags]:
+        tag = slugify(value, 48)
+        if tag and tag not in tags:
+            tags.append(tag)
+
+    transcript = video.get("transcript") if isinstance(video.get("transcript"), dict) else {}
+    transcript_text = str(transcript.get("text") or "").strip() if isinstance(transcript, dict) else ""
+
+    return Bookmark(
+        title=title,
+        url=url,
+        add_date=clean_text(str(video.get("savedAt") or video.get("createdAt") or "")) or None,
+        source="tokwise",
+        folders=folders,
+        tags=tags,
+        document_text=render_tokwise_document_text(video, summary=summary, transcript_text=transcript_text),
+        document_type="short-form-video",
+        document_extraction_engine="tokwise",
+    )
+
+
+def render_tokwise_document_text(video: dict[str, object], summary: str, transcript_text: str) -> str:
+    parts: list[str] = []
+    if summary:
+        parts.extend(["### Tokwise summary", "", summary, ""])
+
+    description = str(video.get("description") or "").strip()
+    if description:
+        parts.extend(["### Description", "", description, ""])
+
+    author = video.get("author") if isinstance(video.get("author"), dict) else {}
+    author_username = str(author.get("username") or "").strip() if isinstance(author, dict) else ""
+    if author_username:
+        parts.extend(["### Author", "", f"@{author_username}", ""])
+
+    classification = video.get("classification") if isinstance(video.get("classification"), dict) else {}
+    if isinstance(classification, dict):
+        category = str(classification.get("category") or "").strip()
+        domain = str(classification.get("domain") or "").strip()
+        topics = list_of_clean_strings(classification.get("topics"))
+        if category or domain or topics:
+            parts.extend(["### Tokwise classification", ""])
+            if category:
+                parts.append(f"- Category: {category}")
+            if domain:
+                parts.append(f"- Domain: {domain}")
+            if topics:
+                parts.append(f"- Topics: {', '.join(topics)}")
+            parts.append("")
+
+    hashtags = list_of_clean_strings(video.get("hashtags"))
+    if hashtags:
+        parts.extend(["### Hashtags", "", " ".join(f"#{tag}" for tag in hashtags), ""])
+
+    stats = video.get("stats") if isinstance(video.get("stats"), dict) else {}
+    if isinstance(stats, dict):
+        stat_lines = []
+        for label, key in [("Plays", "plays"), ("Likes", "likes"), ("Comments", "comments"), ("Shares", "shares"), ("Saves", "saves")]:
+            value = stats.get(key)
+            if value not in (None, ""):
+                stat_lines.append(f"- {label}: {value}")
+        if stat_lines:
+            parts.extend(["### TikTok stats", "", *stat_lines, ""])
+
+    parts.extend(["### Transcript", "", transcript_text or "_No transcript available in Tokwise export._"])
+    return "\n".join(parts).strip()
+
+
+def list_of_clean_strings(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for item in value:
+        text = clean_text(str(item))
+        if text:
+            items.append(text)
+    return items
 
 
 def parse_tag_list(value: str) -> list[str]:
