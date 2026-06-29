@@ -14,7 +14,6 @@
         --reef-accent: #75e6c8;
         --reef-warn: #ffcb7a;
       }
-
       body {
         width: 310px;
         margin: 0;
@@ -23,18 +22,8 @@
         color: var(--reef-ink);
         background: radial-gradient(circle at 20% 0%, #16352f 0, var(--reef-bg) 48%);
       }
-
-      h1 {
-        margin: 0 0 8px;
-        font-size: 17px;
-        letter-spacing: -0.02em;
-      }
-
-      p {
-        margin: 0 0 12px;
-        color: var(--reef-muted);
-      }
-
+      h1 { margin: 0 0 8px; font-size: 17px; letter-spacing: -0.02em; }
+      p { margin: 0 0 12px; color: var(--reef-muted); }
       label {
         display: block;
         margin: 0 0 6px;
@@ -44,7 +33,6 @@
         text-transform: uppercase;
         letter-spacing: 0.06em;
       }
-
       input {
         box-sizing: border-box;
         width: 100%;
@@ -55,7 +43,6 @@
         color: var(--reef-ink);
         background: rgba(255,255,255,0.07);
       }
-
       button {
         width: 100%;
         border: 0;
@@ -66,12 +53,7 @@
         background: var(--reef-accent);
         cursor: pointer;
       }
-
-      button:disabled {
-        cursor: wait;
-        opacity: 0.68;
-      }
-
+      button:disabled { cursor: wait; opacity: 0.68; }
       .status {
         min-height: 38px;
         margin-top: 12px;
@@ -82,7 +64,6 @@
         color: var(--reef-muted);
         white-space: pre-wrap;
       }
-
       .status[data-kind="success"] { color: var(--reef-accent); }
       .status[data-kind="error"] { color: var(--reef-warn); }
       code { color: var(--reef-accent); }
@@ -93,8 +74,10 @@
     <p>Save this page, including highlighted text, into your local MemoReef vault.</p>
     <label for="server-url">MemoReef server URL</label>
     <input id="server-url" type="url" value="http://127.0.0.1:8765" spellcheck="false">
+    <label for="capture-token">Capture token</label>
+    <input id="capture-token" type="password" autocomplete="off" spellcheck="false" placeholder="mr_…">
     <button id="drop-button" type="button">Drop current page</button>
-    <div id="status" class="status">Use localhost when MemoReef runs on this computer, or the Mac Mini LAN/Tailscale URL when dropping from another device.</div>
+    <div id="status" class="status">Paste the Mac Mini URL and token once. They are saved in this browser extension.</div>
     <script src="popup.js"></script>
   </body>
 </html>

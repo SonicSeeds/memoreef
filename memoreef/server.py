@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 from email.parser import BytesParser
 from email.policy import default as email_policy
 
+from .auth import bearer_token_from_header
 from .bookmarks import Bookmark, write_bookmarks_to_vault
 from .capture import capture_text_to_bookmarks
 from .cli import apply_review_decision_payload, build_review_session_payload, default_review_filters, tag_reviewed_drops
@@ -56,11 +57,13 @@ class MemoReefHTTPServer(ThreadingHTTPServer):
         vault: Path,
         root: str,
         limit: int,
+        capture_token: str | None = None,
     ) -> None:
         super().__init__(server_address, handler_class)
         self.vault = vault.expanduser().resolve()
         self.root = root
         self.limit = limit
+        self.capture_token = capture_token
 
 
 class MemoReefRequestHandler(BaseHTTPRequestHandler):
@@ -112,9 +115,13 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
             self.handle_tag_reviewed()
             return
         if parsed.path == "/api/drop":
+            if not self.require_capture_auth():
+                return
             self.handle_drop()
             return
         if parsed.path == "/api/capture":
+            if not self.require_capture_auth():
+                return
             self.handle_capture()
             return
         if parsed.path == "/api/import-docs":
@@ -140,6 +147,16 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
             return
         written = write_bookmarks_to_vault(bookmarks, self.server.vault, self.server.root, allow_duplicates=True)
         self.send_json({"ok": True, "captured": len(written), "written": [str(path) for path in written]})
+
+    def require_capture_auth(self) -> bool:
+        token = self.server.capture_token
+        if not token:
+            return True
+        supplied = bearer_token_from_header(self.headers.get("Authorization"))
+        if supplied and supplied == token:
+            return True
+        self.send_error_json(401, "capture token required")
+        return False
 
     def handle_import_docs(self) -> None:
         content_type = self.headers.get("Content-Type", "")
@@ -316,7 +333,7 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
     def send_cors_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
     @staticmethod
     def content_type_for_path(path: str) -> str:
@@ -394,17 +411,27 @@ def review_mode_urls(host: str, port: int, addresses: list[str] | None = None) -
     return urls
 
 
-def create_server(vault: Path, root: str = "MemoReef", host: str = "127.0.0.1", port: int = 8765, limit: int = 50) -> MemoReefHTTPServer:
-    return MemoReefHTTPServer((host, port), MemoReefRequestHandler, vault, root, limit)
+def create_server(
+    vault: Path,
+    root: str = "MemoReef",
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    limit: int = 50,
+    capture_token: str | None = None,
+) -> MemoReefHTTPServer:
+    return MemoReefHTTPServer((host, port), MemoReefRequestHandler, vault, root, limit, capture_token)
 
 
-def serve(vault: Path, root: str = "MemoReef", host: str = "127.0.0.1", port: int = 8765, limit: int = 50) -> None:
-    server = create_server(vault, root, host, port, limit)
+def serve(vault: Path, root: str = "MemoReef", host: str = "127.0.0.1", port: int = 8765, limit: int = 50, capture_token: str | None = None) -> None:
+    server = create_server(vault, root, host, port, limit, capture_token)
     try:
         print("Serving MemoReef Review Mode:")
         for url in review_mode_urls(host, server.server_port):
             print(f"- {url}")
         print(f"Connected vault: {server.vault}")
+        if capture_token:
+            print("Capture API token protection: enabled")
+            print(f"Capture token: {capture_token}")
         if not is_loopback_bind(host):
             print("WARNING: MemoReef is bound to a network-accessible host.")
             print("The local vault write API can be reached by devices on this network.")

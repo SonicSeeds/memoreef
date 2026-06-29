@@ -304,8 +304,11 @@ class BookmarkImportTests(unittest.TestCase):
         self.assertIn("http://*/*", manifest["host_permissions"])
         self.assertIn("Drop current page", popup_html)
         self.assertIn("MemoReef server URL", popup_html)
+        self.assertIn("Capture token", popup_html)
         self.assertIn("DEFAULT_SERVER_URL = 'http://127.0.0.1:8765'", popup_js)
         self.assertIn("storage.local", popup_js)
+        self.assertIn("captureToken", popup_js)
+        self.assertIn("headers.Authorization", popup_js)
         self.assertIn("dropEndpoint(serverUrl)", popup_js)
         self.assertIn("globalThis.browser || globalThis.chrome", popup_js)
         self.assertIn("extensionApi.tabs.query", popup_js)
@@ -2063,6 +2066,44 @@ endstream endobj
         self.assertIn("Agent gateway link", content)
         self.assertIn("- Sender: Nika", content)
 
+    def test_local_server_capture_token_protects_drop_endpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            try:
+                server = create_server(vault_path, host="127.0.0.1", port=0, limit=50, capture_token="mr_secret")
+            except PermissionError as error:
+                self.skipTest(f"localhost socket binding unavailable: {error}")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                unauthorized = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/drop",
+                    data=json.dumps({"url": "https://example.com/protected", "title": "Protected"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as unauthorized_error:
+                    urllib.request.urlopen(unauthorized, timeout=5)
+
+                authorized = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/drop",
+                    data=json.dumps({"url": "https://example.com/protected", "title": "Protected"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json", "Authorization": "Bearer mr_secret"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(authorized, timeout=5) as response:
+                    status_code = response.status
+                    payload = json.loads(response.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(unauthorized_error.exception.code, 401)
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["ok"], True)
+        self.assertEqual(len(payload["written"]), 1)
+
     def test_local_server_drop_endpoint_writes_url_and_title(self):
         with tempfile.TemporaryDirectory() as tmp:
             vault_path = Path(tmp) / "vault"
@@ -2196,7 +2237,7 @@ endstream endobj
         self.assertEqual(status_code, 204)
         self.assertEqual(headers["Access-Control-Allow-Origin"], "*")
         self.assertEqual(headers["Access-Control-Allow-Methods"], "GET, POST, OPTIONS")
-        self.assertEqual(headers["Access-Control-Allow-Headers"], "Content-Type")
+        self.assertEqual(headers["Access-Control-Allow-Headers"], "Content-Type, Authorization")
 
     def test_local_server_options_rejects_non_bookmarklet_api_cors(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2234,19 +2275,23 @@ endstream endobj
 
     def test_serve_mobile_option_binds_all_interfaces(self):
         with tempfile.TemporaryDirectory() as tmp:
+            token_file = Path(tmp) / "capture-token"
             with patch("memoreef.server.serve") as mocked_serve:
-                result = main(["serve", "--vault", tmp, "--mobile", "--port", "9999", "--limit", "3"])
+                result = main(["serve", "--vault", tmp, "--mobile", "--port", "9999", "--limit", "3", "--capture-token-file", str(token_file)])
 
         self.assertEqual(result, 0)
-        mocked_serve.assert_called_once_with(Path(tmp), "MemoReef", "0.0.0.0", 9999, 3)
+        token = mocked_serve.call_args.args[5]
+        self.assertTrue(str(token).startswith("mr_"))
+        mocked_serve.assert_called_once_with(Path(tmp), "MemoReef", "0.0.0.0", 9999, 3, token)
 
     def test_phone_command_prints_user_owned_phone_urls_and_writes_url_file(self):
         stdout = io.StringIO()
         with tempfile.TemporaryDirectory() as tmp:
             vault_path = Path(tmp) / "vault"
+            token_file = Path(tmp) / "capture-token"
             with patch("memoreef.server.local_ipv4_addresses", return_value=["192.168.1.23"]), patch("memoreef.server.serve") as mocked_serve:
                 with redirect_stdout(stdout):
-                    result = main(["phone", "--vault", str(vault_path), "--port", "9999", "--limit", "3", "--no-qr"])
+                    result = main(["phone", "--vault", str(vault_path), "--port", "9999", "--limit", "3", "--no-qr", "--capture-token-file", str(token_file)])
 
             url_file = vault_path.resolve() / "MemoReef" / "phone-triage-url.txt"
             output = stdout.getvalue()
@@ -2258,7 +2303,9 @@ endstream endobj
         self.assertEqual(url_file_content, "http://192.168.1.23:9999/")
         self.assertIn("MemoReef phone triage for this computer", output)
         self.assertIn("http://192.168.1.23:9999/", output)
-        mocked_serve.assert_called_once_with(vault_path, "MemoReef", "0.0.0.0", 9999, 3)
+        token = mocked_serve.call_args.args[5]
+        self.assertTrue(str(token).startswith("mr_"))
+        mocked_serve.assert_called_once_with(vault_path, "MemoReef", "0.0.0.0", 9999, 3, token)
 
     def test_phone_command_writes_qr_when_qr_helper_succeeds(self):
         with tempfile.TemporaryDirectory() as tmp:

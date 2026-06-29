@@ -40,6 +40,7 @@ def write_optional_qr_png(url: str, output: Path) -> tuple[Path | None, str | No
     return output, None
 
 from . import __version__
+from .auth import DEFAULT_TOKEN_PATH, ensure_capture_token, read_capture_token
 from .bookmarks import (
     Bookmark,
     canonicalize_url,
@@ -5488,6 +5489,9 @@ def build_parser() -> argparse.ArgumentParser:
     serve_cmd.add_argument("--lan", "--mobile", action="store_true", help="Bind to 0.0.0.0 for phone access on trusted LAN/Tailscale.")
     serve_cmd.add_argument("--port", type=int, default=8765, help="Bind port. Default: 8765")
     serve_cmd.add_argument("--limit", type=int, default=50, help="Maximum Drift Drops to load into Review Mode. Default: 50")
+    serve_cmd.add_argument("--capture-token", default=None, help="Bearer token required for /api/drop and /api/capture writes.")
+    serve_cmd.add_argument("--capture-token-file", type=Path, default=DEFAULT_TOKEN_PATH, help=f"Persistent capture-token file. Default: {DEFAULT_TOKEN_PATH}")
+    serve_cmd.add_argument("--no-capture-token", action="store_true", help="Disable capture-token protection even when serving on LAN. Not recommended.")
 
     phone_cmd = sub.add_parser("phone", help="Serve Review Mode for this computer's vault and print phone/QR access details.")
     phone_cmd.add_argument("--vault", type=Path, required=True, help="Path to this computer's Obsidian vault/root folder.")
@@ -5496,12 +5500,29 @@ def build_parser() -> argparse.ArgumentParser:
     phone_cmd.add_argument("--limit", type=int, default=50, help="Maximum Drift Drops to load into Review Mode. Default: 50")
     phone_cmd.add_argument("--qr", type=Path, default=None, help="Optional QR PNG output path. Defaults to <vault>/MemoReef/phone-triage-qr.png when qrcode is installed.")
     phone_cmd.add_argument("--no-qr", action="store_true", help="Do not try to generate a QR PNG.")
+    phone_cmd.add_argument("--capture-token", default=None, help="Bearer token required for /api/drop and /api/capture writes.")
+    phone_cmd.add_argument("--capture-token-file", type=Path, default=DEFAULT_TOKEN_PATH, help=f"Persistent capture-token file. Default: {DEFAULT_TOKEN_PATH}")
+    phone_cmd.add_argument("--no-capture-token", action="store_true", help="Disable capture-token protection. Not recommended.")
 
     demo_cmd = sub.add_parser("demo", help="Create a complete local MemoReef demo vault.")
     demo_cmd.add_argument("--output", type=Path, required=True, help="Directory where the demo vault should be created.")
     demo_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the demo vault. Default: MemoReef")
 
     return parser
+
+
+def capture_token_for_server(args: argparse.Namespace, host: str, default_protect: bool = False) -> str | None:
+    from .server import is_loopback_bind
+
+    if getattr(args, "no_capture_token", False):
+        return None
+    explicit = str(getattr(args, "capture_token", "") or "").strip()
+    if explicit:
+        return explicit
+    if default_protect or not is_loopback_bind(host):
+        return ensure_capture_token(getattr(args, "capture_token_file", DEFAULT_TOKEN_PATH))
+    existing = read_capture_token(getattr(args, "capture_token_file", DEFAULT_TOKEN_PATH))
+    return existing
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -6048,7 +6069,8 @@ def main(argv: list[str] | None = None) -> int:
         from .server import serve
 
         host = "0.0.0.0" if args.lan else args.host
-        serve(args.vault, args.root, host, args.port, args.limit)
+        capture_token = capture_token_for_server(args, host)
+        serve(args.vault, args.root, host, args.port, args.limit, capture_token)
         return 0
 
     if args.command == "phone":
@@ -6082,7 +6104,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"- {qr_warning}")
                 print("- Open the saved URL on your phone, or install the optional qrcode package to generate a QR PNG.")
 
-        server_module.serve(args.vault, args.root, host, args.port, args.limit)
+        server_module.serve(args.vault, args.root, host, args.port, args.limit, capture_token_for_server(args, host, default_protect=True))
         return 0
 
     if args.command == "demo":

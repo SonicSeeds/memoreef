@@ -4,6 +4,7 @@ const extensionApi = globalThis.browser || globalThis.chrome;
 const button = document.getElementById('drop-button');
 const statusBox = document.getElementById('status');
 const serverUrlInput = document.getElementById('server-url');
+const captureTokenInput = document.getElementById('capture-token');
 
 function setStatus(message, kind = '') {
   statusBox.textContent = message;
@@ -61,15 +62,16 @@ async function loadSettings() {
     serverUrlInput.value = DEFAULT_SERVER_URL;
     return;
   }
-  const stored = await storageGet({ serverUrl: DEFAULT_SERVER_URL });
+  const stored = await storageGet({ serverUrl: DEFAULT_SERVER_URL, captureToken: '' });
   serverUrlInput.value = stored.serverUrl || DEFAULT_SERVER_URL;
+  captureTokenInput.value = stored.captureToken || '';
 }
 
-async function saveSettings(serverUrl) {
+async function saveSettings(serverUrl, captureToken) {
   if (!extensionApi || !extensionApi.storage || !extensionApi.storage.local) {
     return;
   }
-  await storageSet({ serverUrl });
+  await storageSet({ serverUrl, captureToken });
 }
 
 async function getActiveTab() {
@@ -101,14 +103,19 @@ async function dropCurrentPage() {
       throw new Error('Browser extension APIs are unavailable.');
     }
     const serverUrl = normalizeServerUrl(serverUrlInput.value);
+    const captureToken = captureTokenInput.value.trim();
     serverUrlInput.value = serverUrl;
-    await saveSettings(serverUrl);
+    await saveSettings(serverUrl, captureToken);
 
     const tab = await getActiveTab();
     const selection = await getSelection(tab.id);
+    const headers = { 'Content-Type': 'application/json' };
+    if (captureToken) {
+      headers.Authorization = `Bearer ${captureToken}`;
+    }
     const response = await fetch(dropEndpoint(serverUrl), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         url: tab.url,
         title: tab.title || tab.url,
@@ -123,7 +130,7 @@ async function dropCurrentPage() {
     const payload = await response.json();
     setStatus(payload.clipped ? 'Highlight clipped to Reef.' : 'Page dropped to Reef.', 'success');
   } catch (error) {
-    setStatus(`${error.message}\n\nStart MemoReef with --lan on the Mac Mini and paste its http://...:8765 URL here.`, 'error');
+    setStatus(`${error.message}\n\nStart MemoReef with --lan on the Mac Mini and paste its URL + capture token here once.`, 'error');
   } finally {
     button.disabled = false;
   }

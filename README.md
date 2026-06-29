@@ -346,6 +346,8 @@ The extension uses the same local `/api/drop` endpoint. It saves the current pag
 
 When the extension runs on another computer than MemoReef, set its **MemoReef server URL** to the LAN/Tailscale URL printed by `memoreef serve --lan` or `memoreef phone`, for example `http://100.x.x.x:8765`.
 
+For network-accessible serving, MemoReef protects browser/channel capture writes with a persistent local capture token. On first `--lan` start it creates `~/.config/memoreef/capture-token`, prints the token, and reuses it on later starts. Paste that token once into the extension's **Capture token** field; the extension stores it in browser extension storage and sends it as `Authorization: Bearer ...`.
+
 This is a localhost-only bridge to your own running `memoreef serve` process, not a hosted sync service, database, or cloud capture tool.
 
 ## Capture from Telegram, Discord, WhatsApp, or iMessage gateways
