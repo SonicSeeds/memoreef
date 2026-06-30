@@ -1,0 +1,23 @@
+{
+  "name": "MemoReef Review",
+  "short_name": "MemoReef",
+  "description": "Open MemoReef Review Mode for mobile triage from a local vault.",
+  "start_url": "/review",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#02080d",
+  "theme_color": "#061722",
+  "icons": [
+    {
+      "src": "/img/memoreef-review-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/img/memoreef-review-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

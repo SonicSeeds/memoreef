@@ -75,8 +75,11 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path in ("/", "/swipe.html"):
+        if parsed.path in ("/", "/swipe.html", "/review", "/review/"):
             self.send_static_file(SITE_DIR / "swipe.html", "text/html; charset=utf-8")
+            return
+        if parsed.path == "/manifest.webmanifest":
+            self.send_static_file(SITE_DIR / "manifest.webmanifest", "application/manifest+json; charset=utf-8")
             return
         if parsed.path.startswith("/img/"):
             self.send_static_file(SITE_DIR / parsed.path.lstrip("/"), self.content_type_for_path(parsed.path))

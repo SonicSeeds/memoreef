@@ -4812,6 +4812,11 @@ def render_review_page(vault: Path, root: str = "MemoReef") -> str:
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MemoReef Review Mode</title>
+  <meta name="theme-color" content="#061722" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MemoReef" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="memoreef-review-icon-192.png" />
   <style>{app_common_css()}</style>
 </head>
 <body>
@@ -4959,6 +4964,27 @@ def linked_file(label: str, path: object, app_dir: Path) -> str:
     if href is None:
         return ""
     return f'<p><a href="{html_escape(href)}">{html_escape(label)}</a></p>'
+
+
+def write_review_pwa_assets(app_dir: Path) -> None:
+    site_dir = repo_root() / "site"
+    manifest = json.loads((site_dir / "manifest.webmanifest").read_text(encoding="utf-8"))
+    manifest["start_url"] = "review.html"
+    manifest["scope"] = "./"
+    manifest["icons"] = [
+        {"src": "memoreef-review-icon-192.png", "sizes": "192x192", "type": "image/png"},
+        {
+            "src": "memoreef-review-icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable",
+        },
+    ]
+    (app_dir / "manifest.webmanifest").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    for size in (192, 512):
+        source = site_dir / "img" / f"memoreef-review-icon-{size}.png"
+        if source.exists():
+            (app_dir / f"memoreef-review-icon-{size}.png").write_bytes(source.read_bytes())
 
 
 def html_list(items: list[str]) -> str:
@@ -5247,6 +5273,7 @@ def generate_app_dashboard(vault: Path, root: str = "MemoReef") -> Path:
     tour_asset_source = Path(__file__).resolve().parent.parent / "site" / "img" / "tour-octopus-eye-hero.png"
     if tour_asset_source.exists():
         (app_dir / "tour-octopus-hero.png").write_bytes(tour_asset_source.read_bytes())
+    write_review_pwa_assets(app_dir)
     drops_dir = app_dir / "drops"
     drops_dir.mkdir(parents=True, exist_ok=True)
     path = app_dir / "index.html"
