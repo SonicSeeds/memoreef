@@ -1997,7 +1997,7 @@ endstream endobj
                     review_page = response.read().decode("utf-8")
                 with urllib.request.urlopen(f"{base_url}/manifest.webmanifest", timeout=5) as response:
                     manifest = json.loads(response.read().decode("utf-8"))
-                with urllib.request.urlopen(f"{base_url}/img/memoreef-review-icon-192.png", timeout=5) as response:
+                with urllib.request.urlopen(f"{base_url}/img/memoreef-review-icon-180.png", timeout=5) as response:
                     icon_header = response.read(8)
             finally:
                 server.shutdown()
@@ -2006,6 +2006,7 @@ endstream endobj
 
         self.assertIn('<link rel="manifest" href="/manifest.webmanifest"', review_page)
         self.assertIn("apple-mobile-web-app-title", review_page)
+        self.assertIn('rel="apple-touch-icon" sizes="180x180" href="/img/memoreef-review-icon-180.png"', review_page)
         self.assertEqual(manifest["name"], "MemoReef Review")
         self.assertEqual(manifest["start_url"], "/review")
         self.assertEqual(manifest["display"], "standalone")
@@ -2644,6 +2645,7 @@ endstream endobj
             review = vault_path / "MemoReef" / "app" / "review.html"
             manifest = vault_path / "MemoReef" / "app" / "manifest.webmanifest"
             review_icon = vault_path / "MemoReef" / "app" / "memoreef-review-icon-192.png"
+            apple_touch_icon = vault_path / "MemoReef" / "app" / "memoreef-review-icon-180.png"
             reports = vault_path / "MemoReef" / "app" / "reports.html"
             briefs = vault_path / "MemoReef" / "app" / "briefs.html"
             html = dashboard.read_text(encoding="utf-8")
@@ -2655,6 +2657,7 @@ endstream endobj
             self.assertTrue(review.exists())
             self.assertTrue(manifest.exists())
             self.assertTrue(review_icon.exists())
+            self.assertTrue(apple_touch_icon.exists())
             self.assertTrue(reports.exists())
             self.assertTrue(briefs.exists())
             self.assertTrue(list((vault_path / "MemoReef" / "app" / "drops").glob("*.html")))
@@ -2673,8 +2676,10 @@ endstream endobj
             pwa_manifest = json.loads(manifest.read_text(encoding="utf-8"))
             self.assertIn("Reef Current", gravity_html)
             self.assertIn('rel="manifest" href="manifest.webmanifest"', review_html)
+            self.assertIn('rel="apple-touch-icon" sizes="180x180" href="memoreef-review-icon-180.png"', review_html)
             self.assertEqual(pwa_manifest["start_url"], "review.html")
             self.assertEqual(pwa_manifest["display"], "standalone")
+            self.assertEqual(pwa_manifest["icons"][0]["src"], "memoreef-review-icon-180.png")
             self.assertIn("Currents show what is starting to pull attention", gravity_html)
             self.assertIn("fish-shape", gravity_html)
             self.assertIn("data-treasure=\"true\"", gravity_html)

@@ -9,6 +9,11 @@
   "theme_color": "#061722",
   "icons": [
     {
+      "src": "/img/memoreef-review-icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
       "src": "/img/memoreef-review-icon-192.png",
       "sizes": "192x192",
       "type": "image/png"

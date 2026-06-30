@@ -4816,7 +4816,7 @@ def render_review_page(vault: Path, root: str = "MemoReef") -> str:
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="MemoReef" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="memoreef-review-icon-192.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="memoreef-review-icon-180.png" />
   <style>{app_common_css()}</style>
 </head>
 <body>
@@ -4972,6 +4972,7 @@ def write_review_pwa_assets(app_dir: Path) -> None:
     manifest["start_url"] = "review.html"
     manifest["scope"] = "./"
     manifest["icons"] = [
+        {"src": "memoreef-review-icon-180.png", "sizes": "180x180", "type": "image/png"},
         {"src": "memoreef-review-icon-192.png", "sizes": "192x192", "type": "image/png"},
         {
             "src": "memoreef-review-icon-512.png",
@@ -4981,7 +4982,7 @@ def write_review_pwa_assets(app_dir: Path) -> None:
         },
     ]
     (app_dir / "manifest.webmanifest").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    for size in (192, 512):
+    for size in (180, 192, 512):
         source = site_dir / "img" / f"memoreef-review-icon-{size}.png"
         if source.exists():
             (app_dir / f"memoreef-review-icon-{size}.png").write_bytes(source.read_bytes())
