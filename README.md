@@ -12,7 +12,7 @@ Testing MemoReef for the first time? Use the [Tester Guide](docs/TESTER_GUIDE.md
 
 ## Demo video
 
-[![MemoReef concept overview](https://memoreef.de/img/og-memoreef-card.png)](https://memoreef.de/demo.html)
+[![MemoReef concept overview](https://memoreef.de/img/og-memoreef-card.png?v=2026-06-30)](https://memoreef.de/demo.html)
 
 Watch the 69-second user-ready prototype demo. The video only loads on play.
 
