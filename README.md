@@ -67,6 +67,22 @@ memoreef pilot --bookmarks examples/bookmarks.html --vault /tmp/memoreef-pilot -
 open /tmp/memoreef-pilot/MemoReef/app/pilot.html
 ```
 
+### Open generated Drops in Obsidian
+
+The generated Library cards and individual Drop pages include an **Open in Obsidian** action. It uses only the native `obsidian://open` URI and opens the exact vault-relative Markdown Drop. By default, MemoReef uses the selected vault directory name as the Obsidian vault name:
+
+```bash
+memoreef app --vault /tmp/memoreef-pilot
+```
+
+If Obsidian displays that vault under a different name, regenerate with the exact displayed vault name:
+
+```bash
+memoreef app --vault /tmp/memoreef-pilot --obsidian-vault-name "Research Reef"
+```
+
+Add the same optional `--obsidian-vault-name "Research Reef"` flag to `memoreef pilot` or `memoreef demo` when those commands generate the app. Open the vault once in Obsidian first so that name is registered there.
+
 Or run commands directly from the checkout without installing the console script:
 
 ```bash
@@ -346,7 +362,9 @@ The extension uses the same local `/api/drop` endpoint. It saves the current pag
 
 When the extension runs on another computer than MemoReef, set its **MemoReef server URL** to the LAN/Tailscale URL printed by `memoreef serve --lan` or `memoreef phone`, for example `http://100.x.x.x:8765`.
 
-For network-accessible serving, MemoReef protects browser/channel capture writes with a persistent local capture token. On first `--lan` start it creates `~/.config/memoreef/capture-token`, prints the token, and reuses it on later starts. Paste that token once into the extension's **Capture token** field; the extension stores it in browser extension storage and sends it as `Authorization: Bearer ...`.
+For network-accessible serving, MemoReef protects browser/channel capture writes with a persistent local capture token. On first `--lan` start it creates `~/.config/memoreef/capture-token`, prints the token, and reuses it on later starts. Paste that token once into the extension's **Capture token** field; the extension stores it in browser extension storage and sends it as `Authorization: Bearer <token>`.
+
+Capture endpoints require a token; vault APIs accept only same-origin requests or the token.
 
 This is a localhost-only bridge to your own running `memoreef serve` process, not a hosted sync service, database, or cloud capture tool.
 

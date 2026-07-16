@@ -1,4 +1,6 @@
 from contextlib import redirect_stderr, redirect_stdout
+from html import escape as html_escape, unescape as html_unescape
+import http.client
 import io
 import importlib.util
 import json
@@ -14,7 +16,7 @@ from unittest.mock import patch
 
 from memoreef.bookmarks import Bookmark, bookmark_to_markdown, canonicalize_url, parse_bookmarks_html, parse_markdown_frontmatter, parse_tokwise_jsonl, update_markdown_frontmatter, write_bookmarks_to_vault
 from memoreef.capture import capture_text_to_bookmarks, parse_capture_text
-from memoreef.cli import main
+from memoreef.cli import main, obsidian_open_uri
 from memoreef.documents import detect_visual_region_boxes, extract_pdf_numeric_analysis, pdf_page_count, pdf_rendered_page_number, pdf_visual_size_warnings
 from memoreef.server import create_server, is_loopback_bind, review_mode_urls
 
@@ -1565,17 +1567,25 @@ endstream endobj
             self.assertEqual(manifest["summary"]["exported"], 1)
             self.assertEqual(manifest["sources"][0]["ai_export"], "local_only")
 
+    def test_obsidian_open_uri_encodes_vault_and_relative_note_path(self):
+        uri = obsidian_open_uri("Research & Réçif?", "MemoReef/Drops/naïve & #note?.md")
+
+        self.assertEqual(
+            uri,
+            "obsidian://open?vault=Research%20%26%20R%C3%A9%C3%A7if%3F&file=MemoReef%2FDrops%2Fna%C3%AFve%20%26%20%23note%3F.md",
+        )
+
     def test_app_writes_library_page_and_dashboard_mentions_library_search(self):
         with tempfile.TemporaryDirectory() as tmp:
             vault_path = Path(tmp) / "vault"
-            write_bookmarks_to_vault([Bookmark("Agent Workflow", "https://example.com")], vault_path)
+            written = write_bookmarks_to_vault([Bookmark("Agent Workflow", "https://example.com")], vault_path)
             with redirect_stdout(io.StringIO()):
                 main(["search-library", "--vault", str(vault_path), "--query", "agent"])
             with redirect_stdout(io.StringIO()):
                 main(["dive", "agent workflow", "--vault", str(vault_path)])
 
             with redirect_stdout(io.StringIO()):
-                result = main(["app", "--vault", str(vault_path)])
+                result = main(["app", "--vault", str(vault_path), "--obsidian-vault-name", "Research Reef"])
 
             app_dir = vault_path / "MemoReef" / "app"
             index = (app_dir / "index.html").read_text(encoding="utf-8")
@@ -1600,6 +1610,15 @@ endstream endobj
             self.assertIn("agent workflow", dive)
             self.assertTrue(detail_pages)
             detail = detail_pages[0].read_text(encoding="utf-8")
+            expected_uri = obsidian_open_uri("Research Reef", written[0].resolve().relative_to(vault_path.resolve()).as_posix())
+            expected_href = f'href="{html_escape(expected_uri)}"'
+            self.assertIn("Open in Obsidian", library)
+            self.assertIn("Open in Obsidian", detail)
+            self.assertIn(expected_href, library)
+            self.assertIn(expected_href, detail)
+            self.assertIn(expected_uri, html_unescape(library))
+            self.assertIn(expected_uri, html_unescape(detail))
+            self.assertNotIn(str(vault_path.resolve()), expected_uri)
             self.assertIn("Agent Workflow", detail)
             self.assertIn("Markdown path", detail)
 
@@ -1923,7 +1942,11 @@ endstream endobj
                 self.assertEqual(status["vault"], str(vault_path.resolve()))
                 self.assertEqual(status["root"], "MemoReef")
 
-                with urllib.request.urlopen(f"{base_url}/api/review-session", timeout=5) as response:
+                session_request = urllib.request.Request(
+                    f"{base_url}/api/review-session",
+                    headers={"Sec-Fetch-Site": "same-origin"},
+                )
+                with urllib.request.urlopen(session_request, timeout=5) as response:
                     session_status = response.status
                     session = json.loads(response.read().decode("utf-8"))
 
@@ -1941,7 +1964,7 @@ endstream endobj
                 request = urllib.request.Request(
                     f"{base_url}/api/review-decisions",
                     data=json.dumps(payload).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
+                    headers={"Content-Type": "application/json", "Sec-Fetch-Site": "same-origin"},
                     method="POST",
                 )
                 with urllib.request.urlopen(request, timeout=5) as response:
@@ -2039,7 +2062,7 @@ endstream endobj
                 request = urllib.request.Request(
                     f"http://127.0.0.1:{server.server_port}/api/import-docs",
                     data=body,
-                    headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+                    headers={"Content-Type": f"multipart/form-data; boundary={boundary}", "Sec-Fetch-Site": "same-origin"},
                     method="POST",
                 )
                 with urllib.request.urlopen(request, timeout=5) as response:
@@ -2262,7 +2285,11 @@ endstream endobj
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             try:
-                request = urllib.request.Request(f"http://127.0.0.1:{server.server_port}/api/drop", method="OPTIONS")
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/drop",
+                    method="OPTIONS",
+                    headers={"Origin": "https://reader.example"},
+                )
                 with urllib.request.urlopen(request, timeout=5) as response:
                     status_code = response.status
                     headers = response.headers
@@ -2272,7 +2299,8 @@ endstream endobj
                 server.server_close()
 
         self.assertEqual(status_code, 204)
-        self.assertEqual(headers["Access-Control-Allow-Origin"], "*")
+        self.assertEqual(headers["Access-Control-Allow-Origin"], "https://reader.example")
+        self.assertEqual(headers["Vary"], "Origin")
         self.assertEqual(headers["Access-Control-Allow-Methods"], "GET, POST, OPTIONS")
         self.assertEqual(headers["Access-Control-Allow-Headers"], "Content-Type, Authorization")
 
@@ -2297,6 +2325,267 @@ endstream endobj
 
         self.assertEqual(error.exception.code, 404)
         self.assertIsNone(headers.get("Access-Control-Allow-Origin"))
+
+    def test_local_server_rejects_unrecognized_host_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            server = create_server(Path(tmp) / "vault", host="127.0.0.1", port=0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/status",
+                    headers={"Host": "attacker.example"},
+                )
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(request, timeout=5)
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(error.exception.code, 421)
+
+    def test_local_server_rejects_malformed_host_headers(self):
+        malformed_hosts = (
+            "attacker.example@127.0.0.1",
+            "127.0.0.1/path",
+            "127.0.0.1?query",
+            "127.0.0.1#fragment",
+            "127.0.0.1,attacker.example",
+            "127.0.0.1\\attacker.example",
+            "127.0.0.1 attacker.example",
+            "localhost:",
+            "localhost:not-a-port",
+            "localhost:65536",
+            "[localhost]",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            server = create_server(Path(tmp) / "vault", host="127.0.0.1", port=0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                for host_header in malformed_hosts:
+                    with self.subTest(host_header=host_header):
+                        connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+                        try:
+                            connection.request("GET", "/api/status", headers={"Host": host_header})
+                            response = connection.getresponse()
+                            response.read()
+                            self.assertEqual(response.status, 400)
+                        finally:
+                            connection.close()
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+    def test_local_server_accepts_bracketed_ipv6_host_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            server = create_server(Path(tmp) / "vault", host="127.0.0.1", port=0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+                try:
+                    connection.request("GET", "/api/status", headers={"Host": "[::1]:8765"})
+                    response = connection.getresponse()
+                    response.read()
+                    status_code = response.status
+                finally:
+                    connection.close()
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(status_code, 200)
+
+    def test_local_server_vault_api_rejects_cross_origin_without_token(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            server = create_server(Path(tmp) / "vault", host="127.0.0.1", port=0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/review-session",
+                    headers={"Origin": "https://attacker.example"},
+                )
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(request, timeout=5)
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(error.exception.code, 401)
+
+    def test_local_server_vault_api_rejects_client_without_origin_or_token(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            server = create_server(Path(tmp) / "vault", host="127.0.0.1", port=0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/review-session",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(request, timeout=5)
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(error.exception.code, 401)
+
+    def test_local_server_vault_api_accepts_cross_origin_with_token(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            server = create_server(Path(tmp) / "vault", host="127.0.0.1", port=0, capture_token="mr_secret")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/review-session",
+                    headers={"Origin": "https://reader.example", "Authorization": "Bearer mr_secret"},
+                )
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    status_code = response.status
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(status_code, 200)
+
+    def test_local_server_review_decisions_reject_cross_origin_without_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Protected", "https://example.com", status="drift")], vault_path)
+            before = written[0].read_text(encoding="utf-8")
+            relative = written[0].resolve().relative_to(vault_path.resolve()).as_posix()
+            server = create_server(vault_path, host="127.0.0.1", port=0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/review-decisions",
+                    data=json.dumps({"version": 1, "decisions": [{"path": relative, "decision": "sink"}]}).encode(),
+                    headers={"Content-Type": "application/json", "Origin": "https://attacker.example"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(request, timeout=5)
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+            self.assertEqual(error.exception.code, 401)
+            self.assertEqual(written[0].read_text(encoding="utf-8"), before)
+
+    def test_local_server_tag_reviewed_rejects_cross_origin_without_token(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            server = create_server(Path(tmp) / "vault", host="127.0.0.1", port=0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/tag-reviewed",
+                    data=b"{}",
+                    headers={"Content-Type": "application/json", "Origin": "https://attacker.example"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(request, timeout=5)
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(error.exception.code, 401)
+
+    def test_local_server_import_docs_rejects_cross_origin_before_reading_upload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            server = create_server(Path(tmp) / "vault", host="127.0.0.1", port=0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/import-docs",
+                    data=b"not-an-upload",
+                    headers={"Content-Type": "application/octet-stream", "Origin": "https://attacker.example"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(request, timeout=5)
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(error.exception.code, 401)
+
+    def test_local_server_options_allows_private_network_preflight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            server = create_server(Path(tmp) / "vault", host="127.0.0.1", port=0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/drop",
+                    method="OPTIONS",
+                    headers={
+                        "Origin": "https://reader.example",
+                        "Access-Control-Request-Private-Network": "true",
+                    },
+                )
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    private_network = response.headers["Access-Control-Allow-Private-Network"]
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(private_network, "true")
+
+    def test_local_server_same_origin_header_allows_vault_api(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            server = create_server(Path(tmp) / "vault", host="127.0.0.1", port=0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                base_url = f"http://127.0.0.1:{server.server_port}"
+                request = urllib.request.Request(f"{base_url}/api/review-session", headers={"Origin": base_url})
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    status_code = response.status
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(status_code, 200)
+
+    def test_local_server_uses_timing_safe_token_comparison(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            server = create_server(Path(tmp) / "vault", host="127.0.0.1", port=0, capture_token="mr_secret")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                with patch("memoreef.server.hmac.compare_digest", return_value=True) as compare_digest:
+                    request = urllib.request.Request(
+                        f"http://127.0.0.1:{server.server_port}/api/drop",
+                        data=json.dumps({"url": "https://example.com/timing"}).encode(),
+                        headers={"Content-Type": "application/json", "Authorization": "Bearer wrong"},
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(request, timeout=5) as response:
+                        status_code = response.status
+                    compare_digest.assert_called_once_with("wrong", "mr_secret")
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(status_code, 200)
 
     def test_review_mode_urls_include_localhost_and_lan_addresses(self):
         self.assertTrue(is_loopback_bind("127.0.0.1"))
@@ -2413,7 +2702,12 @@ endstream endobj
             thread.start()
             try:
                 port = server.server_port
-                request = urllib.request.Request(f"http://127.0.0.1:{port}/api/tag-reviewed", data=b"{}", method="POST", headers={"Content-Type": "application/json"})
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/api/tag-reviewed",
+                    data=b"{}",
+                    method="POST",
+                    headers={"Content-Type": "application/json", "Sec-Fetch-Site": "same-origin"},
+                )
                 with urllib.request.urlopen(request, timeout=5) as response:
                     payload = json.loads(response.read().decode("utf-8"))
                 frontmatter, _ = parse_markdown_frontmatter(written[0].read_text(encoding="utf-8"))

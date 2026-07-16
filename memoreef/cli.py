@@ -11,7 +11,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 
 
 MAX_VISION_PAGE_LIMIT = 25
@@ -25,6 +25,23 @@ def bounded_vision_page_limit(value: str) -> int:
     if parsed < 1 or parsed > MAX_VISION_PAGE_LIMIT:
         raise argparse.ArgumentTypeError(f"must be between 1 and {MAX_VISION_PAGE_LIMIT}")
     return parsed
+
+
+def obsidian_vault_name(vault: Path, override: str | None = None) -> str:
+    """Return the Obsidian vault display name used in generated deep links."""
+    name = (override if override is not None else vault.expanduser().resolve().name).strip()
+    if not name:
+        raise ValueError("Obsidian vault name cannot be empty.")
+    return name
+
+
+def obsidian_open_uri(vault_name: str, relative_note_path: str) -> str:
+    """Build an Obsidian open URI from a vault display name and vault-relative note path."""
+    normalized = relative_note_path.replace("\\", "/").strip()
+    parts = normalized.split("/")
+    if not normalized or normalized.startswith("/") or any(part in {"", ".", ".."} for part in parts):
+        raise ValueError("Obsidian note path must be a vault-relative Markdown path.")
+    return f"obsidian://open?vault={quote(vault_name, safe='')}&file={quote(normalized, safe='')}"
 
 
 def write_optional_qr_png(url: str, output: Path) -> tuple[Path | None, str | None]:
@@ -531,7 +548,7 @@ Generated vault root: `{root_path}`
 """
 
 
-def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]:
+def create_demo_vault(output: Path, root: str = "MemoReef", obsidian_vault_name_override: str | None = None) -> dict[str, object]:
     vault = output.expanduser().resolve()
     vault.mkdir(parents=True, exist_ok=True)
     cleanup_previous_demo_files(vault, root)
@@ -606,7 +623,7 @@ def create_demo_vault(output: Path, root: str = "MemoReef") -> dict[str, object]
             "skip_reports": False,
         },
     )
-    dashboard = generate_app_dashboard(vault, root)
+    dashboard = generate_app_dashboard(vault, root, obsidian_vault_name_override)
     tour = root_path / "app" / "tour.html"
     pilot = root_path / "app" / "pilot.html"
 
@@ -2254,6 +2271,7 @@ def run_pilot(
     allow_duplicates: bool = False,
     review_limit: int = 25,
     skip_reports: bool = False,
+    obsidian_vault_name_override: str | None = None,
 ) -> dict[str, object]:
     if source_kind == "bookmarks":
         bookmarks = parse_bookmarks_html(source_path)
@@ -2300,7 +2318,7 @@ def run_pilot(
         "skip_reports": skip_reports,
     }
     pilot_readme = write_pilot_readme(vault, root, summary)
-    app_dashboard = generate_app_dashboard(vault, root)
+    app_dashboard = generate_app_dashboard(vault, root, obsidian_vault_name_override)
     commands.append(f"python3 -m memoreef.cli app --vault {vault} --root {root}")
     summary.update(
         {
@@ -4061,6 +4079,8 @@ def app_common_css() -> str:
     .app-nav a { color:var(--muted); text-decoration:none; border:1px solid transparent; border-radius:6px; padding:8px 11px; background:transparent; font-size:14px; }
     .app-nav a:hover { color:var(--text); border-color:var(--line); background:rgba(255,255,255,.04); }
     .app-nav a[aria-current="page"] { color:#061118; background:var(--green); border-color:var(--green); }
+    .obsidian-action { display:inline-flex; align-items:center; margin-top:12px; color:#061118; background:var(--pearl); border:1px solid var(--pearl); border-radius:6px; padding:9px 12px; font-weight:760; text-decoration:none; }
+    .obsidian-action:hover { color:#061118; background:#fff7df; border-color:#fff7df; }
     .panel, .result, .card { border:1px solid var(--line); border-radius:8px; background:linear-gradient(180deg, var(--panel), var(--panel2)); padding:22px; margin:16px 0; box-shadow:0 22px 70px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.045); }
     .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
     .meta { color:var(--muted); font-size:14px; }
@@ -4523,7 +4543,8 @@ def render_gravity_page(vault: Path, root: str = "MemoReef") -> str:
 </html>
 """
 
-def render_library_page(vault: Path, root: str = "MemoReef") -> str:
+def render_library_page(vault: Path, root: str = "MemoReef", obsidian_vault_name_override: str | None = None) -> str:
+    vault_name = obsidian_vault_name(vault, obsidian_vault_name_override)
     payload = latest_search_payload(vault, root)
     query = ""
     matches = 0
@@ -4546,6 +4567,10 @@ def render_library_page(vault: Path, root: str = "MemoReef") -> str:
         pearl = "Pearl" if item.get("pearl") else "Drop"
         detail_href = drop_detail_href_for_path(item.get("path"))
         detail_link = f'<p><a href="{html_escape(detail_href)}">Open Drop detail</a></p>' if detail_href else ""
+        note_path = item.get("path")
+        obsidian_link = ""
+        if isinstance(note_path, str):
+            obsidian_link = f'<a class="obsidian-action" href="{html_escape(obsidian_open_uri(vault_name, note_path))}">Open in Obsidian</a>'
         result_cards.append(
             f"""
       <article class=\"result\">
@@ -4554,6 +4579,7 @@ def render_library_page(vault: Path, root: str = "MemoReef") -> str:
         <p>{html_escape(str(item.get('snippet') or ''))}</p>
         <p class=\"meta\">Projects: {html_escape(projects or 'none')} · Shoals: {html_escape(shoals or 'none')}</p>
         {detail_link}
+        {obsidian_link}
       </article>"""
         )
     results_html = "\n".join(result_cards) if result_cards else "<p>No saved search results yet.</p>"
@@ -4589,11 +4615,15 @@ def render_library_page(vault: Path, root: str = "MemoReef") -> str:
 """
 
 
-def render_drop_detail_page(vault: Path, root: str, drop: dict[str, object]) -> str:
+def render_drop_detail_page(vault: Path, root: str, drop: dict[str, object], obsidian_vault_name_override: str | None = None) -> str:
     app_dir = vault / root / "app"
     drop_path = vault / str(drop.get("path") or "")
     markdown_href = app_href(drop_path, app_dir) or ""
     markdown_link = f'<a href="{html_escape(markdown_href)}">{html_escape(str(drop.get("path") or ""))}</a>' if markdown_href else html_escape(str(drop.get("path") or ""))
+    note_path = str(drop.get("path") or "")
+    obsidian_link = ""
+    if note_path:
+        obsidian_link = f'<p><a class="obsidian-action" href="{html_escape(obsidian_open_uri(obsidian_vault_name(vault, obsidian_vault_name_override), note_path))}">Open in Obsidian</a></p>'
     url = str(drop.get("url") or "")
     url_html = f'<a href="{html_escape(url)}">{html_escape(url)}</a>' if url else "none"
     summary = str(drop.get("summary") or drop.get("page_description") or "").strip()
@@ -4616,6 +4646,7 @@ def render_drop_detail_page(vault: Path, root: str, drop: dict[str, object]) -> 
     {app_nav("library", "../")}
     <p><a href="../library.html">Back to library</a> · <a href="../tour.html">Tour</a></p>
     <h1>{html_escape(str(drop.get('title') or 'Untitled Drop'))}</h1>
+    {obsidian_link}
     <section class="panel">
       <dl>
         <dt>URL</dt><dd>{url_html}</dd>
@@ -5267,7 +5298,7 @@ def render_tour_page(vault: Path, root: str = "MemoReef") -> str:
 """
 
 
-def generate_app_dashboard(vault: Path, root: str = "MemoReef") -> Path:
+def generate_app_dashboard(vault: Path, root: str = "MemoReef", obsidian_vault_name_override: str | None = None) -> Path:
     vault_path = vault.expanduser().resolve()
     app_dir = vault_path / root / "app"
     app_dir.mkdir(parents=True, exist_ok=True)
@@ -5281,13 +5312,13 @@ def generate_app_dashboard(vault: Path, root: str = "MemoReef") -> Path:
     path.write_text(render_app_dashboard(dashboard_state(vault_path, root)), encoding="utf-8")
     (app_dir / "pilot.html").write_text(render_pilot_page(vault_path, root), encoding="utf-8")
     (app_dir / "gravity.html").write_text(render_gravity_page(vault_path, root), encoding="utf-8")
-    (app_dir / "library.html").write_text(render_library_page(vault_path, root), encoding="utf-8")
+    (app_dir / "library.html").write_text(render_library_page(vault_path, root, obsidian_vault_name_override), encoding="utf-8")
     (app_dir / "dive.html").write_text(render_dive_page(vault_path, root), encoding="utf-8")
     (app_dir / "review.html").write_text(render_review_page(vault_path, root), encoding="utf-8")
     (app_dir / "reports.html").write_text(render_reports_page(vault_path, root), encoding="utf-8")
     (app_dir / "briefs.html").write_text(render_briefs_page(vault_path, root), encoding="utf-8")
     for drop in app_drop_items(vault_path, root):
-        (drops_dir / drop_detail_filename(drop)).write_text(render_drop_detail_page(vault_path, root, drop), encoding="utf-8")
+        (drops_dir / drop_detail_filename(drop)).write_text(render_drop_detail_page(vault_path, root, drop, obsidian_vault_name_override), encoding="utf-8")
     (app_dir / "tour.html").write_text(render_tour_page(vault_path, root), encoding="utf-8")
     return path
 
@@ -5458,6 +5489,7 @@ def build_parser() -> argparse.ArgumentParser:
     pilot_cmd.add_argument("--allow-duplicates", action="store_true", help="Write duplicate URLs instead of skipping them.")
     pilot_cmd.add_argument("--review-limit", type=int, default=25, help="Maximum Drops in the pilot review session. Default: 25")
     pilot_cmd.add_argument("--skip-reports", action="store_true", help="Skip local report generation.")
+    pilot_cmd.add_argument("--obsidian-vault-name", default=None, help="Obsidian vault display name for generated deep links. Defaults to the vault directory name.")
 
     pilot_check_cmd = sub.add_parser("pilot-check", help="Check whether a vault has pilot-ready local artifacts.")
     pilot_check_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -5509,6 +5541,7 @@ def build_parser() -> argparse.ArgumentParser:
     app_cmd = sub.add_parser("app", help="Generate a static MemoReef local app dashboard.")
     app_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
     app_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the vault. Default: MemoReef")
+    app_cmd.add_argument("--obsidian-vault-name", default=None, help="Obsidian vault display name for generated deep links. Defaults to the vault directory name.")
 
     serve_cmd = sub.add_parser("serve", help="Serve local Review Mode and write decisions directly to the vault.")
     serve_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -5535,6 +5568,7 @@ def build_parser() -> argparse.ArgumentParser:
     demo_cmd = sub.add_parser("demo", help="Create a complete local MemoReef demo vault.")
     demo_cmd.add_argument("--output", type=Path, required=True, help="Directory where the demo vault should be created.")
     demo_cmd.add_argument("--root", default="MemoReef", help="Folder name inside the demo vault. Default: MemoReef")
+    demo_cmd.add_argument("--obsidian-vault-name", default=None, help="Obsidian vault display name for generated deep links. Defaults to the vault directory name.")
 
     return parser
 
@@ -5896,6 +5930,7 @@ def main(argv: list[str] | None = None) -> int:
             args.allow_duplicates,
             args.review_limit,
             args.skip_reports,
+            args.obsidian_vault_name,
         )
         duplicate_report = summary.get("duplicate_report")
         print("Created MemoReef pilot vault:")
@@ -6089,7 +6124,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "app":
-        output = generate_app_dashboard(args.vault, args.root)
+        output = generate_app_dashboard(args.vault, args.root, args.obsidian_vault_name)
         print(f"Generated MemoReef app dashboard: {output}")
         return 0
 
@@ -6136,7 +6171,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "demo":
-        summary = create_demo_vault(args.output, args.root)
+        summary = create_demo_vault(args.output, args.root, args.obsidian_vault_name)
         print("Created MemoReef demo vault:")
         print(f"- vault: {summary['vault']}")
         print(f"- drops: {summary['drops']}")

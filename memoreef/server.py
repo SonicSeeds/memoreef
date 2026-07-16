@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import hmac
 import ipaddress
 import json
 from pathlib import Path
@@ -64,6 +65,13 @@ class MemoReefHTTPServer(ThreadingHTTPServer):
         self.root = root
         self.limit = limit
         self.capture_token = capture_token
+        bind_host = server_address[0].strip().lower().strip("[]")
+        allowed_hosts = {"localhost", "127.0.0.1", "::1"}
+        if bind_host not in {"", "0.0.0.0", "::"}:
+            allowed_hosts.add(bind_host)
+        if bind_host in {"", "0.0.0.0", "::"}:
+            allowed_hosts.update(local_ipv4_addresses())
+        self.allowed_hosts = allowed_hosts
 
 
 class MemoReefRequestHandler(BaseHTTPRequestHandler):
@@ -74,6 +82,8 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
         return
 
     def do_GET(self) -> None:
+        if not self.require_valid_host():
+            return
         parsed = urlparse(self.path)
         if parsed.path in ("/", "/swipe.html", "/review", "/review/"):
             self.send_static_file(SITE_DIR / "swipe.html", "text/html; charset=utf-8")
@@ -95,11 +105,15 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
             )
             return
         if parsed.path == "/api/review-session":
+            if not self.require_vault_api_auth():
+                return
             self.handle_review_session(parse_qs(parsed.query))
             return
         self.send_error_json(404, "Not found")
 
     def do_OPTIONS(self) -> None:
+        if not self.require_valid_host():
+            return
         parsed = urlparse(self.path)
         if parsed.path in self.cors_api_paths:
             self.send_response(204)
@@ -110,11 +124,17 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
         self.send_error_json(404, "Not found")
 
     def do_POST(self) -> None:
+        if not self.require_valid_host():
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/api/review-decisions":
+            if not self.require_vault_api_auth():
+                return
             self.handle_review_decisions()
             return
         if parsed.path == "/api/tag-reviewed":
+            if not self.require_vault_api_auth():
+                return
             self.handle_tag_reviewed()
             return
         if parsed.path == "/api/drop":
@@ -128,6 +148,8 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
             self.handle_capture()
             return
         if parsed.path == "/api/import-docs":
+            if not self.require_vault_api_auth():
+                return
             self.handle_import_docs()
             return
         self.send_error_json(404, "Not found")
@@ -156,10 +178,76 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
         if not token:
             return True
         supplied = bearer_token_from_header(self.headers.get("Authorization"))
-        if supplied and supplied == token:
+        if supplied and hmac.compare_digest(supplied, token):
             return True
         self.send_error_json(401, "capture token required")
         return False
+
+    def require_vault_api_auth(self) -> bool:
+        """Allow browser UI requests from this server's origin or a valid capture token."""
+        if self.is_same_origin_request():
+            return True
+        token = self.server.capture_token
+        supplied = bearer_token_from_header(self.headers.get("Authorization"))
+        if token and supplied and hmac.compare_digest(supplied, token):
+            return True
+        self.send_error_json(401, "same-origin request or capture token required")
+        return False
+
+    def is_same_origin_request(self) -> bool:
+        host = self.headers.get("Host", "").strip().lower()
+        origin = self.headers.get("Origin")
+        fetch_site = self.headers.get("Sec-Fetch-Site", "").strip().lower()
+        if origin:
+            parsed = urlparse(origin)
+            return parsed.scheme in {"http", "https"} and parsed.netloc.lower() == host
+        if fetch_site:
+            return fetch_site == "same-origin"
+        # A client without browser origin metadata cannot prove same-origin status.
+        # It must authenticate with the capture token instead.
+        return False
+
+    def require_valid_host(self) -> bool:
+        host_header = self.headers.get("Host", "")
+        if not host_header:
+            self.send_error_json(400, "Host header required")
+            return False
+        if any(char.isspace() for char in host_header) or any(char in host_header for char in "@/?#,\\"):
+            self.send_error_json(400, "Invalid Host header")
+            return False
+        try:
+            parsed = urlparse(f"//{host_header}")
+            hostname = (parsed.hostname or "").lower()
+            _port = parsed.port
+        except ValueError:
+            self.send_error_json(400, "Invalid Host header")
+            return False
+
+        if host_header.startswith("["):
+            closing_bracket = host_header.find("]")
+            port_suffix = host_header[closing_bracket + 1 :]
+            try:
+                if ipaddress.ip_address(hostname).version != 6:
+                    raise ValueError
+            except ValueError:
+                self.send_error_json(400, "Invalid Host header")
+                return False
+        else:
+            if host_header.count(":") > 1:
+                self.send_error_json(400, "Invalid Host header")
+                return False
+            port_suffix = host_header[host_header.find(":") :] if ":" in host_header else ""
+        if port_suffix and (
+            not port_suffix.startswith(":")
+            or not port_suffix[1:].isascii()
+            or not port_suffix[1:].isdigit()
+        ):
+            self.send_error_json(400, "Invalid Host header")
+            return False
+        if hostname not in self.server.allowed_hosts:
+            self.send_error_json(421, "Unrecognized Host header")
+            return False
+        return True
 
     def handle_import_docs(self) -> None:
         content_type = self.headers.get("Content-Type", "")
@@ -334,9 +422,14 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
         self.send_json({"ok": False, "error": message}, status=status)
 
     def send_cors_headers(self) -> None:
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = self.headers.get("Origin")
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        if self.headers.get("Access-Control-Request-Private-Network", "").lower() == "true":
+            self.send_header("Access-Control-Allow-Private-Network", "true")
 
     @staticmethod
     def content_type_for_path(path: str) -> str:
