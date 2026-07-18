@@ -4159,8 +4159,8 @@ def app_common_css() -> str:
     body::after { content:""; position:fixed; right:-120px; top:10vh; width:420px; height:760px; pointer-events:none; border-left:1px solid rgba(117,234,211,.12); border-top:1px solid rgba(255,146,126,.08); border-radius:55% 0 0 45%; transform:rotate(13deg); box-shadow:-34px 0 90px rgba(117,234,211,.055); mask-image:linear-gradient(to bottom, transparent, #000 18%, #000 72%, transparent); }
     main { width:min(1040px, calc(100% - 32px)); margin:0 auto; padding:34px 0 58px; position:relative; }
     a { color:var(--green); text-decoration-thickness:1px; text-underline-offset:3px; }
-    h1 { font-size:clamp(34px, 6.8vw, 66px); line-height:.95; margin:.22em 0 .18em; letter-spacing:-.055em; }
-    h2 { margin:0 0 10px; font-size:clamp(20px, 2.6vw, 28px); line-height:1.05; letter-spacing:-.035em; }
+    h1 { font-size:clamp(34px, 6.8vw, 66px); line-height:1.02; margin:.22em 0 .24em; letter-spacing:-.025em; }
+    h2 { margin:0 0 10px; font-size:clamp(20px, 2.6vw, 28px); line-height:1.16; letter-spacing:-.012em; }
     p, li { color:var(--muted); line-height:1.58; }
     strong { color:var(--text); }
     code { color:var(--pearl); overflow-wrap:anywhere; }

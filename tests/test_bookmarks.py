@@ -1729,6 +1729,8 @@ endstream endobj
             self.assertIn("pilot.html", tour)
             self.assertIn("Pilot checklist", pilot)
             self.assertIn("Review Mode", pilot)
+            self.assertIn("line-height:1.02", pilot)
+            self.assertIn("letter-spacing:-.025em", pilot)
 
     def test_pilot_check_reports_missing_and_ready_artifacts(self):
         stdout = io.StringIO()
