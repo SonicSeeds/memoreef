@@ -964,7 +964,7 @@
           <p class="tagline">Review a few. Let agents sort the reef.</p>
         </div>
       </div>
-      <a class="mode-pill" href="#dropCard" aria-label="Jump to the current Drop">Review Mode</a>
+      <a class="mode-pill" id="reviewModeLink" href="#dropCard" aria-label="Open the current Drop">Review Mode</a>
     </header>
 
     <aside class="sample-notice" aria-label="Sample data notice">
@@ -1173,6 +1173,8 @@
       sheetTitle: document.getElementById('sheetTitle'),
       sheetCopy: document.getElementById('sheetCopy'),
       sheetActions: document.getElementById('sheetActions'),
+      reviewModeLink: document.getElementById('reviewModeLink'),
+      restartBtn: document.getElementById('restartBtn'),
       reviewSessionInput: document.getElementById('reviewSessionInput'),
       exportDecisionsButton: document.getElementById('exportDecisionsButton'),
       importDockHint: document.getElementById('importDockHint'),
@@ -1484,7 +1486,19 @@
       els.done.classList.add('show');
       els.doneTitle.textContent = 'Progress saved';
       els.doneCopy.textContent = 'Progress saved. Resume Review Mode anytime.';
+      els.restartBtn.textContent = 'Resume review';
+      els.restartBtn.dataset.action = 'resume';
       showToast('Review paused. The reef waits. It has excellent patience.');
+    }
+
+    function resumeReview() {
+      els.done.classList.remove('show');
+      els.restartBtn.textContent = 'Restart review';
+      els.restartBtn.dataset.action = 'restart';
+      renderCard();
+      if (drops[state.index]) {
+        window.requestAnimationFrame(() => els.card.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+      }
     }
 
     function normalizeLoadedDrop(drop) {
@@ -1642,6 +1656,8 @@
       state.isDeciding = false;
       els.history.innerHTML = '';
       els.done.classList.remove('show');
+      els.restartBtn.textContent = 'Restart review';
+      els.restartBtn.dataset.action = 'restart';
       showNotice('<b>Sample data shown.</b> Load a review-session JSON from your MemoReef vault to review real bookmarks.');
       setLocalStatus('Sample mode · decisions stay in this browser until exported');
       renderCard();
@@ -1809,7 +1825,17 @@
     document.getElementById('pearlBtn').addEventListener('click', () => decide('Treasure'));
     document.getElementById('agentFinishBtn').addEventListener('click', () => openSheet('agents'));
     document.getElementById('laterBtn').addEventListener('click', () => openSheet('later'));
-    document.getElementById('restartBtn').addEventListener('click', restart);
+    els.restartBtn.addEventListener('click', () => {
+      if (els.restartBtn.dataset.action === 'resume') {
+        resumeReview();
+      } else {
+        restart();
+      }
+    });
+    els.reviewModeLink.addEventListener('click', event => {
+      event.preventDefault();
+      resumeReview();
+    });
     els.reviewSessionInput.addEventListener('change', event => loadReviewSession(event.target.files[0]));
     els.exportDecisionsButton.addEventListener('click', exportDecisions);
     els.sheet.addEventListener('click', event => { if (event.target === els.sheet) closeSheet(); });
