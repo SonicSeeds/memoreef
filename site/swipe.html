@@ -154,7 +154,14 @@
       background: rgba(1, 10, 16, .48);
       color: #d8fff6;
       font-size: 12px;
+      text-decoration: none;
       white-space: nowrap;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .mode-pill:focus-visible {
+      outline: 2px solid var(--reef);
+      outline-offset: 3px;
     }
     .mode-pill::before {
       content: "";
@@ -401,7 +408,7 @@
       position: relative;
       z-index: 2;
       min-width: 0;
-      padding: 0 var(--card-pad-right) 22px var(--card-pad-left);
+      padding: 5px var(--card-pad-right) 22px var(--card-pad-left);
     }
     .url {
       display: inline-block;
@@ -957,7 +964,7 @@
           <p class="tagline">Review a few. Let agents sort the reef.</p>
         </div>
       </div>
-      <div class="mode-pill">Review Mode</div>
+      <a class="mode-pill" href="#dropCard" aria-label="Jump to the current Drop">Review Mode</a>
     </header>
 
     <aside class="sample-notice" aria-label="Sample data notice">
@@ -1008,7 +1015,7 @@
     <section class="stage" aria-live="polite">
       <div class="card-wrap" id="cardWrap">
         <div class="back-card" aria-hidden="true"></div>
-        <article class="drop-card" id="dropCard" tabindex="0" aria-label="Current Drop. Swipe left to sink, right to keep, up to treasure.">
+        <article class="drop-card" id="dropCard" tabindex="0" style="scroll-margin-top: 16px" aria-label="Current Drop. Swipe left to sink, right to keep, up to treasure.">
           <div class="decision-badge sink">Sink</div>
           <div class="decision-badge keep">Keep</div>
           <div class="decision-badge pearl">Treasure</div>

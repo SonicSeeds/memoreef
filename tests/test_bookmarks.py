@@ -127,6 +127,21 @@ class BookmarkImportTests(unittest.TestCase):
             self.assertEqual(len(written), 1)
             self.assertEqual(len(list((Path(tmp) / "MemoReef" / "Drops").glob("*.md"))), 1)
 
+    def test_write_skips_urls_already_present_in_vault(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            first = write_bookmarks_to_vault(
+                [Bookmark("First", "https://example.com/path?utm_source=first")],
+                tmp,
+            )
+            second = write_bookmarks_to_vault(
+                [Bookmark("Second", "https://example.com/path?fbclid=second")],
+                tmp,
+            )
+
+            self.assertEqual(len(first), 1)
+            self.assertEqual(second, [])
+            self.assertEqual(len(list((Path(tmp) / "MemoReef" / "Drops").glob("*.md"))), 1)
+
     def test_import_command_allows_duplicate_urls(self):
         html = """<!DOCTYPE NETSCAPE-Bookmark-file-1>
 <DL><p>
@@ -1944,7 +1959,7 @@ endstream endobj
 
                 session_request = urllib.request.Request(
                     f"{base_url}/api/review-session",
-                    headers={"Sec-Fetch-Site": "same-origin"},
+                    headers={"Referer": f"{base_url}/review"},
                 )
                 with urllib.request.urlopen(session_request, timeout=5) as response:
                     session_status = response.status
@@ -1982,6 +1997,32 @@ endstream endobj
                 server.shutdown()
                 thread.join(timeout=5)
                 server.server_close()
+
+    def test_local_server_vault_api_rejects_cross_origin_referer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            try:
+                server = create_server(vault_path, host="127.0.0.1", port=0, limit=50)
+            except PermissionError as error:
+                self.skipTest(f"localhost socket binding unavailable: {error}")
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_port}"
+            try:
+                request = urllib.request.Request(
+                    f"{base_url}/api/review-session",
+                    headers={"Referer": "https://attacker.example/"},
+                )
+                with self.assertRaises(urllib.error.HTTPError) as raised:
+                    urllib.request.urlopen(request, timeout=5)
+                payload = json.loads(raised.exception.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(raised.exception.code, 401)
+        self.assertEqual(payload["error"], "same-origin request or capture token required")
 
     def test_local_server_root_page_includes_import_dock(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2030,6 +2071,7 @@ endstream endobj
         self.assertIn('<link rel="manifest" href="/manifest.webmanifest"', review_page)
         self.assertIn("apple-mobile-web-app-title", review_page)
         self.assertIn('rel="apple-touch-icon" sizes="180x180" href="/img/memoreef-review-icon-180.png"', review_page)
+        self.assertIn('<a class="mode-pill" href="#dropCard"', review_page)
         self.assertEqual(manifest["name"], "MemoReef Review")
         self.assertEqual(manifest["start_url"], "/review")
         self.assertEqual(manifest["display"], "standalone")
@@ -3377,6 +3419,40 @@ endstream endobj
             reports = list((vault_path / "MemoReef" / "reports").glob("*-link-check-report.json"))
             self.assertEqual(result, 0)
             self.assertEqual(len(reports), 1)
+
+    def test_check_links_detects_parked_domain_sale_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            output_path = Path(tmp) / "link-check-report.json"
+            write_bookmarks_to_vault([Bookmark("Old Domain", "https://old.example")], vault_path)
+            parked_body = b"<html><title>This domain is for sale</title><body>Buy this domain</body></html>"
+
+            with patch("memoreef.cli.urllib.request.urlopen", return_value=FakeHTTPResponse(200, "https://old.example", parked_body)):
+                with redirect_stdout(io.StringIO()):
+                    result = main(["check-links", "--vault", str(vault_path), "--output", str(output_path), "--method", "get"])
+
+            data = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(data["summary"]["parked"], 1)
+            self.assertEqual(data["results"][0]["status"], "parked")
+            self.assertIn("domain is for sale", data["results"][0]["parked_signal"])
+
+    def test_check_links_exclude_dead_removes_broken_drop_from_triage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_path = Path(tmp) / "vault"
+            written = write_bookmarks_to_vault([Bookmark("Missing", "https://missing.example")], vault_path)
+
+            error = urllib.error.HTTPError("https://missing.example", 404, "missing", http.client.HTTPMessage(), io.BytesIO())
+            with patch("memoreef.cli.urllib.request.urlopen", side_effect=error):
+                with redirect_stdout(io.StringIO()):
+                    result = main(["check-links", "--vault", str(vault_path), "--method", "get", "--exclude-dead"])
+
+            frontmatter, _body = parse_markdown_frontmatter(written[0].read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(frontmatter["status"], "discarded")
+            self.assertEqual(frontmatter["link_health"], "broken")
+            self.assertEqual(frontmatter["link_http_status"], "404")
+            self.assertEqual(frontmatter["link_previous_status"], "drift")
 
     def test_check_links_classifies_http_statuses(self):
         with tempfile.TemporaryDirectory() as tmp:

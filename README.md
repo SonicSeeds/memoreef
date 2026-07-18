@@ -580,9 +580,10 @@ Check saved links directly:
 
 ```bash
 python3.11 -m memoreef.cli check-links --vault /tmp/memoreef-vault --limit 100 --timeout 5
+python3.11 -m memoreef.cli check-links --vault /tmp/memoreef-vault --method get --exclude-dead --timeout 8
 ```
 
-The link check report classifies saved URLs as ok, broken, suspicious, or unknown using direct HTTP HEAD/GET requests to the saved URLs only. It does not use third-party APIs and does not modify, move, or delete files.
+The link check report classifies saved URLs as ok, broken, parked, suspicious, or unknown using direct HTTP HEAD/GET requests to the saved URLs only. `--method get` also detects conservative parked-domain sale signals. By default the command only writes a report. With `--exclude-dead`, confirmed HTTP 404/410 and parked-domain Drops are marked `discarded` and removed from Review Mode while their Markdown files remain intact. Bot-blocked responses such as HTTP 403 stay suspicious and are never auto-discarded.
 
 Refresh basic page metadata:
 

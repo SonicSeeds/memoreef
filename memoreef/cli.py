@@ -2359,6 +2359,45 @@ def classify_http_status(status: int | None) -> str:
     return "unknown"
 
 
+PARKED_DOMAIN_HOSTS = {
+    "afternic.com",
+    "bodis.com",
+    "dan.com",
+    "hugedomains.com",
+    "parkingcrew.net",
+    "sedoparking.com",
+    "undeveloped.com",
+}
+
+
+def parked_page_signal(body: bytes, final_url: str) -> str | None:
+    """Return a conservative signal when a fetched page is a parked-domain sale page."""
+    hostname = (urlsplit(final_url).hostname or "").lower()
+    for parked_host in PARKED_DOMAIN_HOSTS:
+        if hostname == parked_host or hostname.endswith(f".{parked_host}"):
+            return f"parked host: {parked_host}"
+
+    text = html_unescape(body.decode("utf-8", errors="ignore")).lower()
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    phrases = (
+        "this domain is for sale",
+        "this domain may be for sale",
+        "buy this domain",
+        "make an offer on this domain",
+        "inquire about this domain",
+        "this domain is parked",
+        "diese domain steht zum verkauf",
+        "diese domain kaufen",
+    )
+    for phrase in phrases:
+        if phrase in text:
+            return f"page text: {phrase}"
+    if re.search(r"\bthe domain(?: name)? .{0,120}\bis for sale\b", text):
+        return "page text: domain is for sale"
+    return None
+
+
 def request_link(url: str, method: str, timeout: float) -> dict[str, object]:
     request = urllib.request.Request(
         url,
@@ -2367,15 +2406,20 @@ def request_link(url: str, method: str, timeout: float) -> dict[str, object]:
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            if method.lower() == "get":
-                response.read(1024)
+            body = response.read(65536) if method.lower() == "get" else b""
             status = int(response.getcode())
+            final_url = response.geturl()
+            parked_signal = parked_page_signal(body, final_url) if body else None
+            link_status = classify_http_status(status)
+            if parked_signal and link_status == "ok":
+                link_status = "parked"
             return {
-                "status": classify_http_status(status),
+                "status": link_status,
                 "http_status": status,
                 "method": method.upper(),
-                "final_url": response.geturl(),
+                "final_url": final_url,
                 "error": None,
+                "parked_signal": parked_signal,
             }
     except urllib.error.HTTPError as error:
         status = int(error.code)
@@ -2385,6 +2429,7 @@ def request_link(url: str, method: str, timeout: float) -> dict[str, object]:
             "method": method.upper(),
             "final_url": error.geturl(),
             "error": None,
+            "parked_signal": None,
         }
     except (TimeoutError, urllib.error.URLError, OSError) as error:
         return {
@@ -2393,6 +2438,7 @@ def request_link(url: str, method: str, timeout: float) -> dict[str, object]:
             "method": method.upper(),
             "final_url": url,
             "error": str(error),
+            "parked_signal": None,
         }
 
 
@@ -2467,6 +2513,7 @@ def create_link_check_report(
                 "method": result["method"],
                 "final_url": result["final_url"],
                 "error": result["error"],
+                "parked_signal": result.get("parked_signal"),
             }
         )
 
@@ -2475,6 +2522,7 @@ def create_link_check_report(
         "checked": len(results),
         "ok": sum(1 for item in results if item["status"] == "ok"),
         "broken": sum(1 for item in results if item["status"] == "broken"),
+        "parked": sum(1 for item in results if item["status"] == "parked"),
         "suspicious": sum(1 for item in results if item["status"] == "suspicious"),
         "unknown": sum(1 for item in results if item["status"] == "unknown"),
         "skipped": skipped,
@@ -2496,6 +2544,48 @@ def create_link_check_report(
     }
     output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return output, report
+
+
+def exclude_dead_link_results(vault: Path, root: str, report: dict[str, object]) -> int:
+    """Remove confirmed broken/parked Drops from triage without deleting Markdown files."""
+    vault_path = vault.expanduser().resolve()
+    drops_root = (vault_path / root / "Drops").resolve()
+    checked_at = str(report.get("created_at") or utc_now_iso())
+    updated_count = 0
+    results = report.get("results", [])
+    if not isinstance(results, list):
+        return 0
+    for result in results:
+        if not isinstance(result, dict) or result.get("status") not in {"broken", "parked"}:
+            continue
+        path = (vault_path / str(result.get("path") or "")).resolve()
+        if path.parent != drops_root or not path.is_file():
+            continue
+        content = path.read_text(encoding="utf-8")
+        frontmatter, _body = parse_markdown_frontmatter(content)
+        previous_status = str(frontmatter.get("status") or "drift")
+        health = str(result["status"])
+        reason = (
+            f"HTTP {result.get('http_status')}"
+            if health == "broken"
+            else str(result.get("parked_signal") or "parked domain")
+        )
+        updates: dict[str, object] = {
+            "status": "discarded",
+            "link_health": health,
+            "link_checked_at": checked_at,
+            "link_exclusion_reason": reason,
+        }
+        if previous_status != "discarded":
+            updates["link_previous_status"] = previous_status
+        if result.get("http_status") is not None:
+            updates["link_http_status"] = result["http_status"]
+        final_url = str(result.get("final_url") or "").strip()
+        if final_url:
+            updates["link_final_url"] = final_url
+        path.write_text(update_markdown_frontmatter(content, updates), encoding="utf-8")
+        updated_count += 1
+    return updated_count
 
 
 class PageMetadataParser(HTMLParser):
@@ -5502,6 +5592,7 @@ def build_parser() -> argparse.ArgumentParser:
     check_links_cmd.add_argument("--timeout", type=float, default=5, help="HTTP timeout in seconds. Default: 5")
     check_links_cmd.add_argument("--limit", type=int, default=None, help="Check only the first N Drops.")
     check_links_cmd.add_argument("--method", choices=["head", "get", "auto"], default="auto", help="HTTP method strategy. Default: auto")
+    check_links_cmd.add_argument("--exclude-dead", action="store_true", help="Exclude confirmed 404/410 and parked-domain Drops from triage without deleting their Markdown files. Use --method get to detect parked pages.")
 
     refresh_cmd = sub.add_parser("refresh-metadata", help="Fetch saved URLs directly and refresh Drop metadata fields.")
     refresh_cmd.add_argument("--vault", type=Path, required=True, help="Path to the Obsidian vault/root folder.")
@@ -5965,6 +6056,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         summary = report["summary"]
         assert isinstance(summary, dict)
+        excluded = exclude_dead_link_results(args.vault, args.root, report) if args.exclude_dead else 0
         warnings = report.get("warnings", [])
         if not isinstance(warnings, list):
             warnings = []
@@ -5973,9 +6065,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"- checked: {summary['checked']}")
         print(f"- ok: {summary['ok']}")
         print(f"- broken: {summary['broken']}")
+        print(f"- parked: {summary['parked']}")
         print(f"- suspicious: {summary['suspicious']}")
         print(f"- unknown: {summary['unknown']}")
         print(f"- skipped: {summary['skipped']}")
+        if args.exclude_dead:
+            print(f"- excluded from triage: {excluded}")
         print(f"- warnings: {len(warnings)}")
         print(f"- output: {output}")
         for warning in warnings:

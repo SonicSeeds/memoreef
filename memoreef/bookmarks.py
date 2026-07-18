@@ -577,6 +577,12 @@ def write_bookmarks_to_vault(
     base.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     seen_urls: set[str] = set()
+    if not allow_duplicates:
+        for existing_path in base.glob("*.md"):
+            frontmatter, _body = parse_markdown_frontmatter(existing_path.read_text(encoding="utf-8"))
+            existing_url = str(frontmatter.get("url") or "").strip()
+            if existing_url:
+                seen_urls.add(canonicalize_url(existing_url))
     for bookmark in bookmarks:
         canonical_url = canonicalize_url(bookmark.url)
         if not allow_duplicates and canonical_url in seen_urls:

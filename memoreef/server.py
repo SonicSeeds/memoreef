@@ -203,6 +203,14 @@ class MemoReefRequestHandler(BaseHTTPRequestHandler):
             return parsed.scheme in {"http", "https"} and parsed.netloc.lower() == host
         if fetch_site:
             return fetch_site == "same-origin"
+        # Mobile Safari may omit both Origin on same-origin GET requests and
+        # Fetch Metadata headers entirely. It still sends the document Referer.
+        # Accept only an exact scheme+authority match; a missing or cross-origin
+        # Referer remains unauthenticated and must use the capture token.
+        referer = self.headers.get("Referer")
+        if referer:
+            parsed = urlparse(referer)
+            return parsed.scheme in {"http", "https"} and parsed.netloc.lower() == host
         # A client without browser origin metadata cannot prove same-origin status.
         # It must authenticate with the capture token instead.
         return False
